@@ -1,0 +1,6 @@
+{
+  "name": "Oakridge Student Access",
+  "description": "School student ID verification and gate access control for security guards and administrators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
