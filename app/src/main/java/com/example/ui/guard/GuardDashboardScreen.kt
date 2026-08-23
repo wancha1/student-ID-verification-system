@@ -3,8 +3,6 @@ package com.example.ui.guard
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,14 +26,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SyncProblem
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -48,6 +49,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,7 +63,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -68,17 +70,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AuthUser
 import com.example.model.FeeStatus
+import com.example.model.GateVerificationDecision
 import com.example.model.ScanLog
 import com.example.model.Student
+import com.example.model.StudentScanResult
+import com.example.model.SyncInfo
+import com.example.model.SyncStatus
 import com.example.ui.components.FeeStatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.components.VerificationResultDisplay
 import com.example.ui.theme.ApprovedGreen
-import com.example.ui.theme.ApprovedGreenDark
 import com.example.ui.theme.ApprovedGreenLight
 import com.example.ui.theme.ApprovedGreenText
 import com.example.ui.theme.RejectedRed
-import com.example.ui.theme.RejectedRedDark
 import com.example.ui.theme.RejectedRedLight
 import com.example.ui.theme.RejectedRedText
 import com.example.ui.theme.SchoolPrimary
@@ -89,21 +93,25 @@ import java.util.Locale
 @Composable
 fun GuardDashboardScreen(
     user: AuthUser,
+    activeScanResult: StudentScanResult?,
     activeScannedStudent: Student?,
     scanError: String?,
     allStudents: List<Student>,
     scanLogs: List<ScanLog>,
+    syncInfo: SyncInfo,
     onOpenScanner: () -> Unit,
     onSimulateScan: (String) -> Unit,
     onDismissScanResult: () -> Unit,
+    onTriggerSync: () -> Unit,
+    onToggleOnline: (Boolean) -> Unit,
+    onViewAllLogs: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     var showManualInputDialog by remember { mutableStateOf(false) }
     var manualIdText by remember { mutableStateOf("") }
 
-    // If a student verification is active, show the prominent verification result screen
-    if (activeScannedStudent != null) {
+    // If a student verification is active, display the full-bleed Verification result view
+    if (activeScanResult != null) {
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -115,7 +123,7 @@ fun GuardDashboardScreen(
             ) {
                 item {
                     VerificationResultDisplay(
-                        student = activeScannedStudent,
+                        scanResult = activeScanResult,
                         onScanNext = {
                             onDismissScanResult()
                             onOpenScanner()
@@ -136,7 +144,17 @@ fun GuardDashboardScreen(
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
     ) {
-        // Gate & Guard Station Banner
+        // 1. SYNC STATUS & OFFLINE FRESHNESS BANNER
+        item {
+            SyncStatusHeaderCard(
+                syncInfo = syncInfo,
+                onTriggerSync = onTriggerSync,
+                onToggleOnline = onToggleOnline
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        // 2. GATE & GUARD STATION BANNER
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -182,7 +200,7 @@ fun GuardDashboardScreen(
                             fontSize = 17.sp
                         )
                         Text(
-                            text = "Guard on duty: ${user.name}",
+                            text = "Officer on duty: ${user.name}",
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 12.sp
                         )
@@ -204,7 +222,7 @@ fun GuardDashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "LIVE",
+                                text = "ACTIVE",
                                 color = ApprovedGreenText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp
@@ -213,351 +231,301 @@ fun GuardDashboardScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        item { Spacer(modifier = Modifier.height(16.dp)) }
-
-        // Scan Error Alert if any
-        if (scanError != null) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = RejectedRedLight,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Error,
-                            contentDescription = "Error",
-                            tint = RejectedRed,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = scanError,
-                            color = RejectedRedText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = onDismissScanResult) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Dismiss",
-                                tint = RejectedRed
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // PRIMARY ACTION: LARGE "SCAN STUDENT ID" BUTTON (HIGH VISIBILITY)
+        // 3. PRIMARY ACTION: SCAN BADGE BUTTON
         item {
-            Card(
-                onClick = onOpenScanner,
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                ),
-                elevation = CardDefaults.cardElevation(
-                    defaultElevation = 6.dp,
-                    pressedElevation = 2.dp
-                ),
+            Surface(
                 modifier = Modifier
-                    .testTag("button_scan_student_id")
                     .fillMaxWidth()
-                    .height(120.dp)
+                    .shadow(6.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF4ADE80))
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "CAMERA READY",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "SCAN STUDENT ID",
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 22.sp,
-                            letterSpacing = 0.5.sp
-                        )
-                        Text(
-                            text = "Point camera at student QR badge",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 13.sp
-                        )
-                    }
+                    Text(
+                        text = "Gate Access Verification",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Scan student QR badge to evaluate fees and day-scholar gate permissions.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
 
-                    Box(
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onOpenScanner,
                         modifier = Modifier
-                            .size(68.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
+                            .testTag("button_open_qr_scanner")
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
                             contentDescription = "Scan QR",
-                            tint = Color.White,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier.size(24.dp)
                         )
-                    }
-                }
-            }
-        }
-
-        item { Spacer(modifier = Modifier.height(12.dp)) }
-
-        // Secondary Fast Input: Manual ID Entry
-        item {
-            OutlinedButton(
-                onClick = { showManualInputDialog = true },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .testTag("button_manual_id_entry")
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Keyboard,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Manual Student ID Entry / Damaged Card",
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-
-        item { Spacer(modifier = Modifier.height(20.dp)) }
-
-        // QUICK SIMULATOR TRAY FOR EVALUATION & TESTING
-        item {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "QUICK TEST BARCODES",
-                            style = MaterialTheme.typography.labelMedium,
+                            text = "LAUNCH QR SCANNER",
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = "Tap to simulate scan",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 16.sp,
+                            letterSpacing = 0.5.sp
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(horizontal = 2.dp)
+                    OutlinedButton(
+                        onClick = { showManualInputDialog = true },
+                        modifier = Modifier
+                            .testTag("button_manual_id_lookup")
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        item {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFFEF2F2),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444)),
-                                modifier = Modifier
-                                    .testTag("quick_test_invalid_code")
-                                    .clickable {
-                                        onSimulateScan("INVALID-CODE-9999")
-                                    }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = Color(0xFFDC2626),
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text(
-                                            text = "Test Invalid QR",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF991B1B)
-                                        )
-                                        Text(
-                                            text = "Unknown Visitor/Card",
-                                            fontSize = 10.sp,
-                                            color = Color(0xFFDC2626)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        items(allStudents) { student ->
-                            val isCleared = student.feesStatus == FeeStatus.CLEARED
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (isCleared) ApprovedGreenLight else RejectedRedLight,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (isCleared) ApprovedGreen else RejectedRed
-                                ),
-                                modifier = Modifier
-                                    .testTag("quick_test_${student.id}")
-                                    .clickable {
-                                        onSimulateScan(student.id)
-                                    }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = if (isCleared) Icons.Default.CheckCircle else Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = if (isCleared) ApprovedGreen else RejectedRed,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text(
-                                            text = student.fullName,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = if (isCleared) ApprovedGreenText else RejectedRedText
-                                        )
-                                        Text(
-                                            text = "${student.id} • ${if (isCleared) "Cleared" else "Due $${student.outstandingAmount.toInt()}"}",
-                                            fontSize = 10.sp,
-                                            color = if (isCleared) ApprovedGreenDark else RejectedRedDark
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Keyboard,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Manual Student No. Lookup",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
-        item { Spacer(modifier = Modifier.height(24.dp)) }
-
-        // GATE SCAN LOGS / RECENT VERIFICATIONS
+        // 4. QUICK SIMULATION & TEST CARDS
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Quick Field Testing",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Tap to simulate scan",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                items(allStudents) { student ->
+                    Card(
+                        modifier = Modifier
+                            .testTag("button_simulate_scan_${student.studentNumber}")
+                            .width(170.dp)
+                            .clickable { onSimulateScan(student.qrPayload) },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                StudentAvatar(student = student, size = 36.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = student.firstName,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = student.studentNumber,
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            FeeStatusBadge(feeStatus = student.feesStatus)
+                        }
+                    }
+                }
+
+                // Unregistered test student card
+                item {
+                    Card(
+                        modifier = Modifier
+                            .testTag("button_simulate_scan_unregistered")
+                            .width(170.dp)
+                            .clickable { onSimulateScan("OAKRIDGE:STU:OAK-2026-9999") },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Test: Unregistered",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF92400E)
+                            )
+                            Text(
+                                text = "OAK-2026-9999",
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFFB45309)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tests NOT FOUND",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF78350F)
+                            )
+                        }
+                    }
+                }
+
+                // Invalid QR test card
+                item {
+                    Card(
+                        modifier = Modifier
+                            .testTag("button_simulate_scan_invalid")
+                            .width(170.dp)
+                            .clickable { onSimulateScan("NON_SCHOOL_BARCODE_XYZ") },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF94A3B8))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Test: Corrupt QR",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = "Invalid format",
+                                fontSize = 11.sp,
+                                color = Color(0xFF64748B)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tests INVALID QR",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF475569)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 5. RECENT GATE SCAN LOGS
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { onViewAllLogs() }
+                ) {
                     Icon(
                         imageVector = Icons.Default.History,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Recent Gate Verifications",
+                        text = "Recent Gate Scans",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                Text(
-                    text = "${scanLogs.size} today",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${scanLogs.size} recorded",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(
+                        onClick = onViewAllLogs,
+                        modifier = Modifier.testTag("button_guard_view_all_logs")
+                    ) {
+                        Text(
+                            text = "View All",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
             }
+            Spacer(modifier = Modifier.height(4.dp))
         }
-
-        item { Spacer(modifier = Modifier.height(10.dp)) }
 
         if (scanLogs.isEmpty()) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No scans recorded yet today",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Tap 'SCAN STUDENT ID' or a test card above to verify students",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            fontSize = 11.sp
+                            text = "No gate scans recorded yet today.\nScan student badges to begin entry verification.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
             }
         } else {
-            items(scanLogs.take(10)) { log ->
-                val timeFormatted = SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(Date(log.timestamp))
+            items(scanLogs.take(8)) { log ->
+                val timeStr = SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(Date(log.timestamp))
                 Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Row(
                         modifier = Modifier
@@ -573,7 +541,7 @@ fun GuardDashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (log.isApproved) Icons.Default.CheckCircle else Icons.Default.Error,
+                                imageVector = if (log.isApproved) Icons.Default.CheckCircle else Icons.Default.Close,
                                 contentDescription = null,
                                 tint = if (log.isApproved) ApprovedGreen else RejectedRed,
                                 modifier = Modifier.size(20.dp)
@@ -586,35 +554,25 @@ fun GuardDashboardScreen(
                             Text(
                                 text = log.studentName,
                                 fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontSize = 14.sp
                             )
                             Text(
-                                text = "${log.studentId} • ${log.gradeClass}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
+                                text = "${log.studentNumber ?: "Badge"} • $timeStr",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (log.isApproved) ApprovedGreenLight else RejectedRedLight
-                            ) {
-                                Text(
-                                    text = if (log.isApproved) "APPROVED" else "DENIED",
-                                    color = if (log.isApproved) ApprovedGreenDark else RejectedRedDark,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (log.isApproved) ApprovedGreenLight else RejectedRedLight
+                        ) {
                             Text(
-                                text = timeFormatted,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp)
+                                text = if (log.isApproved) "APPROVED" else "DENIED",
+                                color = if (log.isApproved) ApprovedGreenText else RejectedRedText,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                             )
                         }
                     }
@@ -623,47 +581,42 @@ fun GuardDashboardScreen(
         }
     }
 
-    // Manual Entry Dialog
+    // Manual ID Entry Dialog
     if (showManualInputDialog) {
         AlertDialog(
             onDismissRequest = { showManualInputDialog = false },
-            title = {
-                Text(
-                    text = "Enter Student ID",
-                    fontWeight = FontWeight.Bold
-                )
-            },
+            title = { Text("Manual Student Verification") },
             text = {
                 Column {
                     Text(
-                        text = "Enter student barcode ID (e.g. STU-2026-0001):",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Enter the student registration number (e.g. OAK-2026-0001):",
+                        fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = manualIdText,
                         onValueChange = { manualIdText = it.uppercase() },
-                        placeholder = { Text("STU-2026-0001") },
+                        placeholder = { Text("OAK-2026-0001") },
                         singleLine = true,
                         modifier = Modifier
-                            .testTag("input_manual_student_id")
                             .fillMaxWidth()
+                            .testTag("input_manual_student_id")
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (manualIdText.isNotBlank()) {
-                            onSimulateScan(manualIdText.trim())
+                        val input = manualIdText.trim()
+                        if (input.isNotBlank()) {
                             showManualInputDialog = false
-                            manualIdText = ""
+                            onSimulateScan(input)
                         }
                     },
-                    modifier = Modifier.testTag("button_submit_manual_id")
+                    modifier = Modifier.testTag("button_confirm_manual_lookup")
                 ) {
-                    Text("Verify Access")
+                    Text("Verify")
                 }
             },
             dismissButton = {
@@ -674,3 +627,147 @@ fun GuardDashboardScreen(
         )
     }
 }
+
+@Composable
+fun SyncStatusHeaderCard(
+    syncInfo: SyncInfo,
+    onTriggerSync: () -> Unit,
+    onToggleOnline: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val lastSyncStr = timeFormatter.format(Date(syncInfo.lastSyncTimestamp))
+
+    val (bgColor, borderColor, icon, statusTitle, statusSubtitle) = when (syncInfo.status) {
+        SyncStatus.SYNCED -> {
+            Quint(
+                ApprovedGreenLight,
+                ApprovedGreen.copy(alpha = 0.4f),
+                Icons.Default.CloudDone,
+                "Synced with Central Database",
+                "Last synchronized at $lastSyncStr • Fully up to date"
+            )
+        }
+        SyncStatus.OFFLINE -> {
+            Quint(
+                Color(0xFFFEF3C7), // Warm amber
+                Color(0xFFF59E0B),
+                Icons.Default.CloudOff,
+                "Offline Mode Active",
+                "Using local cached data from $lastSyncStr (${syncInfo.pendingLogsCount} logs queued)"
+            )
+        }
+        SyncStatus.SYNCING -> {
+            Quint(
+                Color(0xFFEFF6FF), // Soft Blue
+                Color(0xFF3B82F6),
+                Icons.Default.CloudSync,
+                "Synchronizing Data...",
+                "Connecting to central school server..."
+            )
+        }
+        SyncStatus.SYNC_FAILED -> {
+            Quint(
+                RejectedRedLight,
+                RejectedRed.copy(alpha = 0.4f),
+                Icons.Default.SyncProblem,
+                "Sync Warning",
+                "Could not reach cloud • Using local data ($lastSyncStr)"
+            )
+        }
+        SyncStatus.NEEDS_SYNC -> {
+            Quint(
+                Color(0xFFEFF6FF),
+                Color(0xFF3B82F6),
+                Icons.Default.CloudSync,
+                "Changes Pending Upload",
+                "${syncInfo.pendingLogsCount} gate logs awaiting upload"
+            )
+        }
+    }
+
+    Card(
+        modifier = modifier
+            .testTag("card_sync_status")
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = "Sync Status",
+                tint = if (syncInfo.status == SyncStatus.OFFLINE) Color(0xFFB45309) else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = statusTitle,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = statusSubtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Sync Now icon button
+            IconButton(
+                onClick = onTriggerSync,
+                modifier = Modifier
+                    .testTag("button_trigger_sync")
+                    .size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Sync Now",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // Online / Offline toggle switch
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Icon(
+                    imageVector = if (syncInfo.isOnline) Icons.Default.Wifi else Icons.Default.WifiOff,
+                    contentDescription = if (syncInfo.isOnline) "Online" else "Offline",
+                    tint = if (syncInfo.isOnline) ApprovedGreen else Color(0xFFB45309),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Switch(
+                    checked = syncInfo.isOnline,
+                    onCheckedChange = onToggleOnline,
+                    modifier = Modifier.testTag("switch_network_online"),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = ApprovedGreen,
+                        checkedTrackColor = ApprovedGreenLight
+                    )
+                )
+            }
+        }
+    }
+}
+
+private data class Quint<A, B, C, D, E>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E
+)

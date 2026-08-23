@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
@@ -45,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -62,30 +62,33 @@ import com.example.ui.admin.StudentDetailScreen
 import com.example.ui.auth.LoginScreen
 import com.example.ui.guard.GuardDashboardScreen
 import com.example.ui.guard.GuardScannerScreen
-import com.example.ui.theme.ApprovedGreenLight
+import com.example.ui.logs.GateAccessLogsScreen
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.SchoolPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentAccessApp(
-    viewModel: MainViewModel = viewModel(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: MainViewModel = viewModel(factory = MainViewModel.provideFactory(LocalContext.current))
 ) {
     val context = LocalContext.current
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val allStudents by viewModel.allStudents.collectAsStateWithLifecycle()
     val filteredStudents by viewModel.filteredStudents.collectAsStateWithLifecycle()
     val scanLogs by viewModel.scanLogs.collectAsStateWithLifecycle()
+    val syncInfo by viewModel.syncInfo.collectAsStateWithLifecycle()
+    val activeScanResult by viewModel.activeScanResult.collectAsStateWithLifecycle()
     val activeScannedStudent by viewModel.currentScannedStudent.collectAsStateWithLifecycle()
     val scanError by viewModel.scanError.collectAsStateWithLifecycle()
     val isScannerOpen by viewModel.isScannerOpen.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val feeFilter by viewModel.feeFilter.collectAsStateWithLifecycle()
     val selectedStudentDetail by viewModel.selectedStudentDetail.collectAsStateWithLifecycle()
+    val selectedStudentCards by viewModel.selectedStudentCards.collectAsStateWithLifecycle()
     val userFeedbackMessage by viewModel.userFeedbackMessage.collectAsStateWithLifecycle()
 
-    var showAdminLogsScreen by remember { mutableStateOf(false) }
+    var showLogsScreen by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -158,7 +161,7 @@ fun StudentAccessApp(
                                     .clickable {
                                         val newRole = if (user.role == UserRole.SECURITY_GUARD) UserRole.ADMINISTRATOR else UserRole.SECURITY_GUARD
                                         viewModel.loginAs(newRole)
-                                        showAdminLogsScreen = false
+                                        showLogsScreen = false
                                     }
                             ) {
                                 Row(
@@ -198,6 +201,34 @@ fun StudentAccessApp(
                                     expanded = showOptionsMenu,
                                     onDismissRequest = { showOptionsMenu = false }
                                 ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Gate Access Activity Logs") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.History,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            showLogsScreen = true
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_view_logs")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Sync with Central Server") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.triggerCloudSync()
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_trigger_sync")
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Reset Sample Roster") },
                                         leadingIcon = {
@@ -242,87 +273,107 @@ fun StudentAccessApp(
                     .fillMaxSize()
                     .padding(if (isScannerOpen) PaddingValues(0.dp) else paddingValues)
             ) {
-                when (user.role) {
-                    UserRole.SECURITY_GUARD -> {
-                        if (isScannerOpen) {
-                            GuardScannerScreen(
-                                sampleStudents = allStudents,
-                                onBarcodeDetected = { rawCode ->
-                                    viewModel.handleBarcodeScan(rawCode, context)
-                                },
-                                onCloseScanner = { viewModel.closeScanner() }
-                            )
-                        } else {
-                            GuardDashboardScreen(
-                                user = user,
-                                activeScannedStudent = activeScannedStudent,
-                                scanError = scanError,
-                                allStudents = allStudents,
-                                scanLogs = scanLogs,
-                                onOpenScanner = { viewModel.openScanner() },
-                                onSimulateScan = { studentId ->
-                                    viewModel.handleBarcodeScan(studentId, context)
-                                },
-                                onDismissScanResult = { viewModel.dismissScanResult() }
-                            )
+                if (showLogsScreen) {
+                    GateAccessLogsScreen(
+                        scanLogs = scanLogs,
+                        onBack = { showLogsScreen = false },
+                        onClearLogs = { viewModel.clearLogs() }
+                    )
+                } else {
+                    when (user.role) {
+                        UserRole.SECURITY_GUARD -> {
+                            if (isScannerOpen) {
+                                GuardScannerScreen(
+                                    sampleStudents = allStudents,
+                                    onBarcodeDetected = { rawCode ->
+                                        viewModel.handleBarcodeScan(rawCode, context)
+                                    },
+                                    onCloseScanner = { viewModel.closeScanner() }
+                                )
+                            } else {
+                                GuardDashboardScreen(
+                                    user = user,
+                                    activeScanResult = activeScanResult,
+                                    activeScannedStudent = activeScannedStudent,
+                                    scanError = scanError,
+                                    allStudents = allStudents,
+                                    scanLogs = scanLogs,
+                                    syncInfo = syncInfo,
+                                    onOpenScanner = { viewModel.openScanner() },
+                                    onSimulateScan = { studentId ->
+                                        viewModel.handleBarcodeScan(studentId, context)
+                                    },
+                                    onDismissScanResult = { viewModel.dismissScanResult() },
+                                    onTriggerSync = { viewModel.triggerCloudSync() },
+                                    onToggleOnline = { viewModel.toggleNetworkOnline(it) },
+                                    onViewAllLogs = { showLogsScreen = true }
+                                )
+                            }
                         }
-                    }
 
-                    UserRole.ADMINISTRATOR -> {
-                        if (selectedStudentDetail != null) {
-                            StudentDetailScreen(
-                                student = selectedStudentDetail!!,
-                                onBack = { viewModel.selectStudentForDetail(null) },
-                                onUpdateFeeStatus = { newStatus, amount ->
-                                    viewModel.updateFeeStatus(selectedStudentDetail!!.id, newStatus, amount)
-                                },
-                                onUpdateStudentDetails = { updated ->
-                                    viewModel.updateStudentDetails(updated)
-                                },
-                                onDeleteStudent = { studentId ->
-                                    viewModel.deleteStudentRecord(studentId)
-                                    viewModel.selectStudentForDetail(null)
-                                },
-                                onTestScanAsGuard = { studentId ->
-                                    viewModel.loginAs(UserRole.SECURITY_GUARD)
-                                    viewModel.handleBarcodeScan(studentId, context)
-                                    viewModel.selectStudentForDetail(null)
-                                }
-                            )
-                        } else if (showAdminLogsScreen) {
-                            AdminScanLogsScreen(
-                                scanLogs = scanLogs,
-                                onBack = { showAdminLogsScreen = false },
-                                onClearLogs = { viewModel.clearLogs() }
-                            )
-                        } else {
-                            AdminDashboardScreen(
-                                user = user,
-                                allStudents = allStudents,
-                                filteredStudents = filteredStudents,
-                                scanLogs = scanLogs,
-                                searchQuery = searchQuery,
-                                feeFilter = feeFilter,
-                                onSearchChange = { viewModel.setSearchQuery(it) },
-                                onFilterChange = { viewModel.setFeeFilter(it) },
-                                onSelectStudent = { studentId ->
-                                    viewModel.selectStudentForDetail(studentId)
-                                },
-                                onQuickToggleFeeStatus = { studentId, currentStatus ->
-                                    val nextStatus = if (currentStatus == FeeStatus.CLEARED) FeeStatus.OUTSTANDING else FeeStatus.CLEARED
-                                    viewModel.updateFeeStatus(studentId, nextStatus)
-                                },
-                                onAddStudent = { newStudent ->
-                                    viewModel.registerNewStudent(newStudent)
-                                },
-                                onDeleteStudent = { studentId ->
-                                    viewModel.deleteStudentRecord(studentId)
-                                },
-                                onEditStudent = { updated ->
-                                    viewModel.updateStudentDetails(updated)
-                                },
-                                onViewScanLogs = { showAdminLogsScreen = true }
-                            )
+                        UserRole.ADMINISTRATOR -> {
+                            if (selectedStudentDetail != null) {
+                                StudentDetailScreen(
+                                    student = selectedStudentDetail!!,
+                                    cards = selectedStudentCards,
+                                    onBack = { viewModel.selectStudentForDetail(null) },
+                                    onUpdateFeeStatus = { newStatus, amount ->
+                                        viewModel.updateFeeStatus(selectedStudentDetail!!.id, newStatus, amount)
+                                    },
+                                    onUpdateStudentDetails = { updated ->
+                                        viewModel.updateStudentDetails(updated)
+                                    },
+                                    onDeleteStudent = { studentId ->
+                                        viewModel.deleteStudentRecord(studentId)
+                                        viewModel.selectStudentForDetail(null)
+                                    },
+                                    onReportCardLost = { studentId, cardId, reason ->
+                                        viewModel.reportCardLost(studentId, cardId, reason)
+                                    },
+                                    onIssueReplacementCard = { studentId, oldCardId, reason ->
+                                        viewModel.issueReplacementCard(studentId, oldCardId, reason)
+                                    },
+                                    onDeactivateCard = { studentId, cardId, reason ->
+                                        viewModel.deactivateCard(studentId, cardId, reason)
+                                    },
+                                    onIssueNewCard = { studentId, reason ->
+                                        viewModel.issueNewActiveCard(studentId, reason)
+                                    },
+                                    onTestScanAsGuard = { studentId ->
+                                        viewModel.loginAs(UserRole.SECURITY_GUARD)
+                                        viewModel.handleBarcodeScan(studentId, context)
+                                        viewModel.selectStudentForDetail(null)
+                                    }
+                                )
+                            } else {
+                                AdminDashboardScreen(
+                                    user = user,
+                                    allStudents = allStudents,
+                                    filteredStudents = filteredStudents,
+                                    scanLogs = scanLogs,
+                                    searchQuery = searchQuery,
+                                    feeFilter = feeFilter,
+                                    onSearchChange = { viewModel.setSearchQuery(it) },
+                                    onFilterChange = { viewModel.setFeeFilter(it) },
+                                    onSelectStudent = { studentId ->
+                                        viewModel.selectStudentForDetail(studentId)
+                                    },
+                                    onQuickToggleFeeStatus = { studentId, currentStatus ->
+                                        val nextStatus = if (currentStatus == FeeStatus.CLEARED) FeeStatus.OUTSTANDING else FeeStatus.CLEARED
+                                        viewModel.updateFeeStatus(studentId, nextStatus)
+                                    },
+                                    onAddStudent = { newStudent ->
+                                        viewModel.registerNewStudent(newStudent)
+                                    },
+                                    onDeleteStudent = { studentId ->
+                                        viewModel.deleteStudentRecord(studentId)
+                                    },
+                                    onEditStudent = { updated ->
+                                        viewModel.updateStudentDetails(updated)
+                                    },
+                                    onViewScanLogs = { showLogsScreen = true }
+                                )
+                            }
                         }
                     }
                 }

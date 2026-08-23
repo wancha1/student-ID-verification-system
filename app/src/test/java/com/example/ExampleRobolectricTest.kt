@@ -3,10 +3,13 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.MockStudentRepository
+import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
+import com.example.model.GateVerificationDecision
 import com.example.model.ScanLog
 import com.example.model.Student
+import com.example.model.StudentScanResult
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
 import kotlinx.coroutines.flow.first
@@ -21,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -48,58 +52,96 @@ class ExampleRobolectricTest {
 
     @Test
     fun testStudentQrLookup() = runBlocking {
-        val student = repository.findStudentByQrCode("STU-2026-0001")
+        val scanResult = repository.verifyStudentByQr("OAKRIDGE:STU:OAK-2026-0001")
+        assertTrue(scanResult is StudentScanResult.Success)
+        val student = (scanResult as StudentScanResult.Success).student
         assertNotNull(student)
-        assertEquals("Michael", student?.firstName)
-        assertEquals("Grade 11-A", student?.gradeClass)
-        assertTrue(student?.isDayScholar == true)
-        assertEquals(FeeStatus.CLEARED, student?.feesStatus)
-        assertTrue("Fees cleared student must be approved for entry", student?.isEntryApproved == true)
+        assertEquals("Michael", student.firstName)
+        assertEquals("Senior 4-A", student.gradeClass)
+        assertTrue(student.isDayScholar)
+        assertEquals(FeeStatus.CLEARED, student.feesStatus)
+        assertTrue("Fees cleared student must be approved for entry", scanResult.isApproved)
     }
 
     @Test
     fun testOutstandingStudentEntryNotApproved() = runBlocking {
-        val student = repository.findStudentByQrCode("STU-2026-0002")
+        val scanResult = repository.verifyStudentByQr("OAKRIDGE:STU:OAK-2026-0002")
+        assertTrue(scanResult is StudentScanResult.Success)
+        val success = scanResult as StudentScanResult.Success
+        assertEquals("Sophia", success.student.firstName)
+        assertEquals(FeeStatus.OUTSTANDING, success.student.feesStatus)
+        assertFalse("Outstanding fee student must NOT be approved for entry", success.isApproved)
+    }
+
+    @Test
+    fun testCardLifecycle_ReportLostAndReplacement() = runBlocking {
+        val studentNumber = "OAK-2026-0001"
+        val student = repository.getStudentByStudentNumber(studentNumber)
         assertNotNull(student)
-        assertEquals("Sophia", student?.firstName)
-        assertEquals(FeeStatus.OUTSTANDING, student?.feesStatus)
-        assertFalse("Outstanding fee student must NOT be approved for entry", student?.isEntryApproved == true)
+
+        // 1. Initial scan is approved
+        val scanResult1 = repository.verifyStudentByQr("OAKRIDGE:STU:$studentNumber")
+        assertTrue(scanResult1 is StudentScanResult.Success && scanResult1.isApproved)
+
+        // 2. Retrieve active card and report lost
+        val activeCard = repository.getActiveCardForStudent(student!!.id)
+        assertNotNull(activeCard)
+        assertEquals(CardStatus.ACTIVE, activeCard!!.status)
+
+        val reportResult = repository.reportCardLost(student.id, activeCard.id, "Student lost wallet on campus")
+        assertTrue(reportResult.isSuccess)
+
+        // 3. Scan now returns CardInactive (Denied entry)
+        val scanResult2 = repository.verifyStudentByQr("OAKRIDGE:STU:$studentNumber")
+        assertTrue("Scanning lost card must yield CardInactive", scanResult2 is StudentScanResult.CardInactive)
+        val inactiveResult = scanResult2 as StudentScanResult.CardInactive
+        assertEquals(CardStatus.LOST, inactiveResult.cardStatus)
+
+        // 4. Issue replacement card
+        val replacementResult = repository.issueReplacementCard(student.id, activeCard.id, "Badge replacement")
+        assertTrue(replacementResult.isSuccess)
+        val newCard = replacementResult.getOrThrow()
+        assertEquals(CardStatus.ACTIVE, newCard.status)
+
+        // 5. Scan now succeeds again with new card
+        val scanResult3 = repository.verifyStudentByQr("OAKRIDGE:STU:$studentNumber")
+        assertTrue(scanResult3 is StudentScanResult.Success && scanResult3.isApproved)
     }
 
     @Test
     fun testFeeStatusUpdateImmediatelyAffectsApproval() = runBlocking {
-        val studentId = "STU-2026-0002"
-        var student = repository.findStudentByQrCode(studentId)
-        assertFalse(student!!.isEntryApproved)
+        val studentNumber = "OAK-2026-0002"
+        val initialStudent = repository.getStudentByStudentNumber(studentNumber)
+        assertNotNull(initialStudent)
+        assertFalse(initialStudent!!.isEntryApproved)
 
         // Admin clears the student's fees
-        val updateResult = repository.updateFeeStatus(studentId, FeeStatus.CLEARED)
+        val updateResult = repository.updateFeeStatus(initialStudent.id, FeeStatus.CLEARED)
         assertTrue(updateResult.isSuccess)
 
         // Immediate scan by guard returns approved!
-        student = repository.findStudentByQrCode(studentId)
-        assertEquals(FeeStatus.CLEARED, student?.feesStatus)
-        assertTrue("Student must be approved immediately after admin clears fees", student?.isEntryApproved == true)
+        val scanResult1 = repository.verifyStudentByQr("OAKRIDGE:STU:$studentNumber")
+        assertTrue(scanResult1 is StudentScanResult.Success && scanResult1.isApproved)
 
         // Admin sets fees back to outstanding
-        repository.updateFeeStatus(studentId, FeeStatus.OUTSTANDING, 480.0)
-        student = repository.findStudentByQrCode(studentId)
-        assertEquals(FeeStatus.OUTSTANDING, student?.feesStatus)
-        assertFalse("Student must NOT be approved immediately after admin sets to outstanding", student?.isEntryApproved == true)
+        repository.updateFeeStatus(initialStudent.id, FeeStatus.OUTSTANDING, 480000.0)
+        val scanResult2 = repository.verifyStudentByQr("OAKRIDGE:STU:$studentNumber")
+        assertTrue(scanResult2 is StudentScanResult.Success && !scanResult2.isApproved)
     }
 
     @Test
     fun testAdminAddAndRemoveStudent() = runBlocking {
         val newStudent = Student(
-            id = "STU-2026-0099",
+            id = UUID.randomUUID().toString(),
+            studentNumber = "OAK-2026-0099",
             firstName = "Lucas",
             lastName = "Vance",
-            gradeClass = "Grade 10-C",
+            gradeClass = "Senior 3-C",
             dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
             feesStatus = FeeStatus.CLEARED,
             outstandingAmount = 0.0,
             guardianName = "Patricia Vance",
-            guardianPhone = "+1 (555) 349-1122",
+            guardianPhone = "+256 772 349112",
             homeroomTeacher = "Mr. Henderson",
             transportRoute = "North Gate • Route #5"
         )
@@ -107,17 +149,18 @@ class ExampleRobolectricTest {
         val addResult = repository.addStudent(newStudent)
         assertTrue(addResult.isSuccess)
 
-        val retrieved = repository.findStudentByQrCode("STU-2026-0099")
-        assertNotNull(retrieved)
-        assertEquals("Lucas", retrieved?.firstName)
-        assertTrue(retrieved?.isEntryApproved == true)
+        val scanResult = repository.verifyStudentByQr("OAKRIDGE:STU:OAK-2026-0099")
+        assertTrue(scanResult is StudentScanResult.Success)
+        val retrieved = (scanResult as StudentScanResult.Success).student
+        assertEquals("Lucas", retrieved.firstName)
+        assertTrue(scanResult.isApproved)
 
         // Delete student
-        val deleteResult = repository.deleteStudent("STU-2026-0099")
+        val deleteResult = repository.deleteStudent(newStudent.id)
         assertTrue(deleteResult.isSuccess)
 
-        val afterDelete = repository.findStudentByQrCode("STU-2026-0099")
-        assertNull(afterDelete)
+        val afterDelete = repository.verifyStudentByQr("OAKRIDGE:STU:OAK-2026-0099")
+        assertTrue(afterDelete is StudentScanResult.StudentNotFound)
     }
 
     @Test
@@ -125,29 +168,29 @@ class ExampleRobolectricTest {
         viewModel.loginAs(UserRole.SECURITY_GUARD)
 
         // Scan cleared student
-        viewModel.handleBarcodeScan("STU-2026-0001")
-        val clearedScanned = viewModel.currentScannedStudent.value
-        assertNotNull(clearedScanned)
-        assertTrue(clearedScanned?.isEntryApproved == true)
+        viewModel.handleBarcodeScan("OAKRIDGE:STU:OAK-2026-0001")
+        val clearedResult = viewModel.activeScanResult.value
+        assertNotNull(clearedResult)
+        assertTrue(clearedResult is StudentScanResult.Success && clearedResult.isApproved)
         assertNull(viewModel.scanError.value)
 
         // Scan outstanding student
-        viewModel.handleBarcodeScan("STU-2026-0002")
-        val outstandingScanned = viewModel.currentScannedStudent.value
-        assertNotNull(outstandingScanned)
-        assertFalse(outstandingScanned?.isEntryApproved == true)
+        viewModel.handleBarcodeScan("OAKRIDGE:STU:OAK-2026-0002")
+        val outstandingResult = viewModel.activeScanResult.value
+        assertNotNull(outstandingResult)
+        assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved)
 
-        // Scan invalid barcode
-        viewModel.handleBarcodeScan("UNKNOWN-BARCODE-XYZ")
-        assertNull(viewModel.currentScannedStudent.value)
-        assertNotNull(viewModel.scanError.value)
-        assertTrue(viewModel.scanError.value?.contains("UNKNOWN-BARCODE-XYZ") == true)
+        // Scan invalid barcode format
+        viewModel.handleBarcodeScan("NON_SCHOOL_BARCODE_XYZ")
+        val invalidResult = viewModel.activeScanResult.value
+        assertNotNull(invalidResult)
+        assertTrue(invalidResult is StudentScanResult.InvalidQr)
 
         // Verify logs contain all scans (newest first)
         val logs = repository.scanLogsFlow.first()
         assertEquals(3, logs.size)
-        assertFalse(logs[0].isApproved) // UNKNOWN-BARCODE-XYZ (newest)
-        assertFalse(logs[1].isApproved) // STU-2026-0002
-        assertTrue(logs[2].isApproved)  // STU-2026-0001
+        assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
+        assertEquals(GateVerificationDecision.NOT_APPROVED, logs[1].decision)
+        assertEquals(GateVerificationDecision.APPROVED, logs[2].decision)
     }
 }

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,7 +19,6 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +30,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -42,8 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
-import com.example.ui.theme.ApprovedGreen
-import com.example.ui.theme.RejectedRed
+import java.util.UUID
 
 @Composable
 fun StudentFormDialog(
@@ -55,12 +51,12 @@ fun StudentFormDialog(
 
     var firstName by remember { mutableStateOf(initialStudent?.firstName ?: "") }
     var lastName by remember { mutableStateOf(initialStudent?.lastName ?: "") }
-    var studentId by remember { mutableStateOf(initialStudent?.id ?: "STU-2026-00${(11..99).random()}") }
-    var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "Grade 11-A") }
-    var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "Bus Route 4 (Oakville Express)") }
+    var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "OAK-2026-00${(11..99).random()}") }
+    var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "Senior 3-A") }
+    var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "School Bus #4 (Oakville Express)") }
     var guardianName by remember { mutableStateOf(initialStudent?.guardianName ?: "") }
-    var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "+1 (555) ") }
-    var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "Mr. Kenneth Ross") }
+    var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "+256 772 ") }
+    var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "Ms. Lauren Parker") }
     var notes by remember { mutableStateOf(initialStudent?.notes ?: "") }
     var feeStatus by remember { mutableStateOf(initialStudent?.feesStatus ?: FeeStatus.CLEARED) }
     var outstandingAmount by remember { mutableStateOf(initialStudent?.outstandingAmount?.toString() ?: "0.00") }
@@ -94,16 +90,16 @@ fun StudentFormDialog(
                     )
                 }
 
-                // ID & Class
+                // Student Number & Class
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = studentId,
-                        onValueChange = { if (!isEditing) studentId = it.uppercase() },
+                        value = studentNumber,
+                        onValueChange = { if (!isEditing) studentNumber = it.uppercase() },
                         enabled = !isEditing,
-                        label = { Text("Student ID") },
+                        label = { Text("Student Number") },
                         singleLine = true,
                         leadingIcon = {
                             Icon(Icons.Default.Badge, contentDescription = null)
@@ -181,7 +177,7 @@ fun StudentFormDialog(
                         selected = feeStatus == FeeStatus.OUTSTANDING,
                         onClick = {
                             feeStatus = FeeStatus.OUTSTANDING
-                            if (outstandingAmount.toDoubleOrNull() == 0.0) outstandingAmount = "450.00"
+                            if (outstandingAmount.toDoubleOrNull() == 0.0) outstandingAmount = "450000.00"
                         },
                         label = { Text("OUTSTANDING") },
                         shape = RoundedCornerShape(8.dp),
@@ -193,7 +189,7 @@ fun StudentFormDialog(
                     OutlinedTextField(
                         value = outstandingAmount,
                         onValueChange = { outstandingAmount = it },
-                        label = { Text("Outstanding Balance ($)") },
+                        label = { Text("Outstanding Balance (UGX)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier
@@ -274,8 +270,8 @@ fun StudentFormDialog(
                         errorMessage = "First and Last Name are required."
                         return@Button
                     }
-                    if (studentId.isBlank()) {
-                        errorMessage = "Student ID is required."
+                    if (studentNumber.isBlank()) {
+                        errorMessage = "Student Number is required."
                         return@Button
                     }
 
@@ -284,7 +280,8 @@ fun StudentFormDialog(
                     ).random()
 
                     val newStudent = Student(
-                        id = studentId.trim(),
+                        id = initialStudent?.id ?: UUID.randomUUID().toString(),
+                        studentNumber = studentNumber.trim().uppercase(),
                         firstName = firstName.trim(),
                         lastName = lastName.trim(),
                         gradeClass = gradeClass.trim(),
@@ -292,15 +289,16 @@ fun StudentFormDialog(
                         dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
                         transportRoute = transportRoute.trim(),
                         feesStatus = feeStatus,
-                        outstandingAmount = if (feeStatus == FeeStatus.CLEARED) 0.0 else (outstandingAmount.toDoubleOrNull() ?: 450.0),
+                        outstandingAmount = if (feeStatus == FeeStatus.CLEARED) 0.0 else (outstandingAmount.toDoubleOrNull() ?: 450000.0),
                         gender = initialStudent?.gender ?: "Not specified",
                         avatarColorSeed = colorSeed,
                         photoUrl = initialStudent?.photoUrl,
                         guardianName = guardianName.trim().ifBlank { "Parent / Guardian" },
-                        guardianPhone = guardianPhone.trim().ifBlank { "+1 (555) 000-0000" },
-                        emergencyContact = initialStudent?.emergencyContact ?: "+1 (555) 000-0001",
+                        guardianPhone = guardianPhone.trim().ifBlank { "+256 700 000000" },
+                        emergencyContact = initialStudent?.emergencyContact ?: "+256 770 000000",
                         homeroomTeacher = homeroomTeacher.trim().ifBlank { "Unassigned" },
-                        notes = notes.trim()
+                        notes = notes.trim(),
+                        updatedAt = System.currentTimeMillis()
                     )
                     onSave(newStudent)
                 },
