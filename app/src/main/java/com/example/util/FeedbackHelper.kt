@@ -10,6 +10,18 @@ import android.os.VibratorManager
 
 object FeedbackHelper {
 
+    fun playApprovedSoundAndHaptic(context: Context?) {
+        context?.let { playFeedback(it, isApproved = true) }
+    }
+
+    fun playDeniedSoundAndHaptic(context: Context?) {
+        context?.let { playFeedback(it, isApproved = false) }
+    }
+
+    fun playWarningSoundAndHaptic(context: Context?) {
+        context?.let { playFeedback(it, isApproved = false) }
+    }
+
     fun playFeedback(context: Context, isApproved: Boolean) {
         try {
             // Haptic vibration

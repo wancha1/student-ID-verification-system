@@ -30,11 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
@@ -279,11 +281,22 @@ fun StudentAvatar(
             .background(bgColor)
             .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
     ) {
-        Text(
-            text = initials.ifBlank { "ST" },
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = (size.value * 0.38).sp
-        )
+        if (!student.photoUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = student.photoUrl,
+                contentDescription = "Passport photo for ${student.fullName}",
+                modifier = Modifier
+                    .size(size)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Text(
+                text = initials.ifBlank { "ST" },
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = (size.value * 0.38).sp
+            )
+        }
     }
 }

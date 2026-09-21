@@ -235,7 +235,7 @@ fun PrintableStudentIdCard(
                                 .padding(4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            VisualQrMatrix(payload = "OAKRIDGE:STU:${student.studentNumber}")
+                            VisualQrMatrix(payload = student.uniqueQrCode)
                         }
                     }
 
@@ -478,8 +478,8 @@ fun DigitalIdCardDialog(
                 ) {
                     Button(
                         onClick = {
-                            // Test scan this student's QR payload
-                            onTestScan("OAKRIDGE:STU:${student.studentNumber}")
+                            // Test scan this student's unique QR payload
+                            onTestScan(student.uniqueQrCode)
                             onDismiss()
                         },
                         modifier = Modifier

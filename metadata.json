@@ -1,6 +1,6 @@
 {
   "name": "Oakridge Student Access",
-  "description": "School student ID verification and gate access control for security guards and administrators.",
+  "description": "Comprehensive school access management system with 4 specialized roles (Gate Keeper, Requirements Master, Administrator, Meals Master), passport photo verification, unique student QR codes, and multi-format reports (Excel, Word, CSV, Text).",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

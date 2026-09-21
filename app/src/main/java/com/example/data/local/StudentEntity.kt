@@ -46,6 +46,8 @@ data class StudentEntity(
     val homeroomTeacher: String,
     val academicYear: String,
     val notes: String,
+    @ColumnInfo(defaultValue = "")
+    val qrToken: String = "",
     val updatedAt: Long,
     val isDeleted: Boolean = false
 ) {
@@ -68,6 +70,8 @@ data class StudentEntity(
             AccessStatus.evaluate(isDayScholar, parsedFeeStatus)
         }
 
+        val resolvedToken = if (qrToken.isNotBlank()) qrToken else id.replace("-", "").take(8).uppercase()
+
         return Student(
             id = id,
             studentNumber = studentNumber,
@@ -89,6 +93,7 @@ data class StudentEntity(
             homeroomTeacher = homeroomTeacher,
             academicYear = academicYear,
             notes = notes,
+            qrToken = resolvedToken,
             updatedAt = updatedAt,
             isDeleted = isDeleted
         )
@@ -118,6 +123,7 @@ data class StudentEntity(
                 homeroomTeacher = student.homeroomTeacher,
                 academicYear = student.academicYear,
                 notes = student.notes,
+                qrToken = student.qrToken,
                 updatedAt = student.updatedAt,
                 isDeleted = student.isDeleted
             )

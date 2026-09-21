@@ -1,28 +1,48 @@
 package com.example.ui.admin
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,15 +50,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
+import com.example.ui.components.VisualQrMatrix
+import com.example.ui.theme.SchoolPrimary
+import com.example.util.ImageStorageHelper
 import java.util.UUID
 
 @Composable
@@ -47,6 +77,7 @@ fun StudentFormDialog(
     onDismiss: () -> Unit,
     onSave: (Student) -> Unit
 ) {
+    val context = LocalContext.current
     val isEditing = initialStudent != null
 
     var firstName by remember { mutableStateOf(initialStudent?.firstName ?: "") }
@@ -60,6 +91,27 @@ fun StudentFormDialog(
     var notes by remember { mutableStateOf(initialStudent?.notes ?: "") }
     var feeStatus by remember { mutableStateOf(initialStudent?.feesStatus ?: FeeStatus.CLEARED) }
     var outstandingAmount by remember { mutableStateOf(initialStudent?.outstandingAmount?.toString() ?: "0.00") }
+
+    // Passport Photo state from device
+    var photoUrl by remember { mutableStateOf(initialStudent?.photoUrl) }
+
+    // Unique QR Code token
+    val qrToken by remember {
+        mutableStateOf(
+            initialStudent?.qrToken ?: UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        )
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val localPath = ImageStorageHelper.saveImageUriToInternalStorage(context, uri)
+            if (localPath != null) {
+                photoUrl = localPath
+            }
+        }
+    }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scrollState = rememberScrollState()
@@ -79,7 +131,7 @@ fun StudentFormDialog(
                     .fillMaxWidth()
                     .verticalScroll(scrollState)
                     .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (errorMessage != null) {
                     Text(
@@ -88,6 +140,229 @@ fun StudentFormDialog(
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold
                     )
+                }
+
+                // ==========================================
+                // 1. PASSPORT PHOTO SELECTION FROM DEVICE
+                // ==========================================
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "PASSPORT PHOTO (DEVICE ATTACHMENT)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SchoolPrimary,
+                            letterSpacing = 0.5.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Photo preview
+                            Box(
+                                modifier = Modifier
+                                    .size(76.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(
+                                        width = 1.5.dp,
+                                        color = if (photoUrl != null) SchoolPrimary else MaterialTheme.colorScheme.outlineVariant,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (photoUrl != null) {
+                                    AsyncImage(
+                                        model = photoUrl,
+                                        contentDescription = "Student Passport Photo",
+                                        modifier = Modifier.size(76.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AddAPhoto,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        Text(
+                                            text = "No Photo",
+                                            fontSize = 9.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Actions
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("button_pick_passport_photo")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddAPhoto,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (photoUrl == null) "Select from Device" else "Change Photo",
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                if (photoUrl != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFF059669).copy(alpha = 0.15f)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF059669),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Device Photo Saved",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF059669)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.weight(1f))
+
+                                        IconButton(
+                                            onClick = {
+                                                ImageStorageHelper.deleteInternalPhoto(context, photoUrl)
+                                                photoUrl = null
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Remove photo",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 2. UNIQUE QR CODE GENERATION & PREVIEW
+                // ==========================================
+                val effectiveStudentNumber = studentNumber.trim().uppercase()
+                val uniqueQrCodePayload = "OAKRIDGE:STU:$effectiveStudentNumber:$qrToken"
+
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = SchoolPrimary.copy(alpha = 0.05f)
+                    ),
+                    border = BorderStroke(1.dp, SchoolPrimary.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                VisualQrMatrix(
+                                    payload = uniqueQrCodePayload,
+                                    modifier = Modifier.size(56.dp)
+                                )
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.QrCode2,
+                                    contentDescription = null,
+                                    tint = SchoolPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "ASSIGNED UNIQUE QR CODE",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SchoolPrimary,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = uniqueQrCodePayload,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Unique tamper-resistant identifier for Gate, Requirements & Meals.",
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
 
                 // Student Number & Class
@@ -292,12 +567,13 @@ fun StudentFormDialog(
                         outstandingAmount = if (feeStatus == FeeStatus.CLEARED) 0.0 else (outstandingAmount.toDoubleOrNull() ?: 450000.0),
                         gender = initialStudent?.gender ?: "Not specified",
                         avatarColorSeed = colorSeed,
-                        photoUrl = initialStudent?.photoUrl,
+                        photoUrl = photoUrl,
                         guardianName = guardianName.trim().ifBlank { "Parent / Guardian" },
                         guardianPhone = guardianPhone.trim().ifBlank { "+256 700 000000" },
                         emergencyContact = initialStudent?.emergencyContact ?: "+256 770 000000",
                         homeroomTeacher = homeroomTeacher.trim().ifBlank { "Unassigned" },
                         notes = notes.trim(),
+                        qrToken = qrToken,
                         updatedAt = System.currentTimeMillis()
                     )
                     onSave(newStudent)
@@ -317,3 +593,4 @@ fun StudentFormDialog(
         }
     )
 }
+

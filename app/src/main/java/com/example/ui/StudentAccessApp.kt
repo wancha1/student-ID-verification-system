@@ -70,8 +70,16 @@ import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.SchoolPrimary
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.TableChart
+import com.example.ui.components.MultiFormatExportDialog
+import com.example.ui.meals.MealsMasterScreen
+import com.example.ui.requirements.RequirementsMasterScreen
+import com.example.util.ExportFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,11 +105,24 @@ fun StudentAccessApp(
     val guardianNotifications by viewModel.guardianNotifications.collectAsStateWithLifecycle()
     val exeatPasses by viewModel.exeatPasses.collectAsStateWithLifecycle()
 
+    val activeMealType by viewModel.activeMealType.collectAsStateWithLifecycle()
+    val mealRecords by viewModel.mealRecords.collectAsStateWithLifecycle()
+    val mealScanOutcome by viewModel.mealScanOutcome.collectAsStateWithLifecycle()
+    val isMealScannerOpen by viewModel.isMealScannerOpen.collectAsStateWithLifecycle()
+    val requirementsList by viewModel.requirementsList.collectAsStateWithLifecycle()
+    val requirementsSearchQuery by viewModel.requirementsSearchQuery.collectAsStateWithLifecycle()
+    val isRequirementScannerOpen by viewModel.isRequirementScannerOpen.collectAsStateWithLifecycle()
+
     var showLogsScreen by remember { mutableStateOf(false) }
     var showGuardianAlertsScreen by remember { mutableStateOf(false) }
     var showExeatScreen by remember { mutableStateOf(false) }
     var showBatchPrintDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
+    var showRoleSwitchMenu by remember { mutableStateOf(false) }
+    var showAllExportsDialog by remember { mutableStateOf(false) }
+    var exportDatasetTarget by remember { mutableStateOf("STUDENTS") }
+
+    val isAnyScannerOpen = isScannerOpen || isMealScannerOpen || isRequirementScannerOpen
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -123,78 +144,162 @@ fun StudentAccessApp(
             modifier = modifier
         )
     } else {
+        val roleColor = when (user.role) {
+            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> SchoolPrimary
+            UserRole.REQUIREMENTS_MASTER -> Color(0xFF0284C7)
+            UserRole.ADMINISTRATOR -> GoldAccent
+            UserRole.MEALS_MASTER -> Color(0xFFE11D48)
+        }
+
+        val roleIcon = when (user.role) {
+            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> Icons.Default.Security
+            UserRole.REQUIREMENTS_MASTER -> Icons.Default.FactCheck
+            UserRole.ADMINISTRATOR -> Icons.Default.AdminPanelSettings
+            UserRole.MEALS_MASTER -> Icons.Default.Restaurant
+        }
+
+        val roleTitle = when (user.role) {
+            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> "Gate Keeper"
+            UserRole.REQUIREMENTS_MASTER -> "Requirements Master"
+            UserRole.ADMINISTRATOR -> "Administrator"
+            UserRole.MEALS_MASTER -> "Meals Master"
+        }
+
+        val roleSubtitle = when (user.role) {
+            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> "Turnstile Gate 1 • Access Verification"
+            UserRole.REQUIREMENTS_MASTER -> "Checklist Clearance • Student Affairs"
+            UserRole.ADMINISTRATOR -> "Bursar & Records • Fees & Registry"
+            UserRole.MEALS_MASTER -> "Dining Hall Turnstile • Food Service"
+        }
+
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                if (!isScannerOpen) {
+                if (!isAnyScannerOpen) {
                     TopAppBar(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(34.dp),
                                     shape = CircleShape,
-                                    color = if (user.role == UserRole.SECURITY_GUARD) SchoolPrimary else GoldAccent
+                                    color = roleColor
                                 ) {
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = if (user.role == UserRole.SECURITY_GUARD) Icons.Default.Security else Icons.Default.AdminPanelSettings,
-                                            contentDescription = null,
+                                            imageVector = roleIcon,
+                                            contentDescription = roleTitle,
                                             tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Oakridge Student Access",
+                                        text = "Oakridge Academy",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = if (user.role == UserRole.SECURITY_GUARD) "Gate Verification • Guard Mode" else "Admin Office • Fees & Records",
+                                        text = "$roleTitle • $roleSubtitle",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 11.sp
+                                        fontSize = 11.sp,
+                                        maxLines = 1
                                     )
                                 }
                             }
                         },
                         actions = {
-                            // Quick Role Switcher Pill
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier
-                                    .testTag("button_switch_role")
-                                    .clickable {
-                                        val newRole = if (user.role == UserRole.SECURITY_GUARD) UserRole.ADMINISTRATOR else UserRole.SECURITY_GUARD
-                                        viewModel.loginAs(newRole)
-                                        showLogsScreen = false
-                                        showGuardianAlertsScreen = false
-                                        showExeatScreen = false
-                                    }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            // Quick Role Switcher Pill with Dropdown
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = roleColor.copy(alpha = 0.12f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, roleColor.copy(alpha = 0.35f)),
+                                    modifier = Modifier
+                                        .testTag("button_switch_role")
+                                        .clickable { showRoleSwitchMenu = true }
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SwapHoriz,
-                                        contentDescription = "Switch Role",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SwapHoriz,
+                                            contentDescription = "Switch Role",
+                                            tint = roleColor,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = roleTitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = roleColor,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                DropdownMenu(
+                                    expanded = showRoleSwitchMenu,
+                                    onDismissRequest = { showRoleSwitchMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Gate Keeper (Turnstile)") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Security, contentDescription = null, tint = SchoolPrimary)
+                                        },
+                                        onClick = {
+                                            viewModel.loginAs(UserRole.GATE_KEEPER)
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
+                                            showRoleSwitchMenu = false
+                                        }
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (user.role == UserRole.SECURITY_GUARD) "Switch to Admin" else "Switch to Guard",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 11.sp
+                                    DropdownMenuItem(
+                                        text = { Text("Requirements Master (Checklist)") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.FactCheck, contentDescription = null, tint = Color(0xFF0284C7))
+                                        },
+                                        onClick = {
+                                            viewModel.loginAs(UserRole.REQUIREMENTS_MASTER)
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
+                                            showRoleSwitchMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Administrator (Registry & Fees)") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = GoldAccent)
+                                        },
+                                        onClick = {
+                                            viewModel.loginAs(UserRole.ADMINISTRATOR)
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
+                                            showRoleSwitchMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Meals Master (Dining Hall)") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Restaurant, contentDescription = null, tint = Color(0xFFE11D48))
+                                        },
+                                        onClick = {
+                                            viewModel.loginAs(UserRole.MEALS_MASTER)
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
+                                            showRoleSwitchMenu = false
+                                        }
                                     )
                                 }
                             }
@@ -215,6 +320,27 @@ fun StudentAccessApp(
                                     expanded = showOptionsMenu,
                                     onDismissRequest = { showOptionsMenu = false }
                                 ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Multi-Format Data Downloads (Excel, Word...)") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.TableChart,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        },
+                                        onClick = {
+                                            exportDatasetTarget = when (user.role) {
+                                                UserRole.MEALS_MASTER -> "MEALS"
+                                                UserRole.REQUIREMENTS_MASTER -> "REQUIREMENTS"
+                                                UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> "GATE_LOGS"
+                                                else -> "STUDENTS"
+                                            }
+                                            showAllExportsDialog = true
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_multi_export")
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Gate Access Logs") },
                                         leadingIcon = {
@@ -361,7 +487,7 @@ fun StudentAccessApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(if (isScannerOpen) PaddingValues(0.dp) else paddingValues)
+                    .padding(if (isAnyScannerOpen) PaddingValues(0.dp) else paddingValues)
             ) {
                 if (showLogsScreen) {
                     GateAccessLogsScreen(
@@ -391,7 +517,7 @@ fun StudentAccessApp(
                     )
                 } else {
                     when (user.role) {
-                        UserRole.SECURITY_GUARD -> {
+                        UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> {
                             if (isScannerOpen) {
                                 GuardScannerScreen(
                                     onBarcodeDetected = { rawCode ->
@@ -415,6 +541,38 @@ fun StudentAccessApp(
                                     onTriggerSync = { viewModel.triggerCloudSync() },
                                     onToggleOnline = { viewModel.toggleNetworkOnline(it) },
                                     onViewAllLogs = { showLogsScreen = true }
+                                )
+                            }
+                        }
+
+                        UserRole.REQUIREMENTS_MASTER -> {
+                            if (isRequirementScannerOpen) {
+                                GuardScannerScreen(
+                                    onBarcodeDetected = { rawCode ->
+                                        viewModel.handleRequirementBarcodeScan(rawCode)
+                                    },
+                                    onCloseScanner = { viewModel.closeRequirementScanner() }
+                                )
+                            } else {
+                                RequirementsMasterScreen(
+                                    user = user,
+                                    requirementsList = requirementsList,
+                                    allStudents = allStudents,
+                                    searchQuery = requirementsSearchQuery,
+                                    onSearchQueryChange = { viewModel.setRequirementsSearchQuery(it) },
+                                    onToggleRequirement = { studentId, itemKey ->
+                                        viewModel.toggleRequirementItem(studentId, itemKey)
+                                    },
+                                    onMarkAllCleared = { studentId ->
+                                        viewModel.markAllRequirementsCleared(studentId)
+                                    },
+                                    onUpdateNotes = { studentId, notes ->
+                                        viewModel.updateRequirementNotes(studentId, notes)
+                                    },
+                                    onOpenScanner = { viewModel.openRequirementScanner() },
+                                    onExport = { format ->
+                                        viewModel.exportDataset("REQUIREMENTS", format, context)
+                                    }
                                 )
                             }
                         }
@@ -448,7 +606,7 @@ fun StudentAccessApp(
                                         viewModel.issueNewActiveCard(studentId, reason)
                                     },
                                     onTestScanAsGuard = { studentId ->
-                                        viewModel.loginAs(UserRole.SECURITY_GUARD)
+                                        viewModel.loginAs(UserRole.GATE_KEEPER)
                                         viewModel.handleBarcodeScan(studentId, context)
                                         viewModel.selectStudentForDetail(null)
                                     }
@@ -487,6 +645,34 @@ fun StudentAccessApp(
                                 )
                             }
                         }
+
+                        UserRole.MEALS_MASTER -> {
+                            if (isMealScannerOpen) {
+                                GuardScannerScreen(
+                                    onBarcodeDetected = { rawCode ->
+                                        viewModel.verifyAndServeMeal(rawCode, context)
+                                    },
+                                    onCloseScanner = { viewModel.closeMealScanner() }
+                                )
+                            } else {
+                                MealsMasterScreen(
+                                    user = user,
+                                    activeMealType = activeMealType,
+                                    mealRecords = mealRecords,
+                                    mealScanOutcome = mealScanOutcome,
+                                    allStudents = allStudents,
+                                    onSelectMealType = { viewModel.setActiveMealType(it) },
+                                    onOpenScanner = { viewModel.openMealScanner() },
+                                    onManualServe = { studentNumber ->
+                                        viewModel.verifyAndServeMeal(studentNumber, context)
+                                    },
+                                    onDismissScanOutcome = { viewModel.dismissMealOutcome() },
+                                    onExport = { format ->
+                                        viewModel.exportDataset("MEALS", format, context)
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -495,6 +681,29 @@ fun StudentAccessApp(
                     BatchPrintIdCardsDialog(
                         students = allStudents,
                         onDismiss = { showBatchPrintDialog = false }
+                    )
+                }
+
+                // Multi-Format Export Dialog
+                if (showAllExportsDialog) {
+                    MultiFormatExportDialog(
+                        datasetTitle = when (exportDatasetTarget) {
+                            "GATE_LOGS" -> "Gate Access Verification Logs"
+                            "MEALS" -> "Dining Hall Meal Serving Records"
+                            "REQUIREMENTS" -> "Student Term Requirements Checklist"
+                            else -> "Complete Student Registry & Fee Roster"
+                        },
+                        recordCount = when (exportDatasetTarget) {
+                            "GATE_LOGS" -> scanLogs.size
+                            "MEALS" -> mealRecords.size
+                            "REQUIREMENTS" -> requirementsList.size
+                            else -> allStudents.size
+                        },
+                        onDismiss = { showAllExportsDialog = false },
+                        onExport = { format ->
+                            viewModel.exportDataset(exportDatasetTarget, format, context)
+                            showAllExportsDialog = false
+                        }
                     )
                 }
             }

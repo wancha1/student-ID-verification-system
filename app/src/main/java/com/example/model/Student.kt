@@ -29,6 +29,7 @@ data class Student(
     val homeroomTeacher: String = "Mrs. Sarah Henderson",
     val academicYear: String = "2025/2026",
     val notes: String = "",
+    val qrToken: String = UUID.randomUUID().toString().replace("-", "").take(8).uppercase(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isDeleted: Boolean = false
 ) {
@@ -36,10 +37,16 @@ data class Student(
     val name: String get() = fullName
 
     /**
-     * Standardized non-sensitive QR payload.
-     * Encodes ONLY a non-sensitive student pointer (never financial or personal info).
+     * Unique QR code assigned to this specific student.
+     * Encodes student registration number + unique cryptographic token.
      */
-    val qrPayload: String get() = "OAKRIDGE:STU:$studentNumber"
+    val uniqueQrCode: String get() = "OAKRIDGE:STU:$studentNumber:$qrToken"
+
+    /**
+     * Standardized non-sensitive QR payload.
+     * Encodes the unique student QR identifier (never financial or personal info).
+     */
+    val qrPayload: String get() = uniqueQrCode
 
     /**
      * Entry verification policy:

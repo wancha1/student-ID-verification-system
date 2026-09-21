@@ -13,14 +13,26 @@ import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
 import com.example.model.GuardianNotification
 import com.example.model.NotificationType
+import com.example.model.MealRecord
+import com.example.model.MealServingStatus
+import com.example.model.MealType
+import com.example.model.MealVerificationResult
 import com.example.model.ScanLog
 import com.example.model.Student
+import com.example.model.StudentRequirement
 import com.example.model.StudentScanResult
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
+import com.example.util.ExportFormat
+import com.example.util.ExportManager
 import com.example.util.ExportUtils
 import com.example.util.FeedbackHelper
+import com.example.util.QrCodeUtils
+import com.example.util.QrParseResult
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,12 +51,12 @@ class MainViewModel(
     private val repository: StudentRepository = MockStudentRepository.getInstance()
 ) : ViewModel() {
 
-    // Current Authenticated User
+    // Current Authenticated User (Defaults to Gate Keeper)
     private val _currentUser = MutableStateFlow<AuthUser?>(
         AuthUser(
-            role = UserRole.SECURITY_GUARD,
-            name = UserRole.SECURITY_GUARD.defaultUsername,
-            station = UserRole.SECURITY_GUARD.subtitle
+            role = UserRole.GATE_KEEPER,
+            name = UserRole.GATE_KEEPER.defaultUsername,
+            station = UserRole.GATE_KEEPER.subtitle
         )
     )
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
@@ -145,6 +157,62 @@ class MainViewModel(
     // User feedback notifications
     private val _userFeedbackMessage = MutableStateFlow<String?>(null)
     val userFeedbackMessage: StateFlow<String?> = _userFeedbackMessage.asStateFlow()
+
+    // ==========================================
+    // MEALS MASTER STATE & ACCESS CONTROL
+    // ==========================================
+    private val _activeMealType = MutableStateFlow(MealType.LUNCH)
+    val activeMealType: StateFlow<MealType> = _activeMealType.asStateFlow()
+
+    private val _mealRecords = MutableStateFlow<List<MealRecord>>(createInitialSampleMeals())
+    val mealRecords: StateFlow<List<MealRecord>> = _mealRecords.asStateFlow()
+
+    private val _mealScanOutcome = MutableStateFlow<MealVerificationResult?>(null)
+    val mealScanOutcome: StateFlow<MealVerificationResult?> = _mealScanOutcome.asStateFlow()
+
+    private val _isMealScannerOpen = MutableStateFlow(false)
+    val isMealScannerOpen: StateFlow<Boolean> = _isMealScannerOpen.asStateFlow()
+
+    // ==========================================
+    // REQUIREMENTS MASTER STATE & CHECKLIST
+    // ==========================================
+    private val _requirementsOverrides = MutableStateFlow<Map<String, StudentRequirement>>(emptyMap())
+    private val _requirementsSearchQuery = MutableStateFlow("")
+    val requirementsSearchQuery: StateFlow<String> = _requirementsSearchQuery.asStateFlow()
+
+    private val _isRequirementScannerOpen = MutableStateFlow(false)
+    val isRequirementScannerOpen: StateFlow<Boolean> = _isRequirementScannerOpen.asStateFlow()
+
+    private val _scannedRequirementStudentId = MutableStateFlow<String?>(null)
+    val scannedRequirementStudentId: StateFlow<String?> = _scannedRequirementStudentId.asStateFlow()
+
+    val requirementsList: StateFlow<List<StudentRequirement>> = combine(
+        allStudents,
+        _requirementsOverrides,
+        _requirementsSearchQuery
+    ) { students, overrides, query ->
+        students.map { student ->
+            overrides[student.id] ?: StudentRequirement(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                gradeClass = student.gradeClass,
+                uniformComplete = student.feesStatus == FeeStatus.CLEARED,
+                sportsKitComplete = true,
+                textbooksSubmitted = student.feesStatus == FeeStatus.CLEARED,
+                medicalFormSigned = true,
+                schoolIdIssued = true,
+                rulesAgreementSigned = true,
+                busPassCleared = student.isDayScholar,
+                notes = student.notes
+            )
+        }.filter {
+            if (query.isBlank()) true
+            else it.studentName.contains(query, ignoreCase = true) ||
+                 it.studentNumber.contains(query, ignoreCase = true) ||
+                 it.gradeClass.contains(query, ignoreCase = true)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun loginAs(role: UserRole, customName: String? = null) {
         _currentUser.value = AuthUser(
@@ -533,6 +601,267 @@ class MainViewModel(
             isCsv = false
         )
         _userFeedbackMessage.value = "Gate Attendance Summary Report opened in share sheet."
+    }
+
+    // ==========================================
+    // MEALS MASTER ACTIONS
+    // ==========================================
+    fun selectMealType(mealType: MealType) {
+        _activeMealType.value = mealType
+    }
+
+    fun setActiveMealType(mealType: MealType) {
+        selectMealType(mealType)
+    }
+
+    fun openMealScanner() {
+        _isMealScannerOpen.value = true
+    }
+
+    fun closeMealScanner() {
+        _isMealScannerOpen.value = false
+    }
+
+    fun dismissMealScanOutcome() {
+        _mealScanOutcome.value = null
+    }
+
+    fun dismissMealOutcome() {
+        dismissMealScanOutcome()
+    }
+
+    fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val parsed = QrCodeUtils.parseQrCode(rawCode)
+        val students = allStudents.value
+
+        val student = when (parsed) {
+            is QrParseResult.ValidStudentNumber -> {
+                students.find { it.studentNumber.equals(parsed.studentNumber, ignoreCase = true) }
+            }
+            is QrParseResult.ValidInternalId -> {
+                students.find { it.id.equals(parsed.internalId, ignoreCase = true) }
+            }
+            is QrParseResult.Invalid -> {
+                students.find {
+                    it.studentNumber.equals(rawCode.trim(), ignoreCase = true) ||
+                    it.uniqueQrCode.equals(rawCode.trim(), ignoreCase = true)
+                }
+            }
+        }
+
+        if (student == null) {
+            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+            FeedbackHelper.playDeniedSoundAndHaptic(context)
+            return
+        }
+
+        val activeMeal = _activeMealType.value
+
+        // Check for double-serving on same date and same meal session
+        val previousRecord = _mealRecords.value.find {
+            it.studentId == student.id &&
+            it.mealType == activeMeal &&
+            it.mealDate == todayStr &&
+            it.status == MealServingStatus.SERVED
+        }
+
+        if (previousRecord != null) {
+            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
+            FeedbackHelper.playWarningSoundAndHaptic(context)
+            return
+        }
+
+        // Meal Approved & Served
+        val newRecord = MealRecord(
+            studentId = student.id,
+            studentNumber = student.studentNumber,
+            studentName = student.fullName,
+            gradeClass = student.gradeClass,
+            mealType = activeMeal,
+            mealDate = todayStr,
+            timestamp = System.currentTimeMillis(),
+            serverName = _currentUser.value?.name ?: "Chef Jackson Omondi",
+            status = MealServingStatus.SERVED
+        )
+
+        _mealRecords.value = listOf(newRecord) + _mealRecords.value
+        _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
+        FeedbackHelper.playApprovedSoundAndHaptic(context)
+    }
+
+    // ==========================================
+    // REQUIREMENTS MASTER ACTIONS
+    // ==========================================
+    fun openRequirementScanner() {
+        _isRequirementScannerOpen.value = true
+    }
+
+    fun closeRequirementScanner() {
+        _isRequirementScannerOpen.value = false
+    }
+
+    fun setRequirementsSearchQuery(query: String) {
+        _requirementsSearchQuery.value = query
+    }
+
+    fun selectRequirementStudent(studentId: String?) {
+        _scannedRequirementStudentId.value = studentId
+    }
+
+    fun handleRequirementBarcodeScan(rawCode: String) {
+        _isRequirementScannerOpen.value = false
+        val parsed = QrCodeUtils.parseQrCode(rawCode)
+        val students = allStudents.value
+        val student = when (parsed) {
+            is QrParseResult.ValidStudentNumber -> students.find { it.studentNumber.equals(parsed.studentNumber, ignoreCase = true) }
+            is QrParseResult.ValidInternalId -> students.find { it.id.equals(parsed.internalId, ignoreCase = true) }
+            is QrParseResult.Invalid -> students.find { it.studentNumber.equals(rawCode.trim(), ignoreCase = true) }
+        }
+        if (student != null) {
+            _scannedRequirementStudentId.value = student.id
+            _requirementsSearchQuery.value = student.studentNumber
+            _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
+        } else {
+            _userFeedbackMessage.value = "Student not found for scanned QR: $rawCode"
+        }
+    }
+
+    fun toggleRequirementItem(studentId: String, itemKey: String) {
+        val current = requirementsList.value.find { it.studentId == studentId } ?: return
+        val updated = when (itemKey) {
+            "uniform" -> current.copy(uniformComplete = !current.uniformComplete, updatedAt = System.currentTimeMillis())
+            "sports" -> current.copy(sportsKitComplete = !current.sportsKitComplete, updatedAt = System.currentTimeMillis())
+            "textbooks" -> current.copy(textbooksSubmitted = !current.textbooksSubmitted, updatedAt = System.currentTimeMillis())
+            "medical" -> current.copy(medicalFormSigned = !current.medicalFormSigned, updatedAt = System.currentTimeMillis())
+            "idCard" -> current.copy(schoolIdIssued = !current.schoolIdIssued, updatedAt = System.currentTimeMillis())
+            "rules" -> current.copy(rulesAgreementSigned = !current.rulesAgreementSigned, updatedAt = System.currentTimeMillis())
+            "busPass" -> current.copy(busPassCleared = !current.busPassCleared, updatedAt = System.currentTimeMillis())
+            else -> current
+        }
+        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+    }
+
+    fun markAllRequirementsCleared(studentId: String) {
+        val current = requirementsList.value.find { it.studentId == studentId } ?: return
+        val updated = current.copy(
+            uniformComplete = true,
+            sportsKitComplete = true,
+            textbooksSubmitted = true,
+            medicalFormSigned = true,
+            schoolIdIssued = true,
+            rulesAgreementSigned = true,
+            busPassCleared = true,
+            updatedAt = System.currentTimeMillis()
+        )
+        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        _userFeedbackMessage.value = "All items marked CLEARED for ${current.studentName}!"
+    }
+
+    fun updateRequirementNotes(studentId: String, notes: String) {
+        val current = requirementsList.value.find { it.studentId == studentId } ?: return
+        val updated = current.copy(notes = notes, updatedAt = System.currentTimeMillis())
+        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+    }
+
+    // ==========================================
+    // MULTI-FORMAT EXPORT DISPATCHER (Excel, Word, CSV, Text)
+    // ==========================================
+    fun exportDataset(datasetType: String, format: ExportFormat, context: Context) {
+        exportDataset(context, datasetType, format)
+    }
+
+    fun exportDataset(context: Context, datasetType: String, format: ExportFormat) {
+        when (datasetType.uppercase()) {
+            "STUDENTS" -> {
+                val list = allStudents.value
+                val content = ExportManager.generateStudentsExport(list, format)
+                ExportManager.downloadAndShare(
+                    context = context,
+                    content = content,
+                    baseFileName = "Oakridge_Student_Registry",
+                    format = format,
+                    subject = "Oakridge Academy - Student Registry Directory"
+                )
+                _userFeedbackMessage.value = "Exported ${list.size} student records as ${format.label}."
+            }
+            "GATE_LOGS" -> {
+                val logs = scanLogs.value
+                val content = ExportManager.generateGateLogsExport(logs, format)
+                ExportManager.downloadAndShare(
+                    context = context,
+                    content = content,
+                    baseFileName = "Oakridge_Gate_Verification_Logs",
+                    format = format,
+                    subject = "Oakridge Academy - Gate Verification Logs"
+                )
+                _userFeedbackMessage.value = "Exported ${logs.size} gate logs as ${format.label}."
+            }
+            "MEALS" -> {
+                val meals = mealRecords.value
+                val content = ExportManager.generateMealsExport(meals, format)
+                ExportManager.downloadAndShare(
+                    context = context,
+                    content = content,
+                    baseFileName = "Oakridge_Dining_Hall_Logs",
+                    format = format,
+                    subject = "Oakridge Academy - Dining Hall Access Log"
+                )
+                _userFeedbackMessage.value = "Exported ${meals.size} meal serving logs as ${format.label}."
+            }
+            "REQUIREMENTS" -> {
+                val reqs = requirementsList.value
+                val content = ExportManager.generateRequirementsExport(reqs, format)
+                ExportManager.downloadAndShare(
+                    context = context,
+                    content = content,
+                    baseFileName = "Oakridge_Requirements_Clearance",
+                    format = format,
+                    subject = "Oakridge Academy - Requirements Compliance Report"
+                )
+                _userFeedbackMessage.value = "Exported ${reqs.size} requirements records as ${format.label}."
+            }
+        }
+    }
+
+    private fun createInitialSampleMeals(): List<MealRecord> {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val now = System.currentTimeMillis()
+        return listOf(
+            MealRecord(
+                studentId = "stu-001",
+                studentNumber = "OAK-2026-0001",
+                studentName = "Kato Alex",
+                gradeClass = "Senior 3-A",
+                mealType = MealType.LUNCH,
+                mealDate = today,
+                timestamp = now - (18 * 60 * 1000),
+                serverName = "Chef Jackson Omondi",
+                status = MealServingStatus.SERVED
+            ),
+            MealRecord(
+                studentId = "stu-002",
+                studentNumber = "OAK-2026-0002",
+                studentName = "Nalwadda Grace",
+                gradeClass = "Senior 4-B",
+                mealType = MealType.LUNCH,
+                mealDate = today,
+                timestamp = now - (32 * 60 * 1000),
+                serverName = "Chef Jackson Omondi",
+                status = MealServingStatus.SERVED
+            ),
+            MealRecord(
+                studentId = "stu-004",
+                studentNumber = "OAK-2026-0004",
+                studentName = "Mukasa David",
+                gradeClass = "Senior 1-A",
+                mealType = MealType.BREAKFAST,
+                mealDate = today,
+                timestamp = now - (4 * 3600 * 1000),
+                serverName = "Chef Jackson Omondi",
+                status = MealServingStatus.SERVED
+            )
+        )
     }
 
     fun clearFeedbackMessage() {

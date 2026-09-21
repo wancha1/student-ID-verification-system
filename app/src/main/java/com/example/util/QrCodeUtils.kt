@@ -34,9 +34,10 @@ object QrCodeUtils {
             return QrParseResult.Invalid(trimmed, "QR code content is empty or unreadable.")
         }
 
-        // 1. Standard prefix with Student Number: OAKRIDGE:STU:OAK-2026-0001
+        // 1. Standard prefix with Student Number: OAKRIDGE:STU:OAK-2026-0001 or OAKRIDGE:STU:OAK-2026-0001:9A2F8B10
         if (trimmed.startsWith(PREFIX_STUDENT_NUMBER, ignoreCase = true)) {
-            val num = trimmed.substring(PREFIX_STUDENT_NUMBER.length).trim().uppercase()
+            val payload = trimmed.substring(PREFIX_STUDENT_NUMBER.length).trim()
+            val num = payload.split(":").firstOrNull()?.trim()?.uppercase() ?: ""
             if (num.isBlank()) {
                 return QrParseResult.Invalid(trimmed, "Malformed student number in QR code.")
             }

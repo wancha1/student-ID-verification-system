@@ -23,7 +23,9 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -166,57 +168,55 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Role Option 1: Security Guard
+                // Role Option 1: Gate Keeper
                 Card(
-                    onClick = { onSelectRole(UserRole.SECURITY_GUARD) },
+                    onClick = { onSelectRole(UserRole.GATE_KEEPER) },
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     modifier = Modifier
-                        .testTag("button_login_security_guard")
+                        .testTag("button_login_gate_keeper")
                         .fillMaxWidth()
                         .border(
                             1.5.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                            SchoolPrimary.copy(alpha = 0.5f),
                             RoundedCornerShape(20.dp)
                         )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(52.dp)
                                 .clip(CircleShape)
                                 .background(SchoolPrimary.copy(alpha = 0.12f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Security,
-                                contentDescription = "Security Guard",
+                                contentDescription = "Gate Keeper",
                                 tint = SchoolPrimary,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Security Guard",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
                             Text(
-                                text = "Gate 1 Turnstile • Fast QR Barcode Scan • Instant Verification",
+                                text = "Gate Keeper",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Turnstile Gate 1 • QR Access Verification • Guard Post",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -226,39 +226,104 @@ fun LoginScreen(
                             imageVector = Icons.Default.ArrowForward,
                             contentDescription = null,
                             tint = SchoolPrimary,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Role Option 2: Administrator / Bursar
+                // Role Option 2: Requirements Master
                 Card(
-                    onClick = { onSelectRole(UserRole.ADMINISTRATOR) },
+                    onClick = { onSelectRole(UserRole.REQUIREMENTS_MASTER) },
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     modifier = Modifier
-                        .testTag("button_login_administrator")
+                        .testTag("button_login_requirements_master")
                         .fillMaxWidth()
                         .border(
                             1.5.dp,
-                            GoldAccent.copy(alpha = 0.5f),
+                            Color(0xFF0284C7).copy(alpha = 0.5f),
                             RoundedCornerShape(20.dp)
                         )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF0284C7).copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FactCheck,
+                                contentDescription = "Requirements Master",
+                                tint = Color(0xFF0284C7),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Requirements Master",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Uniform, Sports Kit, Textbooks, Medical & Term Checklist",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = Color(0xFF0284C7),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Role Option 3: Administrator / Bursar
+                Card(
+                    onClick = { onSelectRole(UserRole.ADMINISTRATOR) },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    modifier = Modifier
+                        .testTag("button_login_administrator")
+                        .fillMaxWidth()
+                        .border(
+                            1.5.dp,
+                            GoldAccent.copy(alpha = 0.6f),
+                            RoundedCornerShape(20.dp)
+                        )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
                                 .clip(CircleShape)
                                 .background(GoldAccent.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
@@ -267,21 +332,21 @@ fun LoginScreen(
                                 imageVector = Icons.Default.AdminPanelSettings,
                                 contentDescription = "Administrator",
                                 tint = GoldAccent,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Bursar & Administrator",
-                                style = MaterialTheme.typography.titleLarge,
+                                text = "Administrator",
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Fee Clearance • Day Scholar Roster • Digital ID Badges",
+                                text = "Student Registry, Passport Photos, Fees & ID Badges",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -291,7 +356,72 @@ fun LoginScreen(
                             imageVector = Icons.Default.ArrowForward,
                             contentDescription = null,
                             tint = GoldAccent,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Role Option 4: Meals Master
+                Card(
+                    onClick = { onSelectRole(UserRole.MEALS_MASTER) },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    modifier = Modifier
+                        .testTag("button_login_meals_master")
+                        .fillMaxWidth()
+                        .border(
+                            1.5.dp,
+                            Color(0xFFE11D48).copy(alpha = 0.5f),
+                            RoundedCornerShape(20.dp)
+                        )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE11D48).copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Restaurant,
+                                contentDescription = "Meals Master",
+                                tint = Color(0xFFE11D48),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Meals Master",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Dining Hall Turnstile • Meal Serving & Double-Serving Control",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = Color(0xFFE11D48),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
