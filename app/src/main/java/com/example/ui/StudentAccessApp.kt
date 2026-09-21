@@ -58,13 +58,20 @@ import com.example.model.FeeStatus
 import com.example.model.UserRole
 import com.example.ui.admin.AdminDashboardScreen
 import com.example.ui.admin.AdminScanLogsScreen
+import com.example.ui.admin.BatchPrintIdCardsDialog
 import com.example.ui.admin.StudentDetailScreen
 import com.example.ui.auth.LoginScreen
+import com.example.ui.exeat.ExeatPassScreen
 import com.example.ui.guard.GuardDashboardScreen
 import com.example.ui.guard.GuardScannerScreen
 import com.example.ui.logs.GateAccessLogsScreen
+import com.example.ui.notifications.GuardianAlertsScreen
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.SchoolPrimary
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Notifications
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,8 +94,13 @@ fun StudentAccessApp(
     val selectedStudentDetail by viewModel.selectedStudentDetail.collectAsStateWithLifecycle()
     val selectedStudentCards by viewModel.selectedStudentCards.collectAsStateWithLifecycle()
     val userFeedbackMessage by viewModel.userFeedbackMessage.collectAsStateWithLifecycle()
+    val guardianNotifications by viewModel.guardianNotifications.collectAsStateWithLifecycle()
+    val exeatPasses by viewModel.exeatPasses.collectAsStateWithLifecycle()
 
     var showLogsScreen by remember { mutableStateOf(false) }
+    var showGuardianAlertsScreen by remember { mutableStateOf(false) }
+    var showExeatScreen by remember { mutableStateOf(false) }
+    var showBatchPrintDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -162,6 +174,8 @@ fun StudentAccessApp(
                                         val newRole = if (user.role == UserRole.SECURITY_GUARD) UserRole.ADMINISTRATOR else UserRole.SECURITY_GUARD
                                         viewModel.loginAs(newRole)
                                         showLogsScreen = false
+                                        showGuardianAlertsScreen = false
+                                        showExeatScreen = false
                                     }
                             ) {
                                 Row(
@@ -202,7 +216,7 @@ fun StudentAccessApp(
                                     onDismissRequest = { showOptionsMenu = false }
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text("Gate Access Activity Logs") },
+                                        text = { Text("Gate Access Logs") },
                                         leadingIcon = {
                                             Icon(
                                                 imageVector = Icons.Default.History,
@@ -211,9 +225,85 @@ fun StudentAccessApp(
                                         },
                                         onClick = {
                                             showLogsScreen = true
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
                                             showOptionsMenu = false
                                         },
                                         modifier = Modifier.testTag("menu_view_logs")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Guardian SMS & Alerts") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Notifications,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            showGuardianAlertsScreen = true
+                                            showLogsScreen = false
+                                            showExeatScreen = false
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_view_alerts")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Exeat & Gate Leave Passes") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.AdminPanelSettings,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            showExeatScreen = true
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_view_exeats")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Batch ID Badges Studio") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Badge,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            showBatchPrintDialog = true
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_batch_print")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Export Gate Logs (CSV)") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.FileDownload,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.exportGateLogsCsv(context)
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_export_csv")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Share Attendance Summary") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Assessment,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.exportAttendanceSummaryReport(context)
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_export_summary")
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Sync with Central Server") },
@@ -278,6 +368,26 @@ fun StudentAccessApp(
                         scanLogs = scanLogs,
                         onBack = { showLogsScreen = false },
                         onClearLogs = { viewModel.clearLogs() }
+                    )
+                } else if (showGuardianAlertsScreen) {
+                    GuardianAlertsScreen(
+                        notifications = guardianNotifications,
+                        onBack = { showGuardianAlertsScreen = false },
+                        onSendCustomAlert = { studentName, phone, message ->
+                            viewModel.sendCustomGuardianAlert(studentName, phone, message)
+                        }
+                    )
+                } else if (showExeatScreen) {
+                    ExeatPassScreen(
+                        exeatPasses = exeatPasses,
+                        students = allStudents,
+                        onBack = { showExeatScreen = false },
+                        onIssueExeatPass = { pass ->
+                            viewModel.issueExeatPass(pass)
+                        },
+                        onMarkExeatUsed = { passId ->
+                            viewModel.markExeatUsed(passId)
+                        }
                     )
                 } else {
                     when (user.role) {
@@ -371,11 +481,23 @@ fun StudentAccessApp(
                                     onEditStudent = { updated ->
                                         viewModel.updateStudentDetails(updated)
                                     },
-                                    onViewScanLogs = { showLogsScreen = true }
+                                    onViewScanLogs = { showLogsScreen = true },
+                                    onViewGuardianAlerts = { showGuardianAlertsScreen = true },
+                                    onViewExeatPasses = { showExeatScreen = true },
+                                    onViewBatchPrint = { showBatchPrintDialog = true },
+                                    onExportLogsCsv = { viewModel.exportGateLogsCsv(context) }
                                 )
                             }
                         }
                     }
+                }
+
+                // Batch Print Modal
+                if (showBatchPrintDialog) {
+                    BatchPrintIdCardsDialog(
+                        students = allStudents,
+                        onDismiss = { showBatchPrintDialog = false }
+                    )
                 }
             }
         }

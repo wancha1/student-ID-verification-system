@@ -64,6 +64,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.GateVerificationDecision
 import com.example.model.ScanLog
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.platform.LocalContext
+import com.example.util.ExportUtils
 import com.example.ui.components.GateDecisionBadge
 import com.example.ui.theme.ApprovedGreen
 import com.example.ui.theme.ApprovedGreenLight
@@ -71,6 +75,7 @@ import com.example.ui.theme.ApprovedGreenText
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedLight
 import com.example.ui.theme.RejectedRedText
+import com.example.ui.theme.SchoolPrimary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -101,6 +106,7 @@ fun GateAccessLogsScreen(
 
     val approvedCount = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
     val deniedCount = scanLogs.count { it.decision != GateVerificationDecision.APPROVED }
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -132,6 +138,26 @@ fun GateAccessLogsScreen(
                     }
                 },
                 actions = {
+                    if (scanLogs.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                val csv = ExportUtils.generateGateLogsCsv(scanLogs)
+                                ExportUtils.shareData(
+                                    context = context,
+                                    content = csv,
+                                    subject = "Oakridge Gate Scan History (CSV)",
+                                    isCsv = true
+                                )
+                            },
+                            modifier = Modifier.testTag("button_export_csv_logs")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = "Export CSV",
+                                tint = SchoolPrimary
+                            )
+                        }
+                    }
                     if (onClearLogs != null && scanLogs.isNotEmpty()) {
                         IconButton(
                             onClick = { showClearDialog = true },

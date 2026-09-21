@@ -1,6 +1,7 @@
 package com.example.data.sync
 
 import com.example.data.local.AppDatabase
+import com.example.data.local.StudentProfileEntity
 import com.example.data.local.SyncMetadataEntity
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
@@ -106,6 +107,7 @@ class SyncManager(
                         // Conflict resolution: Last-Write-Wins based on updatedAt
                         if (local == null || remoteStudent.updatedAt >= local.updatedAt) {
                             database.studentDao().insertOrUpdateStudent(remoteStudent)
+                            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(remoteStudent.toDomain()))
                             studentsUpdatedCount++
                         }
                     }

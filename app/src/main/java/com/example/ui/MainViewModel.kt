@@ -8,14 +8,18 @@ import com.example.data.StudentRepository
 import com.example.model.AuthUser
 import com.example.model.Card
 import com.example.model.CardStatus
+import com.example.model.ExeatPass
 import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
+import com.example.model.GuardianNotification
+import com.example.model.NotificationType
 import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.model.StudentScanResult
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
+import com.example.util.ExportUtils
 import com.example.util.FeedbackHelper
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +55,14 @@ class MainViewModel(
 
     // Gate verification audit logs
     val scanLogs: StateFlow<List<ScanLog>> = repository.scanLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Guardian SMS / Notification dispatch history
+    val guardianNotifications: StateFlow<List<GuardianNotification>> = repository.guardianNotificationsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Student Exeat and Gate passes
+    val exeatPasses: StateFlow<List<ExeatPass>> = repository.exeatPassesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Synchronization state & freshness
@@ -453,6 +465,74 @@ class MainViewModel(
                 _userFeedbackMessage.value = "Failed to issue card: ${result.exceptionOrNull()?.message}"
             }
         }
+    }
+
+    fun issueExeatPass(pass: ExeatPass) {
+        viewModelScope.launch {
+            val result = repository.issueExeatPass(pass)
+            if (result.isSuccess) {
+                _userFeedbackMessage.value = "Exeat Pass ${pass.passNumber} issued for ${pass.studentName}."
+            } else {
+                _userFeedbackMessage.value = "Failed to issue exeat pass: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    fun markExeatUsed(passId: String) {
+        viewModelScope.launch {
+            val result = repository.markExeatPassUsed(passId)
+            if (result.isSuccess) {
+                _userFeedbackMessage.value = "Exeat Pass marked as USED. Gate exit recorded."
+            }
+        }
+    }
+
+    fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String) {
+        viewModelScope.launch {
+            val notif = GuardianNotification(
+                studentId = "manual-dispatch",
+                studentNumber = "MANUAL",
+                studentName = studentName,
+                guardianName = "Guardian of $studentName",
+                guardianPhone = guardianPhone,
+                type = NotificationType.ARRIVAL,
+                message = message,
+                timestamp = System.currentTimeMillis(),
+                isDelivered = true
+            )
+            repository.sendGuardianNotification(notif)
+            _userFeedbackMessage.value = "SMS Alert dispatched to $guardianPhone!"
+        }
+    }
+
+    fun exportGateLogsCsv(context: Context) {
+        val logs = scanLogs.value
+        if (logs.isEmpty()) {
+            _userFeedbackMessage.value = "No gate scan records to export."
+            return
+        }
+        val csv = ExportUtils.generateGateLogsCsv(logs)
+        ExportUtils.shareData(
+            context = context,
+            content = csv,
+            subject = "Oakridge Gate Verification Logs (CSV)",
+            isCsv = true
+        )
+        _userFeedbackMessage.value = "Exported ${logs.size} log records to CSV share sheet."
+    }
+
+    fun exportAttendanceSummaryReport(context: Context) {
+        val report = ExportUtils.generateAttendanceSummaryReport(
+            allStudents = allStudents.value,
+            scanLogs = scanLogs.value
+        )
+        ExportUtils.shareData(
+            context = context,
+            content = report,
+            subject = "Oakridge Gate Attendance Summary Report",
+            isCsv = false
+        )
+        _userFeedbackMessage.value = "Gate Attendance Summary Report opened in share sheet."
     }
 
     fun clearFeedbackMessage() {

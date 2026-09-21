@@ -32,6 +32,12 @@ class MockStudentRepository : StudentRepository {
     private val _scanLogs = MutableStateFlow<List<ScanLog>>(StudentDataSamples.createInitialScanLogs())
     override val scanLogsFlow: Flow<List<ScanLog>> = _scanLogs.asStateFlow()
 
+    private val _guardianNotifications = MutableStateFlow<List<com.example.model.GuardianNotification>>(StudentDataSamples.createInitialGuardianNotifications())
+    override val guardianNotificationsFlow: Flow<List<com.example.model.GuardianNotification>> = _guardianNotifications.asStateFlow()
+
+    private val _exeatPasses = MutableStateFlow<List<com.example.model.ExeatPass>>(StudentDataSamples.createInitialExeatPasses())
+    override val exeatPassesFlow: Flow<List<com.example.model.ExeatPass>> = _exeatPasses.asStateFlow()
+
     private var lastSyncTime = System.currentTimeMillis()
     private val _syncInfo = MutableStateFlow(
         SyncInfo(
@@ -370,11 +376,67 @@ class MockStudentRepository : StudentRepository {
         if (!_syncInfo.value.isOnline) {
             _syncInfo.update { it.copy(pendingLogsCount = it.pendingLogsCount + 1, status = SyncStatus.OFFLINE) }
         }
+
+        // Auto-generate Guardian Notification for live gate updates
+        val student = if (log.studentId != null) getStudentById(log.studentId) else if (log.studentNumber != null) getStudentByStudentNumber(log.studentNumber) else null
+        if (student != null) {
+            val isApproved = log.decision == GateVerificationDecision.APPROVED
+            val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(log.timestamp))
+            val notif = com.example.model.GuardianNotification(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                guardianName = student.guardianName,
+                guardianPhone = student.guardianPhone,
+                type = if (isApproved) com.example.model.NotificationType.ARRIVAL else com.example.model.NotificationType.DENIED_ACCESS,
+                message = if (isApproved) {
+                    "✅ GATE ARRIVAL: ${student.fullName} (${student.studentNumber}) checked in safely at ${log.gateLocation} at $timeStr."
+                } else {
+                    "⚠️ GATE NOTICE: ${student.fullName} (${student.studentNumber}) was checked at ${log.gateLocation} at $timeStr. Reason: ${log.reason}."
+                },
+                timestamp = log.timestamp,
+                gateLocation = log.gateLocation,
+                isDelivered = true
+            )
+            _guardianNotifications.update { listOf(notif) + it }
+        }
     }
 
     override suspend fun clearScanLogs() {
         _scanLogs.value = emptyList()
         _syncInfo.update { it.copy(pendingLogsCount = 0) }
+    }
+
+    override suspend fun issueExeatPass(pass: com.example.model.ExeatPass): Result<Unit> {
+        _exeatPasses.update { listOf(pass) + it }
+        // Create an alert for the guardian
+        val notif = com.example.model.GuardianNotification(
+            studentId = pass.studentId,
+            studentNumber = pass.studentNumber,
+            studentName = pass.studentName,
+            guardianName = "Guardian of ${pass.studentName}",
+            guardianPhone = pass.guardianContact,
+            type = com.example.model.NotificationType.EXEAT_PASS_ISSUED,
+            message = "🎫 OFFICIAL EXEAT PASS: ${pass.passNumber} issued for ${pass.studentName} (${pass.reason.name.replace("_", " ")}). Destination: ${pass.destination}.",
+            timestamp = System.currentTimeMillis(),
+            isDelivered = true
+        )
+        _guardianNotifications.update { listOf(notif) + it }
+        return Result.success(Unit)
+    }
+
+    override suspend fun markExeatPassUsed(passId: String): Result<Unit> {
+        _exeatPasses.update { list ->
+            list.map {
+                if (it.id == passId) it.copy(status = com.example.model.ExeatStatus.USED) else it
+            }
+        }
+        return Result.success(Unit)
+    }
+
+    override suspend fun sendGuardianNotification(notification: com.example.model.GuardianNotification): Result<Unit> {
+        _guardianNotifications.update { listOf(notification) + it }
+        return Result.success(Unit)
     }
 
     override suspend fun syncWithCloud(): Result<SyncSummary> {

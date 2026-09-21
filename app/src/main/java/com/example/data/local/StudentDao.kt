@@ -33,6 +33,12 @@ interface StudentDao {
     @Query("UPDATE students SET feesStatus = :newStatus, outstandingAmount = :outstandingAmount, updatedAt = :updatedAt WHERE id = :studentId")
     suspend fun updateFeeStatus(studentId: String, newStatus: String, outstandingAmount: Double, updatedAt: Long)
 
+    @Query("UPDATE students SET accessStatus = :newStatus, updatedAt = :updatedAt WHERE id = :studentId")
+    suspend fun updateAccessStatus(studentId: String, newStatus: String, updatedAt: Long)
+
+    @Query("SELECT * FROM students WHERE accessStatus = :status AND isDeleted = 0 ORDER BY name ASC")
+    fun getStudentsByAccessStatus(status: String): Flow<List<StudentEntity>>
+
     @Query("UPDATE students SET isDeleted = 1, updatedAt = :updatedAt WHERE id = :studentId")
     suspend fun softDeleteStudent(studentId: String, updatedAt: Long)
 

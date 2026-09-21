@@ -386,4 +386,84 @@ object StudentDataSamples {
             )
         )
     }
+
+    fun createInitialGuardianNotifications(): List<com.example.model.GuardianNotification> {
+        val now = System.currentTimeMillis()
+        return listOf(
+            com.example.model.GuardianNotification(
+                id = "notif-001",
+                studentId = "c7b2-4f11-9a3d-0001",
+                studentNumber = "OAK-2026-0001",
+                studentName = "Michael Adeyemi",
+                guardianName = "Dr. Samuel Adeyemi",
+                guardianPhone = "+256 772 234890",
+                type = com.example.model.NotificationType.ARRIVAL,
+                message = "✅ GATE PASS: Michael Adeyemi (OAK-2026-0001) checked in safely at Gate 1 (Main Entrance) at 07:15 AM.",
+                timestamp = now - 7200000L,
+                isDelivered = true
+            ),
+            com.example.model.GuardianNotification(
+                id = "notif-002",
+                studentId = "c7b2-4f11-9a3d-0002",
+                studentNumber = "OAK-2026-0002",
+                studentName = "Sophia Chen",
+                guardianName = "Mrs. Mei Chen",
+                guardianPhone = "+256 782 345671",
+                type = com.example.model.NotificationType.DENIED_ACCESS,
+                message = "⚠️ OAKRIDGE NOTICE: Sophia Chen was flagged at Main Gate with outstanding fee balance (UGX 480,000). Please contact the Bursar.",
+                timestamp = now - 3600000L,
+                isDelivered = true
+            ),
+            com.example.model.GuardianNotification(
+                id = "notif-003",
+                studentId = "c7b2-4f11-9a3d-0003",
+                studentNumber = "OAK-2026-0003",
+                studentName = "Liam O'Connor",
+                guardianName = "Patrick O'Connor",
+                guardianPhone = "+256 703 456782",
+                type = com.example.model.NotificationType.EXEAT_PASS_ISSUED,
+                message = "🎫 EXEAT PASS CONFIRMED: Liam O'Connor has been issued Exeat EXT-8821 for Clinic visit until 05:00 PM today.",
+                timestamp = now - 1800000L,
+                isDelivered = true
+            )
+        )
+    }
+
+    fun createInitialExeatPasses(): List<com.example.model.ExeatPass> {
+        val now = System.currentTimeMillis()
+        return listOf(
+            com.example.model.ExeatPass(
+                id = "exeat-001",
+                passNumber = "EXT-8821",
+                studentId = "c7b2-4f11-9a3d-0003",
+                studentNumber = "OAK-2026-0003",
+                studentName = "Liam O'Connor",
+                gradeClass = "Senior 6-Sciences",
+                reason = com.example.model.ExeatReason.MEDICAL_CLINIC,
+                destination = "Oakridge Health Centre / Dental",
+                issuedBy = "Deputy Principal • Mrs. Clara Nambi",
+                validFrom = now - 1800000L,
+                validUntil = now + (6 * 3600000L),
+                status = com.example.model.ExeatStatus.ACTIVE,
+                guardianContact = "+256 703 456782",
+                guardianApprovalConfirmed = true
+            ),
+            com.example.model.ExeatPass(
+                id = "exeat-002",
+                passNumber = "EXT-4912",
+                studentId = "c7b2-4f11-9a3d-0005",
+                studentNumber = "OAK-2026-0005",
+                studentName = "David Mukasa",
+                gradeClass = "Senior 4-B",
+                reason = com.example.model.ExeatReason.OFFICIAL_SCHOOL_REPRESENTATION,
+                destination = "National Science Olympiad • Makerere Univ",
+                issuedBy = "Head of Science • Dr. Vance",
+                validFrom = now - 86400000L,
+                validUntil = now - 3600000L,
+                status = com.example.model.ExeatStatus.USED,
+                guardianContact = "+256 775 678904",
+                guardianApprovalConfirmed = true
+            )
+        )
+    }
 }

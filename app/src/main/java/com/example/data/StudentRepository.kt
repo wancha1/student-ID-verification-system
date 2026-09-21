@@ -1,7 +1,9 @@
 package com.example.data
 
 import com.example.model.Card
+import com.example.model.ExeatPass
 import com.example.model.FeeStatus
+import com.example.model.GuardianNotification
 import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.model.StudentScanResult
@@ -17,6 +19,8 @@ interface StudentRepository {
     val studentsFlow: Flow<List<Student>>
     val scanLogsFlow: Flow<List<ScanLog>>
     val syncInfoFlow: Flow<SyncInfo>
+    val guardianNotificationsFlow: Flow<List<GuardianNotification>>
+    val exeatPassesFlow: Flow<List<ExeatPass>>
 
     suspend fun getStudentById(id: String): Student?
     suspend fun getStudentByStudentNumber(studentNumber: String): Student?
@@ -50,6 +54,13 @@ interface StudentRepository {
     // Cloud Sync
     suspend fun syncWithCloud(): Result<SyncSummary>
     fun setNetworkOnline(isOnline: Boolean)
+
+    // Exeat & Gate Passes
+    suspend fun issueExeatPass(pass: ExeatPass): Result<Unit>
+    suspend fun markExeatPassUsed(passId: String): Result<Unit>
+
+    // Guardian Notifications
+    suspend fun sendGuardianNotification(notification: GuardianNotification): Result<Unit>
 
     // Maintenance & Sample Data
     suspend fun resetToSampleData()

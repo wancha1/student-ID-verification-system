@@ -22,6 +22,7 @@ data class Student(
     val gender: String = "Unspecified",
     val avatarColorSeed: Long = 0xFF3B82F6,
     val photoUrl: String? = null,
+    val accessStatus: AccessStatus = AccessStatus.evaluate(isDayScholar, feesStatus),
     val guardianName: String = "Guardian",
     val guardianPhone: String = "+256 700 000000",
     val emergencyContact: String = "+256 770 000000",
@@ -32,6 +33,7 @@ data class Student(
     val isDeleted: Boolean = false
 ) {
     val fullName: String get() = "$firstName $lastName"
+    val name: String get() = fullName
 
     /**
      * Standardized non-sensitive QR payload.
@@ -43,5 +45,5 @@ data class Student(
      * Entry verification policy:
      * Student is approved if they are a registered Day Scholar and their School Fees are CLEARED.
      */
-    val isEntryApproved: Boolean get() = (feesStatus == FeeStatus.CLEARED && isDayScholar)
+    val isEntryApproved: Boolean get() = (accessStatus.isApproved && feesStatus == FeeStatus.CLEARED && isDayScholar)
 }

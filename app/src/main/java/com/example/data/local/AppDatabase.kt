@@ -8,16 +8,18 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         StudentEntity::class,
+        StudentProfileEntity::class,
         CardEntity::class,
         ScanLogEntity::class,
         SyncMetadataEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun studentDao(): StudentDao
+    abstract fun studentProfileDao(): StudentProfileDao
     abstract fun cardDao(): CardDao
     abstract fun scanLogDao(): ScanLogDao
     abstract fun syncMetadataDao(): SyncMetadataDao

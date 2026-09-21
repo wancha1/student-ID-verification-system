@@ -92,6 +92,10 @@ fun AdminDashboardScreen(
     onDeleteStudent: (String) -> Unit,
     onEditStudent: (Student) -> Unit,
     onViewScanLogs: () -> Unit,
+    onViewGuardianAlerts: () -> Unit = {},
+    onViewExeatPasses: () -> Unit = {},
+    onViewBatchPrint: () -> Unit = {},
+    onExportLogsCsv: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalStudents = allStudents.size
@@ -213,6 +217,51 @@ fun AdminDashboardScreen(
                         count = outstandingCount.toString(),
                         color = RejectedRedDark,
                         bgColor = RejectedRedLight,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+
+            // Gate Analytics & Live Metrics
+            item {
+                GateAnalyticsCard(
+                    students = allStudents,
+                    scanLogs = scanLogs
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+
+            // Security Hub Action Tiles
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HubButton(
+                        icon = androidx.compose.material.icons.Icons.Default.History,
+                        title = "Gate Logs",
+                        onClick = onViewScanLogs,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubButton(
+                        icon = androidx.compose.material.icons.Icons.Default.Clear, // or notifications
+                        title = "SMS Alerts",
+                        onClick = onViewGuardianAlerts,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubButton(
+                        icon = androidx.compose.material.icons.Icons.Default.AdminPanelSettings,
+                        title = "Exeat Passes",
+                        onClick = onViewExeatPasses,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubButton(
+                        icon = androidx.compose.material.icons.Icons.Default.Edit,
+                        title = "Print Badges",
+                        onClick = onViewBatchPrint,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -598,6 +647,43 @@ private fun KpiCard(
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Black,
                 color = color
+            )
+        }
+    }
+}
+
+@Composable
+private fun HubButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = SchoolPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = title,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
         }
     }

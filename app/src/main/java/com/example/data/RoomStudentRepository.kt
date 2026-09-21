@@ -4,9 +4,11 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
+import com.example.data.local.StudentProfileEntity
 import com.example.data.sync.InMemoryCloudBackend
 import com.example.data.sync.RemoteCloudDataSource
 import com.example.data.sync.SyncManager
+import com.example.model.AccessStatus
 import com.example.model.Card
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
@@ -43,6 +45,12 @@ class RoomStudentRepository(
 
     override val scanLogsFlow: Flow<List<ScanLog>> = database.scanLogDao().getAllLogsFlow()
         .map { entities -> entities.map { it.toDomain() } }
+
+    private val _guardianNotifications = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.GuardianNotification>>(StudentDataSamples.createInitialGuardianNotifications())
+    override val guardianNotificationsFlow: Flow<List<com.example.model.GuardianNotification>> = _guardianNotifications
+
+    private val _exeatPasses = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.ExeatPass>>(StudentDataSamples.createInitialExeatPasses())
+    override val exeatPassesFlow: Flow<List<com.example.model.ExeatPass>> = _exeatPasses
 
     override val syncInfoFlow: Flow<SyncInfo> = syncManager.syncInfo
 
@@ -203,10 +211,27 @@ class RoomStudentRepository(
     ): Result<Unit> = withContext(ioDispatcher) {
         val now = System.currentTimeMillis()
         try {
+            val student = database.studentDao().getStudentById(studentId)?.toDomain()
+            val newAccessStatus = if (student != null) {
+                AccessStatus.evaluate(student.isDayScholar, newStatus)
+            } else {
+                if (newStatus == FeeStatus.CLEARED) AccessStatus.APPROVED else AccessStatus.RESTRICTED_FEES
+            }
+
             database.studentDao().updateFeeStatus(
                 studentId = studentId,
                 newStatus = newStatus.name,
                 outstandingAmount = outstandingAmount,
+                updatedAt = now
+            )
+            database.studentDao().updateAccessStatus(
+                studentId = studentId,
+                newStatus = newAccessStatus.name,
+                updatedAt = now
+            )
+            database.studentProfileDao().updateAccessStatus(
+                studentId = studentId,
+                newStatus = newAccessStatus.name,
                 updatedAt = now
             )
 
@@ -227,6 +252,7 @@ class RoomStudentRepository(
 
         try {
             database.studentDao().insertOrUpdateStudent(entity)
+            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
 
             // Automatically issue first active card for the new student
             val firstCard = Card(
@@ -260,6 +286,7 @@ class RoomStudentRepository(
 
         try {
             database.studentDao().insertOrUpdateStudent(entity)
+            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushStudentChanges(listOf(entity))
             }
@@ -273,6 +300,7 @@ class RoomStudentRepository(
         val now = System.currentTimeMillis()
         try {
             database.studentDao().softDeleteStudent(studentId, now)
+            database.studentProfileDao().deleteProfileById(studentId)
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.deleteRemoteStudent(studentId, now)
             }
@@ -465,16 +493,47 @@ class RoomStudentRepository(
         syncManager.setNetworkConnectivity(isOnline)
     }
 
+    override suspend fun issueExeatPass(pass: com.example.model.ExeatPass): Result<Unit> = withContext(ioDispatcher) {
+        _exeatPasses.value = listOf(pass) + _exeatPasses.value
+        val notif = com.example.model.GuardianNotification(
+            studentId = pass.studentId,
+            studentNumber = pass.studentNumber,
+            studentName = pass.studentName,
+            guardianName = "Guardian of ${pass.studentName}",
+            guardianPhone = pass.guardianContact,
+            type = com.example.model.NotificationType.EXEAT_PASS_ISSUED,
+            message = "🎫 OFFICIAL EXEAT PASS: ${pass.passNumber} issued for ${pass.studentName} (${pass.reason.name.replace("_", " ")}). Destination: ${pass.destination}.",
+            timestamp = System.currentTimeMillis(),
+            isDelivered = true
+        )
+        _guardianNotifications.value = listOf(notif) + _guardianNotifications.value
+        Result.success(Unit)
+    }
+
+    override suspend fun markExeatPassUsed(passId: String): Result<Unit> = withContext(ioDispatcher) {
+        _exeatPasses.value = _exeatPasses.value.map {
+            if (it.id == passId) it.copy(status = com.example.model.ExeatStatus.USED) else it
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun sendGuardianNotification(notification: com.example.model.GuardianNotification): Result<Unit> = withContext(ioDispatcher) {
+        _guardianNotifications.value = listOf(notification) + _guardianNotifications.value
+        Result.success(Unit)
+    }
+
     override suspend fun resetToSampleData() = withContext(ioDispatcher) {
         val sampleStudents = StudentDataSamples.createInitialStudents()
         val sampleCards = StudentDataSamples.createInitialCards(sampleStudents)
         val sampleLogs = StudentDataSamples.createInitialScanLogs()
 
         database.studentDao().clearAllStudents()
+        database.studentProfileDao().clearAllProfiles()
         database.cardDao().clearAllCards()
         database.scanLogDao().clearAllLogs()
 
         database.studentDao().insertOrUpdateStudents(sampleStudents.map { StudentEntity.fromDomain(it) })
+        database.studentProfileDao().insertOrUpdateProfiles(sampleStudents.map { StudentProfileEntity.fromStudent(it) })
         database.cardDao().insertOrUpdateCards(sampleCards.map { CardEntity.fromDomain(it) })
         database.scanLogDao().insertLogs(sampleLogs.map { ScanLogEntity.fromDomain(it) })
 
