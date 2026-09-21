@@ -96,11 +96,10 @@ fun GuardDashboardScreen(
     activeScanResult: StudentScanResult?,
     activeScannedStudent: Student?,
     scanError: String?,
-    allStudents: List<Student>,
     scanLogs: List<ScanLog>,
     syncInfo: SyncInfo,
     onOpenScanner: () -> Unit,
-    onSimulateScan: (String) -> Unit,
+    onManualLookup: (String) -> Unit,
     onDismissScanResult: () -> Unit,
     onTriggerSync: () -> Unit,
     onToggleOnline: (Boolean) -> Unit,
@@ -311,143 +310,10 @@ fun GuardDashboardScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-
-        // 4. QUICK SIMULATION & TEST CARDS
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Quick Field Testing",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Tap to simulate scan",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 8.dp)
-            ) {
-                items(allStudents) { student ->
-                    Card(
-                        modifier = Modifier
-                            .testTag("button_simulate_scan_${student.studentNumber}")
-                            .width(170.dp)
-                            .clickable { onSimulateScan(student.qrPayload) },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                StudentAvatar(student = student, size = 36.dp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = student.firstName,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = student.studentNumber,
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            FeeStatusBadge(feeStatus = student.feesStatus)
-                        }
-                    }
-                }
-
-                // Unregistered test student card
-                item {
-                    Card(
-                        modifier = Modifier
-                            .testTag("button_simulate_scan_unregistered")
-                            .width(170.dp)
-                            .clickable { onSimulateScan("OAKRIDGE:STU:OAK-2026-9999") },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "Test: Unregistered",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = Color(0xFF92400E)
-                            )
-                            Text(
-                                text = "OAK-2026-9999",
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFFB45309)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Tests NOT FOUND",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF78350F)
-                            )
-                        }
-                    }
-                }
-
-                // Invalid QR test card
-                item {
-                    Card(
-                        modifier = Modifier
-                            .testTag("button_simulate_scan_invalid")
-                            .width(170.dp)
-                            .clickable { onSimulateScan("NON_SCHOOL_BARCODE_XYZ") },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF94A3B8))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "Test: Corrupt QR",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = Color(0xFF334155)
-                            )
-                            Text(
-                                text = "Invalid format",
-                                fontSize = 11.sp,
-                                color = Color(0xFF64748B)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Tests INVALID QR",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF475569)
-                            )
-                        }
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // 5. RECENT GATE SCAN LOGS
+        // 4. RECENT GATE SCAN LOGS
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -611,7 +477,7 @@ fun GuardDashboardScreen(
                         val input = manualIdText.trim()
                         if (input.isNotBlank()) {
                             showManualInputDialog = false
-                            onSimulateScan(input)
+                            onManualLookup(input)
                         }
                     },
                     modifier = Modifier.testTag("button_confirm_manual_lookup")

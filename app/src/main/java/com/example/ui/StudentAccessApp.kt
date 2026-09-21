@@ -320,18 +320,18 @@ fun StudentAccessApp(
                                         modifier = Modifier.testTag("menu_trigger_sync")
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Reset Sample Roster") },
+                                        text = { Text("Clear Gate Logs") },
                                         leadingIcon = {
                                             Icon(
-                                                imageVector = Icons.Default.Refresh,
+                                                imageVector = Icons.Default.History,
                                                 contentDescription = null
                                             )
                                         },
                                         onClick = {
-                                            viewModel.resetDemoData()
+                                            viewModel.clearLogs()
                                             showOptionsMenu = false
                                         },
-                                        modifier = Modifier.testTag("menu_reset_demo_data")
+                                        modifier = Modifier.testTag("menu_clear_logs")
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Switch / Log Out") },
@@ -394,7 +394,6 @@ fun StudentAccessApp(
                         UserRole.SECURITY_GUARD -> {
                             if (isScannerOpen) {
                                 GuardScannerScreen(
-                                    sampleStudents = allStudents,
                                     onBarcodeDetected = { rawCode ->
                                         viewModel.handleBarcodeScan(rawCode, context)
                                     },
@@ -406,11 +405,10 @@ fun StudentAccessApp(
                                     activeScanResult = activeScanResult,
                                     activeScannedStudent = activeScannedStudent,
                                     scanError = scanError,
-                                    allStudents = allStudents,
                                     scanLogs = scanLogs,
                                     syncInfo = syncInfo,
                                     onOpenScanner = { viewModel.openScanner() },
-                                    onSimulateScan = { studentId ->
+                                    onManualLookup = { studentId ->
                                         viewModel.handleBarcodeScan(studentId, context)
                                     },
                                     onDismissScanResult = { viewModel.dismissScanResult() },

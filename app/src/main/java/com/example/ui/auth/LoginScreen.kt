@@ -340,7 +340,7 @@ fun LoginScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Presentation Mode: One-tap login enables seamless role switching for administrative demonstration.",
+                            text = "Authorized Personnel Access: Select your assigned duty role to access the gate security terminal or administrative console.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp

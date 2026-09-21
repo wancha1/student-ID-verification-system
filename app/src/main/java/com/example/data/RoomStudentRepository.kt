@@ -46,19 +46,19 @@ class RoomStudentRepository(
     override val scanLogsFlow: Flow<List<ScanLog>> = database.scanLogDao().getAllLogsFlow()
         .map { entities -> entities.map { it.toDomain() } }
 
-    private val _guardianNotifications = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.GuardianNotification>>(StudentDataSamples.createInitialGuardianNotifications())
+    private val _guardianNotifications = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.GuardianNotification>>(emptyList())
     override val guardianNotificationsFlow: Flow<List<com.example.model.GuardianNotification>> = _guardianNotifications
 
-    private val _exeatPasses = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.ExeatPass>>(StudentDataSamples.createInitialExeatPasses())
+    private val _exeatPasses = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.ExeatPass>>(emptyList())
     override val exeatPassesFlow: Flow<List<com.example.model.ExeatPass>> = _exeatPasses
 
     override val syncInfoFlow: Flow<SyncInfo> = syncManager.syncInfo
 
     suspend fun initialize() = withContext(ioDispatcher) {
-        // Pre-populate Room with initial sample data if DB is empty
-        val count = database.studentDao().getActiveCount()
-        if (count == 0) {
-            resetToSampleData()
+        // Ensure clean production state: purge any legacy sample data if present from previous runs
+        val allStudents = database.studentDao().getAllStudentsSnapshot()
+        if (allStudents.any { it.id.startsWith("c7b2-4f11-9a3d") || it.studentNumber.startsWith("OAK-2026-000") }) {
+            clearAllData()
         }
         syncManager.initialize()
     }
@@ -523,19 +523,16 @@ class RoomStudentRepository(
     }
 
     override suspend fun resetToSampleData() = withContext(ioDispatcher) {
-        val sampleStudents = StudentDataSamples.createInitialStudents()
-        val sampleCards = StudentDataSamples.createInitialCards(sampleStudents)
-        val sampleLogs = StudentDataSamples.createInitialScanLogs()
+        clearAllData()
+    }
 
+    suspend fun clearAllData() = withContext(ioDispatcher) {
         database.studentDao().clearAllStudents()
         database.studentProfileDao().clearAllProfiles()
         database.cardDao().clearAllCards()
         database.scanLogDao().clearAllLogs()
-
-        database.studentDao().insertOrUpdateStudents(sampleStudents.map { StudentEntity.fromDomain(it) })
-        database.studentProfileDao().insertOrUpdateProfiles(sampleStudents.map { StudentProfileEntity.fromStudent(it) })
-        database.cardDao().insertOrUpdateCards(sampleCards.map { CardEntity.fromDomain(it) })
-        database.scanLogDao().insertLogs(sampleLogs.map { ScanLogEntity.fromDomain(it) })
+        _guardianNotifications.value = emptyList()
+        _exeatPasses.value = emptyList()
 
         if (remoteCloudDataSource is InMemoryCloudBackend) {
             remoteCloudDataSource.resetRemoteState()

@@ -390,23 +390,27 @@ fun AdminDashboardScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Search,
+                                imageVector = if (allStudents.isEmpty()) Icons.Default.PersonAdd else Icons.Default.Search,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(36.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "No students match your query",
+                                text = if (allStudents.isEmpty()) "No student records registered yet" else "No students match your query",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Try adjusting the search filter or register a new student below.",
+                                text = if (allStudents.isEmpty())
+                                    "Tap '+ Register Student' to enroll your first student into the school directory."
+                                else
+                                    "Try adjusting the search filter or register a new student below.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }

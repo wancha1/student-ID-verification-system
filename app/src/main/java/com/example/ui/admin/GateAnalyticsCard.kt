@@ -70,11 +70,15 @@ fun GateAnalyticsCard(
     val totalStudents = students.size
     val clearedCount = students.count { it.feesStatus == FeeStatus.CLEARED }
     val clearancePct = if (totalStudents > 0) (clearedCount * 100 / totalStudents) else 0
+    val clearanceDisplay = if (totalStudents > 0) "$clearancePct%" else "--"
+    val clearanceSubtitle = if (totalStudents > 0) "$clearedCount / $totalStudents cleared" else "0 registered students"
 
     val totalScans = scanLogs.size
     val approvedScans = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
     val deniedScans = scanLogs.count { it.decision != GateVerificationDecision.APPROVED }
-    val approvalPct = if (totalScans > 0) (approvedScans * 100 / totalScans) else 100
+    val approvalPct = if (totalScans > 0) (approvedScans * 100 / totalScans) else 0
+    val approvalDisplay = if (totalScans > 0) "$approvalPct%" else "--"
+    val approvalSubtitle = if (totalScans > 0) "$approvedScans / $totalScans passed" else "0 scans logged"
 
     // Hourly scan buckets (6 AM to 18 PM)
     val hourlyData = remember(scanLogs) {
@@ -91,8 +95,10 @@ fun GateAnalyticsCard(
     }
 
     val maxHourlyCount = hourlyData.maxOrNull()?.coerceAtLeast(1) ?: 1
-    val peakHourIndex = hourlyData.indices.maxByOrNull { hourlyData[it] } ?: 1
-    val peakHourLabel = "${peakHourIndex + 6}:00 - ${peakHourIndex + 7}:00"
+    val hasTraffic = hourlyData.any { it > 0 }
+    val peakHourIndex = if (hasTraffic) hourlyData.indices.maxByOrNull { hourlyData[it] } ?: -1 else -1
+    val peakHourDisplay = if (hasTraffic) "${peakHourIndex + 6}:00" else "--"
+    val peakHourSubtitle = if (hasTraffic) "Rush Hour" else "No Scans Yet"
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -179,8 +185,8 @@ fun GateAnalyticsCard(
             ) {
                 MetricPill(
                     title = "Pass Rate",
-                    value = "$approvalPct%",
-                    subtitle = "$approvedScans / $totalScans passed",
+                    value = approvalDisplay,
+                    subtitle = approvalSubtitle,
                     icon = Icons.Default.CheckCircle,
                     tint = ApprovedGreen,
                     containerColor = ApprovedGreenLight.copy(alpha = 0.5f),
@@ -189,8 +195,8 @@ fun GateAnalyticsCard(
 
                 MetricPill(
                     title = "Fee Clearance",
-                    value = "$clearancePct%",
-                    subtitle = "$clearedCount / $totalStudents cleared",
+                    value = clearanceDisplay,
+                    subtitle = clearanceSubtitle,
                     icon = Icons.Default.CreditCard,
                     tint = GoldAccent,
                     containerColor = GoldAccent.copy(alpha = 0.12f),
@@ -199,8 +205,8 @@ fun GateAnalyticsCard(
 
                 MetricPill(
                     title = "Peak Traffic",
-                    value = peakHourLabel.split(" - ").firstOrNull() ?: "07:00",
-                    subtitle = "Rush Hour",
+                    value = peakHourDisplay,
+                    subtitle = peakHourSubtitle,
                     icon = Icons.Default.Schedule,
                     tint = SchoolPrimary,
                     containerColor = SchoolPrimary.copy(alpha = 0.1f),
@@ -284,7 +290,10 @@ fun GateAnalyticsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Gate Access Integrity: $approvedScans Approved • $deniedScans Denied / Flagged",
+                    text = if (totalScans > 0)
+                        "Gate Access Integrity: $approvedScans Approved • $deniedScans Denied / Flagged"
+                    else
+                        "Gate Access Integrity: No gate scans logged yet today",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -299,22 +308,31 @@ fun GateAnalyticsCard(
                     .height(8.dp)
                     .clip(RoundedCornerShape(4.dp))
             ) {
-                val approvedWeight = if (totalScans > 0) (approvedScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.01f) else 1f
-                val deniedWeight = if (totalScans > 0) (deniedScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.001f) else 0f
-
-                Box(
-                    modifier = Modifier
-                        .weight(approvedWeight)
-                        .fillMaxHeight()
-                        .background(ApprovedGreen)
-                )
-                if (deniedScans > 0) {
+                if (totalScans == 0) {
                     Box(
                         modifier = Modifier
-                            .weight(deniedWeight)
+                            .fillMaxWidth()
                             .fillMaxHeight()
-                            .background(RejectedRed)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                     )
+                } else {
+                    val approvedWeight = (approvedScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.01f)
+                    val deniedWeight = (deniedScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.001f)
+
+                    Box(
+                        modifier = Modifier
+                            .weight(approvedWeight)
+                            .fillMaxHeight()
+                            .background(ApprovedGreen)
+                    )
+                    if (deniedScans > 0) {
+                        Box(
+                            modifier = Modifier
+                                .weight(deniedWeight)
+                                .fillMaxHeight()
+                                .background(RejectedRed)
+                        )
+                    }
                 }
             }
         }

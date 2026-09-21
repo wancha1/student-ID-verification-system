@@ -25,17 +25,17 @@ import java.util.UUID
 
 class MockStudentRepository : StudentRepository {
 
-    private val _students = MutableStateFlow<List<Student>>(StudentDataSamples.createInitialStudents())
+    private val _students = MutableStateFlow<List<Student>>(emptyList())
     override val studentsFlow: Flow<List<Student>> = _students.asStateFlow()
 
-    private val _cards = MutableStateFlow<List<Card>>(StudentDataSamples.createInitialCards(_students.value))
-    private val _scanLogs = MutableStateFlow<List<ScanLog>>(StudentDataSamples.createInitialScanLogs())
+    private val _cards = MutableStateFlow<List<Card>>(emptyList())
+    private val _scanLogs = MutableStateFlow<List<ScanLog>>(emptyList())
     override val scanLogsFlow: Flow<List<ScanLog>> = _scanLogs.asStateFlow()
 
-    private val _guardianNotifications = MutableStateFlow<List<com.example.model.GuardianNotification>>(StudentDataSamples.createInitialGuardianNotifications())
+    private val _guardianNotifications = MutableStateFlow<List<com.example.model.GuardianNotification>>(emptyList())
     override val guardianNotificationsFlow: Flow<List<com.example.model.GuardianNotification>> = _guardianNotifications.asStateFlow()
 
-    private val _exeatPasses = MutableStateFlow<List<com.example.model.ExeatPass>>(StudentDataSamples.createInitialExeatPasses())
+    private val _exeatPasses = MutableStateFlow<List<com.example.model.ExeatPass>>(emptyList())
     override val exeatPassesFlow: Flow<List<com.example.model.ExeatPass>> = _exeatPasses.asStateFlow()
 
     private var lastSyncTime = System.currentTimeMillis()
@@ -470,9 +470,11 @@ class MockStudentRepository : StudentRepository {
     }
 
     override suspend fun resetToSampleData() {
-        _students.value = StudentDataSamples.createInitialStudents()
-        _cards.value = StudentDataSamples.createInitialCards(_students.value)
-        _scanLogs.value = StudentDataSamples.createInitialScanLogs()
+        _students.value = emptyList()
+        _cards.value = emptyList()
+        _scanLogs.value = emptyList()
+        _guardianNotifications.value = emptyList()
+        _exeatPasses.value = emptyList()
         lastSyncTime = System.currentTimeMillis()
         _syncInfo.value = SyncInfo(
             status = SyncStatus.SYNCED,

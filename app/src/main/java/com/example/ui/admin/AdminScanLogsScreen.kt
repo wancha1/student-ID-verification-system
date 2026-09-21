@@ -104,7 +104,7 @@ fun AdminScanLogsScreen(
     val notFoundCount = scanLogs.count { it.decision == GateVerificationDecision.STUDENT_NOT_FOUND }
     val invalidQrCount = scanLogs.count { it.decision == GateVerificationDecision.INVALID_QR }
 
-    val approvalRate = if (totalCount > 0) (approvedCount * 100 / totalCount) else 100
+    val approvalRate = if (totalCount > 0) (approvedCount * 100 / totalCount) else 0
 
     val filteredLogs = scanLogs.filter { log ->
         val matchesFilter = when (selectedDecisionFilter) {

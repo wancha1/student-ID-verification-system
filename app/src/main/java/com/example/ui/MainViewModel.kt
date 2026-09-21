@@ -549,7 +549,7 @@ class MainViewModel(
     fun resetDemoData() {
         viewModelScope.launch {
             repository.resetToSampleData()
-            _userFeedbackMessage.value = "Database reset to initial sample student roster and card records."
+            _userFeedbackMessage.value = "All local records cleared."
         }
     }
 

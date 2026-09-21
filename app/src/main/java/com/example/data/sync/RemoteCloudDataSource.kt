@@ -1,6 +1,5 @@
 package com.example.data.sync
 
-import com.example.data.StudentDataSamples
 import com.example.data.local.CardEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
@@ -36,17 +35,6 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
     private val remoteStudentsMap = mutableMapOf<String, StudentEntity>()
     private val remoteCardsMap = mutableMapOf<String, CardEntity>()
     private val remoteLogsList = mutableListOf<ScanLogEntity>()
-
-    init {
-        // Initialize central database with sample student and card dataset
-        val sampleStudents = StudentDataSamples.createInitialStudents()
-        sampleStudents.forEach { student ->
-            remoteStudentsMap[student.id] = StudentEntity.fromDomain(student)
-        }
-        StudentDataSamples.createInitialCards(sampleStudents).forEach { card ->
-            remoteCardsMap[card.id] = CardEntity.fromDomain(card)
-        }
-    }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = mutex.withLock {
         delay(100)
@@ -146,12 +134,5 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
         remoteStudentsMap.clear()
         remoteCardsMap.clear()
         remoteLogsList.clear()
-        val sampleStudents = StudentDataSamples.createInitialStudents()
-        sampleStudents.forEach { student ->
-            remoteStudentsMap[student.id] = StudentEntity.fromDomain(student)
-        }
-        StudentDataSamples.createInitialCards(sampleStudents).forEach { card ->
-            remoteCardsMap[card.id] = CardEntity.fromDomain(card)
-        }
     }
 }

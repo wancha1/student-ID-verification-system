@@ -83,7 +83,6 @@ import com.example.ui.theme.SchoolPrimary
 
 @Composable
 fun GuardScannerScreen(
-    sampleStudents: List<Student>,
     onBarcodeDetected: (String) -> Unit,
     onCloseScanner: () -> Unit,
     modifier: Modifier = Modifier
@@ -289,35 +288,6 @@ fun GuardScannerScreen(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Quick demo pills
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
-            ) {
-                items(sampleStudents) { student ->
-                    val isCleared = student.feesStatus == FeeStatus.CLEARED
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isCleared) ApprovedGreen.copy(alpha = 0.9f) else RejectedRed.copy(alpha = 0.9f),
-                        modifier = Modifier
-                            .testTag("scanner_pill_${student.id}")
-                            .clickable {
-                                onBarcodeDetected(student.id)
-                            }
-                    ) {
-                        Text(
-                            text = "${student.firstName} (${student.id})",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
                 }
             }
         }
