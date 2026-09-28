@@ -50,4 +50,10 @@ interface StudentDao {
 
     @Query("SELECT COUNT(*) FROM students WHERE isDeleted = 0")
     suspend fun getActiveCount(): Int
+
+    @Query("SELECT studentNumber FROM students WHERE studentNumber LIKE :prefix ORDER BY studentNumber DESC LIMIT 1")
+    suspend fun getLastStudentNumber(prefix: String): String?
+
+    @Query("SELECT COUNT(*) FROM students")
+    suspend fun getTotalStudentCount(): Int
 }

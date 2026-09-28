@@ -1,6 +1,6 @@
 {
-  "name": "Oakridge Student Access",
-  "description": "Comprehensive school access management system with 4 specialized roles (Gate Keeper, Requirements Master, Administrator, Meals Master), passport photo verification, unique student QR codes, and multi-format reports (Excel, Word, CSV, Text).",
+  "name": "LTC Student Access",
+  "description": "Lira Town College (LTC) Student QR Identity & Access Management System. Secure offline-first gate verification, student ID cards with centered LTC monogram QR codes, bursar fee clearance, and administrative controls.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

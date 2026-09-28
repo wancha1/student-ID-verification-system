@@ -65,4 +65,5 @@ interface StudentRepository {
     // Maintenance & Sample Data
     suspend fun resetToSampleData()
     fun getLastSyncTimestamp(): Long
+    suspend fun allocateNextStudentNumber(year: Int = 2026): String
 }

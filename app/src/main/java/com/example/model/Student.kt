@@ -16,7 +16,7 @@ data class Student(
     val gradeClass: String,
     val isDayScholar: Boolean = true,
     val dayScholarType: DayScholarStatus = DayScholarStatus.DAY_SCHOLAR_BUS,
-    val transportRoute: String = "Route 4 (Oakville Express)",
+    val transportRoute: String = "Route 1 (Lira Main Town)",
     val feesStatus: FeeStatus = FeeStatus.CLEARED,
     val outstandingAmount: Double = 0.0,
     val gender: String = "Unspecified",
@@ -26,7 +26,7 @@ data class Student(
     val guardianName: String = "Guardian",
     val guardianPhone: String = "+256 700 000000",
     val emergencyContact: String = "+256 770 000000",
-    val homeroomTeacher: String = "Mrs. Sarah Henderson",
+    val homeroomTeacher: String = "Mr. Okello Patrick",
     val academicYear: String = "2025/2026",
     val notes: String = "",
     val qrToken: String = UUID.randomUUID().toString().replace("-", "").take(8).uppercase(),
@@ -38,9 +38,9 @@ data class Student(
 
     /**
      * Unique QR code assigned to this specific student.
-     * Encodes student registration number + unique cryptographic token.
+     * Encodes student registration number + unique cryptographic token using LTC specification.
      */
-    val uniqueQrCode: String get() = "OAKRIDGE:STU:$studentNumber:$qrToken"
+    val uniqueQrCode: String get() = com.example.util.QrCodeUtils.createPayload(studentNumber, qrToken)
 
     /**
      * Standardized non-sensitive QR payload.

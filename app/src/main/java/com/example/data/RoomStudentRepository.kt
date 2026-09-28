@@ -62,6 +62,7 @@ class RoomStudentRepository(
 
     suspend fun initialize() = withContext(ioDispatcher) {
         syncManager.initialize()
+        seedInitialDataIfEmpty()
     }
 
     override suspend fun getStudentById(id: String): Student? = withContext(ioDispatcher) {
@@ -96,7 +97,7 @@ class RoomStudentRepository(
             is QrParseResult.ValidStudentNumber -> {
                 val student = database.studentDao().getStudentByStudentNumber(parseResult.studentNumber)?.toDomain()
                 if (student != null) {
-                    evaluateStudentAndCardAccess(student, isOffline, lastSync)
+                    evaluateStudentAndCardAccess(student, isOffline, lastSync, parseResult.cardIdentifier)
                 } else {
                     StudentScanResult.StudentNotFound(
                         parsedIdentifier = parseResult.studentNumber,
@@ -125,11 +126,44 @@ class RoomStudentRepository(
     private suspend fun evaluateStudentAndCardAccess(
         student: Student,
         isOffline: Boolean,
-        lastSync: Long
+        lastSync: Long,
+        scannedCardIdentifier: String? = null
     ): StudentScanResult {
         // Retrieve cards for this student
         val cards = database.cardDao().getCardsForStudent(student.id).map { it.toDomain() }
-        val activeCard = cards.firstOrNull { it.status == CardStatus.ACTIVE }
+
+        // If a specific card was scanned, check its exact status first
+        if (scannedCardIdentifier != null) {
+            val specificCard = database.cardDao().getCardByIdentifier(scannedCardIdentifier)?.toDomain()
+                ?: cards.firstOrNull { it.cardIdentifier.equals(scannedCardIdentifier, ignoreCase = true) }
+
+            if (specificCard != null && specificCard.status != CardStatus.ACTIVE) {
+                val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.US)
+                val dateStr = dateFormat.format(Date(specificCard.deactivationDate ?: specificCard.updatedAt))
+                val reason = when (specificCard.status) {
+                    CardStatus.LOST -> "Card ${specificCard.cardIdentifier} was reported LOST on $dateStr. Access Denied."
+                    CardStatus.REPLACED -> "Card ${specificCard.cardIdentifier} was REPLACED on $dateStr. Please present the newly issued active card."
+                    CardStatus.DEACTIVATED -> "Card ${specificCard.cardIdentifier} has been DEACTIVATED (${specificCard.reason ?: "Administrative lock"})."
+                    CardStatus.ACTIVE -> "Card status unverified."
+                }
+
+                return StudentScanResult.CardInactive(
+                    student = student,
+                    card = specificCard,
+                    cardStatus = specificCard.status,
+                    reason = reason,
+                    isOfflineData = isOffline,
+                    lastSyncTimestamp = lastSync
+                )
+            }
+        }
+
+        val activeCard = if (scannedCardIdentifier != null) {
+            val specificCard = database.cardDao().getCardByIdentifier(scannedCardIdentifier)?.toDomain()
+            if (specificCard?.status == CardStatus.ACTIVE) specificCard else cards.firstOrNull { it.status == CardStatus.ACTIVE }
+        } else {
+            cards.firstOrNull { it.status == CardStatus.ACTIVE }
+        }
 
         // If no active card, check inactive card status
         if (activeCard == null) {
@@ -268,12 +302,14 @@ class RoomStudentRepository(
             database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
 
             // Automatically issue first active card for the new student
+            val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
+            val cardId = "CRD-$cleanStudentNum-01"
             val firstCard = Card(
                 id = UUID.randomUUID().toString(),
-                cardIdentifier = "CRD-${student.studentNumber.removePrefix("OAK-")}-01",
+                cardIdentifier = cardId,
                 studentId = student.id,
                 studentNumber = student.studentNumber,
-                qrPayload = "OAKRIDGE:STU:${student.studentNumber}",
+                qrPayload = QrCodeUtils.createPayload(student.studentNumber, cardId),
                 status = CardStatus.ACTIVE,
                 issueDate = now,
                 activationDate = now,
@@ -393,14 +429,15 @@ class RoomStudentRepository(
         val existingCards = database.cardDao().getCardsForStudent(studentId)
         val seqNumber = existingCards.size + 1
         val formattedSeq = String.format(Locale.US, "%02d", seqNumber)
-        val cardIdentifier = customIdentifier ?: "CRD-${student.studentNumber.removePrefix("OAK-")}-$formattedSeq"
+        val cleanNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
+        val cardIdentifier = customIdentifier ?: "CRD-$cleanNum-$formattedSeq"
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = cardIdentifier,
             studentId = student.id,
             studentNumber = student.studentNumber,
-            qrPayload = "OAKRIDGE:STU:${student.studentNumber}",
+            qrPayload = QrCodeUtils.createPayload(student.studentNumber, cardIdentifier),
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,
@@ -491,14 +528,15 @@ class RoomStudentRepository(
         val existingCards = database.cardDao().getCardsForStudent(studentId)
         val seqNumber = existingCards.size + 1
         val formattedSeq = String.format(Locale.US, "%02d", seqNumber)
-        val newCardIdentifier = "CRD-${student.studentNumber.removePrefix("OAK-")}-$formattedSeq"
+        val cleanNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
+        val newCardIdentifier = "CRD-$cleanNum-$formattedSeq"
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = newCardIdentifier,
             studentId = student.id,
             studentNumber = student.studentNumber,
-            qrPayload = "OAKRIDGE:STU:${student.studentNumber}",
+            qrPayload = QrCodeUtils.createPayload(student.studentNumber, newCardIdentifier),
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,

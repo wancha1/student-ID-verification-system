@@ -486,6 +486,18 @@ class MockStudentRepository : StudentRepository {
 
     override fun getLastSyncTimestamp(): Long = lastSyncTime
 
+    override suspend fun allocateNextStudentNumber(year: Int): String {
+        val prefix = "LTC-$year-"
+        val existingSeqs = _students.value
+            .map { it.studentNumber }
+            .filter { it.startsWith(prefix, ignoreCase = true) }
+            .mapNotNull {
+                it.removePrefix(prefix).takeWhile { c -> c.isDigit() }.toIntOrNull()
+            }
+        val nextSeq = (existingSeqs.maxOrNull() ?: 0) + 1
+        return String.format(Locale.US, "LTC-%d-%04d", year, nextSeq)
+    }
+
     companion object {
         @Volatile
         private var instance: MockStudentRepository? = null

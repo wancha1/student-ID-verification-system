@@ -22,7 +22,7 @@ data class Card(
     val cardIdentifier: String,
     val studentId: String,
     val studentNumber: String,
-    val qrPayload: String = "OAKRIDGE:STU:$studentNumber",
+    val qrPayload: String = com.example.util.QrCodeUtils.createPayload(studentNumber, cardIdentifier),
     val status: CardStatus = CardStatus.ACTIVE,
     val issueDate: Long = System.currentTimeMillis(),
     val activationDate: Long = System.currentTimeMillis(),
