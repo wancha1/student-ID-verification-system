@@ -39,6 +39,35 @@ class ExampleRobolectricTest {
         runBlocking {
             repository.resetToSampleData()
             repository.clearScanLogs()
+
+            val s1 = Student(
+                id = "stu-001",
+                studentNumber = "OAK-2026-0001",
+                firstName = "Michael",
+                lastName = "Kasule",
+                gradeClass = "Senior 4-A",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+                feesStatus = FeeStatus.CLEARED,
+                outstandingAmount = 0.0,
+                accessStatus = com.example.model.AccessStatus.APPROVED
+            )
+            val s2 = Student(
+                id = "stu-002",
+                studentNumber = "OAK-2026-0002",
+                firstName = "Sophia",
+                lastName = "Nanteza",
+                gradeClass = "Senior 3-B",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
+                feesStatus = FeeStatus.OUTSTANDING,
+                outstandingAmount = 450000.0,
+                accessStatus = com.example.model.AccessStatus.RESTRICTED_FEES
+            )
+            repository.addStudent(s1)
+            repository.addStudent(s2)
+            repository.issueCard(s1.id, "CARD-0001", "Initial card")
+            repository.issueCard(s2.id, "CARD-0002", "Initial card")
         }
         viewModel = MainViewModel(repository)
     }

@@ -3,7 +3,6 @@ package com.example.ui
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.MockStudentRepository
 import com.example.data.StudentRepository
 import com.example.model.AuthUser
 import com.example.model.Card
@@ -48,7 +47,7 @@ enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(
-    private val repository: StudentRepository = MockStudentRepository.getInstance()
+    private val repository: StudentRepository
 ) : ViewModel() {
 
     // Current Authenticated User (Defaults to Gate Keeper)
