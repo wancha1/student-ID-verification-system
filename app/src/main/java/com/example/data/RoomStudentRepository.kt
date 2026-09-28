@@ -2,9 +2,12 @@ package com.example.data
 
 import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
+import com.example.data.local.PendingChangeEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
 import com.example.data.local.StudentProfileEntity
+import com.example.data.local.SyncEntityType
+import com.example.data.local.SyncOperationType
 import com.example.data.sync.InMemoryCloudBackend
 import com.example.data.sync.RemoteCloudDataSource
 import com.example.data.sync.SyncManager
@@ -54,12 +57,10 @@ class RoomStudentRepository(
 
     override val syncInfoFlow: Flow<SyncInfo> = syncManager.syncInfo
 
+    val pendingChangesFlow: Flow<List<PendingChangeEntity>> = database.pendingChangeDao().getPendingChangesFlow()
+    val pendingCountFlow: Flow<Int> = database.pendingChangeDao().getPendingCountFlow()
+
     suspend fun initialize() = withContext(ioDispatcher) {
-        // Ensure clean production state: purge any legacy sample data if present from previous runs
-        val allStudents = database.studentDao().getAllStudentsSnapshot()
-        if (allStudents.any { it.id.startsWith("c7b2-4f11-9a3d") || it.studentNumber.startsWith("OAK-2026-000") }) {
-            clearAllData()
-        }
         syncManager.initialize()
     }
 
@@ -235,6 +236,18 @@ class RoomStudentRepository(
                 updatedAt = now
             )
 
+            // Durable offline tracking: Record fee status mutation in pending queue
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.FEE_STATUS,
+                    recordId = studentId,
+                    operationType = SyncOperationType.STATUS_CHANGE,
+                    payloadJson = "{\"feesStatus\":\"${newStatus.name}\",\"outstandingAmount\":$outstandingAmount}",
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.updateRemoteFeeStatus(studentId, newStatus, outstandingAmount, now)
             }
@@ -269,6 +282,26 @@ class RoomStudentRepository(
             )
             database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(firstCard))
 
+            // Durable offline tracking: Record student and initial card creation
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.STUDENT,
+                    recordId = student.id,
+                    operationType = SyncOperationType.CREATE,
+                    createdAt = now
+                )
+            )
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.CARD,
+                    recordId = firstCard.id,
+                    operationType = SyncOperationType.CREATE,
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushStudentChanges(listOf(entity))
                 remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(firstCard)))
@@ -287,6 +320,18 @@ class RoomStudentRepository(
         try {
             database.studentDao().insertOrUpdateStudent(entity)
             database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
+
+            // Durable offline tracking: Record student update
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.STUDENT,
+                    recordId = student.id,
+                    operationType = SyncOperationType.UPDATE,
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushStudentChanges(listOf(entity))
             }
@@ -301,6 +346,18 @@ class RoomStudentRepository(
         try {
             database.studentDao().softDeleteStudent(studentId, now)
             database.studentProfileDao().deleteProfileById(studentId)
+
+            // Durable offline tracking: Record soft deletion
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.STUDENT,
+                    recordId = studentId,
+                    operationType = SyncOperationType.DELETE,
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.deleteRemoteStudent(studentId, now)
             }
@@ -362,6 +419,17 @@ class RoomStudentRepository(
             )
             database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
 
+            // Durable offline tracking: Record newly issued card
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.CARD,
+                    recordId = newCard.id,
+                    operationType = SyncOperationType.CREATE,
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
             }
@@ -389,6 +457,19 @@ class RoomStudentRepository(
 
         try {
             database.cardDao().insertOrUpdateCard(updated)
+
+            // Durable offline tracking: Record lost card status change
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.CARD,
+                    recordId = cardId,
+                    operationType = SyncOperationType.STATUS_CHANGE,
+                    payloadJson = "{\"status\":\"LOST\",\"reason\":\"$reason\"}",
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.updateRemoteCard(updated)
             }
@@ -439,6 +520,27 @@ class RoomStudentRepository(
 
             database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
 
+            // Durable offline tracking: Record replacement card and previous card status change
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.CARD,
+                    recordId = oldCardId,
+                    operationType = SyncOperationType.STATUS_CHANGE,
+                    payloadJson = "{\"status\":\"REPLACED\",\"replacedBy\":\"${newCard.id}\"}",
+                    createdAt = now
+                )
+            )
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.CARD,
+                    recordId = newCard.id,
+                    operationType = SyncOperationType.CREATE,
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
             }
@@ -466,6 +568,19 @@ class RoomStudentRepository(
 
         try {
             database.cardDao().insertOrUpdateCard(updated)
+
+            // Durable offline tracking: Record card deactivation
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = UUID.randomUUID().toString(),
+                    entityType = SyncEntityType.CARD,
+                    recordId = cardId,
+                    operationType = SyncOperationType.STATUS_CHANGE,
+                    payloadJson = "{\"status\":\"DEACTIVATED\",\"reason\":\"$reason\"}",
+                    createdAt = now
+                )
+            )
+
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.updateRemoteCard(updated)
             }

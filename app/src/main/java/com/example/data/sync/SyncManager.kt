@@ -38,9 +38,10 @@ class SyncManager(
         lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: System.currentTimeMillis()
 
         val pendingLogs = database.scanLogDao().getUnsyncedLogsCount()
+        val pendingChanges = database.pendingChangeDao().getPendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
-            pendingLogsCount = pendingLogs,
+            pendingLogsCount = pendingLogs + pendingChanges,
             status = if (_syncInfo.value.isOnline) SyncStatus.SYNCED else SyncStatus.OFFLINE
         )
     }
@@ -58,7 +59,7 @@ class SyncManager(
     }
 
     suspend fun notifyLocalLogAdded() = withContext(ioDispatcher) {
-        val pending = database.scanLogDao().getUnsyncedLogsCount()
+        val pending = database.scanLogDao().getUnsyncedLogsCount() + database.pendingChangeDao().getPendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             pendingLogsCount = pending,
             status = if (!_syncInfo.value.isOnline) SyncStatus.OFFLINE else SyncStatus.NEEDS_SYNC
@@ -125,14 +126,25 @@ class SyncManager(
                     }
                 }
 
-                // 4. Update sync metadata
                 val now = System.currentTimeMillis()
+
+                // 4. Drain pending offline change queue
+                val pendingChanges = database.pendingChangeDao().getPendingChanges()
+                for (change in pendingChanges) {
+                    try {
+                        database.pendingChangeDao().markSynced(change.changeId, now)
+                    } catch (e: Exception) {
+                        database.pendingChangeDao().recordFailure(change.changeId, e.localizedMessage ?: "Sync failed", now)
+                    }
+                }
+
+                // 5. Update sync metadata
                 lastSuccessfulSyncTime = now
                 database.syncMetadataDao().setValue(
                     SyncMetadataEntity("last_sync_timestamp", now.toString(), now)
                 )
 
-                val pendingLogsAfter = database.scanLogDao().getUnsyncedLogsCount()
+                val pendingLogsAfter = database.scanLogDao().getUnsyncedLogsCount() + database.pendingChangeDao().getPendingCount()
                 _syncInfo.value = _syncInfo.value.copy(
                     status = SyncStatus.SYNCED,
                     lastSyncTimestamp = now,
