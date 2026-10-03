@@ -41,7 +41,7 @@ data class ScanLogEntity(
     val guardName: String,
     val deviceIdentifier: String,
     val gateLocation: String,
-    val isSyncedToCloud: Boolean
+    val isSyncedToCloud: Boolean = false
 ) {
     fun toDomain(): ScanLog {
         val parsedDecision = try {

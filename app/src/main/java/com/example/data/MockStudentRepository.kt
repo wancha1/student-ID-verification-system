@@ -470,8 +470,48 @@ class MockStudentRepository : StudentRepository {
     }
 
     override suspend fun resetToSampleData() {
-        _students.value = emptyList()
-        _cards.value = emptyList()
+        val s1 = Student(
+            id = "stu-001",
+            studentNumber = "OAK-2026-0001",
+            firstName = "Michael",
+            lastName = "Kasule",
+            gradeClass = "Senior 4-A",
+            isDayScholar = true,
+            dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+            feesStatus = FeeStatus.CLEARED,
+            outstandingAmount = 0.0,
+            accessStatus = com.example.model.AccessStatus.APPROVED
+        )
+        val s2 = Student(
+            id = "stu-002",
+            studentNumber = "OAK-2026-0002",
+            firstName = "Sophia",
+            lastName = "Nanteza",
+            gradeClass = "Senior 3-B",
+            isDayScholar = true,
+            dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
+            feesStatus = FeeStatus.OUTSTANDING,
+            outstandingAmount = 450000.0,
+            accessStatus = com.example.model.AccessStatus.RESTRICTED_FEES
+        )
+        val s3 = Student(
+            id = "stu-ltc-001",
+            studentNumber = "LTC-2026-0001",
+            firstName = "Emmanuel",
+            lastName = "Okello",
+            gradeClass = "Senior 3-A",
+            isDayScholar = true,
+            dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
+            feesStatus = FeeStatus.CLEARED,
+            outstandingAmount = 0.0,
+            accessStatus = com.example.model.AccessStatus.APPROVED
+        )
+        _students.value = listOf(s1, s2, s3)
+        _cards.value = listOf(
+            Card(id = "card-001", studentId = s1.id, studentNumber = s1.studentNumber, cardIdentifier = "CARD-0001", qrPayload = "OAKRIDGE:STU:OAK-2026-0001", status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis()),
+            Card(id = "card-002", studentId = s2.id, studentNumber = s2.studentNumber, cardIdentifier = "CARD-0002", qrPayload = "OAKRIDGE:STU:OAK-2026-0002", status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis()),
+            Card(id = "card-003", studentId = s3.id, studentNumber = s3.studentNumber, cardIdentifier = "CARD-0003", qrPayload = "LTC:STU:LTC-2026-0001", status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis())
+        )
         _scanLogs.value = emptyList()
         _guardianNotifications.value = emptyList()
         _exeatPasses.value = emptyList()

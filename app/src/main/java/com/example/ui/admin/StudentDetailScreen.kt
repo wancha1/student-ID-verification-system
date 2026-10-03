@@ -1,5 +1,9 @@
 package com.example.ui.admin
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCard
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
@@ -57,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +77,7 @@ import com.example.ui.components.CardStatusBadge
 import com.example.ui.components.DayScholarBadge
 import com.example.ui.components.DigitalIdCardDialog
 import com.example.ui.components.FeeStatusBadge
+import com.example.ui.components.PhotoEditorDialog
 import com.example.ui.components.PrintableStudentIdCard
 import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.ApprovedGreen
@@ -81,6 +88,7 @@ import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedDark
 import com.example.ui.theme.RejectedRedLight
 import com.example.ui.theme.RejectedRedText
+import com.example.util.ImageStorageHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -107,6 +115,19 @@ fun StudentDetailScreen(
     var cardToReplace by remember { mutableStateOf<StudentCard?>(null) }
     var cardToDeactivate by remember { mutableStateOf<StudentCard?>(null) }
     var showIssueNewCardDialog by remember { mutableStateOf(false) }
+    var showPhotoEditor by remember { mutableStateOf(false) }
+    var pendingPhotoUriOrPath by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val localPath = ImageStorageHelper.saveImageUriToInternalStorage(context, uri)
+            pendingPhotoUriOrPath = localPath ?: uri.toString()
+            showPhotoEditor = true
+        }
+    }
 
     var outstandingAmountInput by remember(student.outstandingAmount) {
         mutableStateOf(if (student.outstandingAmount > 0) student.outstandingAmount.toString() else "450000.00")
@@ -217,10 +238,31 @@ fun StudentDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StudentAvatar(
-                            student = student,
-                            size = 72.dp
-                        )
+                        Box(contentAlignment = Alignment.BottomEnd) {
+                            StudentAvatar(
+                                student = student,
+                                size = 96.dp
+                            )
+                            IconButton(
+                                onClick = {
+                                    photoPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                    .testTag("button_change_student_photo")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CameraAlt,
+                                    contentDescription = "Edit Student Photo",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.width(16.dp))
 
@@ -1019,6 +1061,26 @@ fun StudentDetailScreen(
                 ) {
                     Text("Cancel")
                 }
+            }
+        )
+    }
+
+    if (showPhotoEditor && pendingPhotoUriOrPath != null) {
+        PhotoEditorDialog(
+            imageUriOrPath = pendingPhotoUriOrPath!!,
+            onDismiss = {
+                showPhotoEditor = false
+                pendingPhotoUriOrPath = null
+            },
+            onPhotoSaved = { savedPath ->
+                onUpdateStudentDetails(
+                    student.copy(
+                        photoUrl = savedPath,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+                showPhotoEditor = false
+                pendingPhotoUriOrPath = null
             }
         )
     }

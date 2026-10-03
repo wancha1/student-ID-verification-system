@@ -20,6 +20,7 @@ import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.model.StudentRequirement
 import com.example.model.StudentScanResult
+import com.example.model.StaffPermission
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
@@ -29,6 +30,7 @@ import com.example.util.ExportUtils
 import com.example.util.FeedbackHelper
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
+import com.example.util.SecurityManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,14 +52,8 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
-    // Current Authenticated User (Defaults to Gate Keeper)
-    private val _currentUser = MutableStateFlow<AuthUser?>(
-        AuthUser(
-            role = UserRole.GATE_KEEPER,
-            name = UserRole.GATE_KEEPER.defaultUsername,
-            station = UserRole.GATE_KEEPER.subtitle
-        )
-    )
+    // Current Authenticated User (Requires staff login on initial launch)
+    private val _currentUser = MutableStateFlow<AuthUser?>(null)
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
 
     // Students list from repository
@@ -213,18 +209,57 @@ class MainViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun loginAs(role: UserRole, customName: String? = null) {
+    fun loginAs(role: UserRole, customName: String? = null, hasFinancePermission: Boolean = false) {
         _currentUser.value = AuthUser(
             role = role,
             name = customName ?: role.defaultUsername,
-            station = role.subtitle
+            station = role.subtitle,
+            hasExplicitFinanceAccess = hasFinancePermission
         )
         dismissScanResult()
     }
 
-    fun logout() {
+    /**
+     * Authenticates credentials against local salted SHA-256 store before granting duty mode.
+     */
+    fun authenticateAndLogin(
+        context: Context,
+        role: UserRole,
+        pin: String,
+        customName: String? = null,
+        requestFinanceAccess: Boolean = false
+    ): Boolean {
+        if (!SecurityManager.isProvisioned(context)) {
+            _userFeedbackMessage.value = "Terminal is not provisioned. Master Administrator setup required."
+            return false
+        }
+        if (!SecurityManager.verifyRolePin(context, role, pin)) {
+            _userFeedbackMessage.value = "Invalid credentials. Authentication failed for ${role.title}."
+            return false
+        }
+        val hasFinance = if (role == UserRole.BURSAR_FINANCE) true else requestFinanceAccess
+        loginAs(role, customName, hasFinance)
+        return true
+    }
+
+    /**
+     * Locks terminal session. Unlocks only after entering valid staff credentials.
+     */
+    fun lockSession() {
         _currentUser.value = null
         dismissScanResult()
+    }
+
+    var lockOnBackgroundEnabled = true
+
+    fun lockSessionOnBackground() {
+        if (lockOnBackgroundEnabled && _currentUser.value != null) {
+            lockSession()
+        }
+    }
+
+    fun logout() {
+        lockSession()
     }
 
     fun openScanner() {
@@ -237,6 +272,10 @@ class MainViewModel(
     }
 
     fun handleBarcodeScan(rawCode: String, context: Context? = null) {
+        if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Gate verification scanning")) {
+            _scanError.value = "Access Denied: Gate verification scanning requires Gate Staff authorization."
+            return
+        }
         viewModelScope.launch {
             _isScannerOpen.value = false
             val scanResult = repository.verifyStudentByQr(rawCode)
@@ -423,7 +462,38 @@ class MainViewModel(
         _selectedStudentId.value = studentId
     }
 
+    fun requirePermission(permission: StaffPermission, actionName: String): Boolean {
+        val user = _currentUser.value
+        if (user == null) {
+            _userFeedbackMessage.value = "Access Denied: Unauthenticated session. Please authenticate first."
+            return false
+        }
+        if (!user.hasPermission(permission)) {
+            val roleMsg = when (permission) {
+                StaffPermission.MANAGE_FEES -> "Access Denied: $actionName requires Bursar / Finance authorization. Administrator accounts require explicit finance clearance."
+                StaffPermission.MANAGE_STUDENTS -> "Access Denied: $actionName requires Administrator privileges."
+                StaffPermission.VERIFY_GATE_ACCESS -> "Access Denied: $actionName requires Gate Staff authorization."
+                StaffPermission.SERVE_MEALS -> "Access Denied: $actionName requires Meal-Serving Staff authorization."
+                StaffPermission.EXAM_CLEARANCE -> "Access Denied: $actionName requires Examination Staff authorization."
+                StaffPermission.SYSTEM_CONFIGURATION -> "Access Denied: $actionName requires Administrator privileges."
+                else -> "Access Denied: Insufficient staff permissions for $actionName."
+            }
+            _userFeedbackMessage.value = roleMsg
+            return false
+        }
+        return true
+    }
+
+    fun requireAdminRole(actionName: String): Boolean {
+        return requirePermission(StaffPermission.MANAGE_STUDENTS, actionName)
+    }
+
+    fun requireFinanceRole(actionName: String): Boolean {
+        return requirePermission(StaffPermission.MANAGE_FEES, actionName)
+    }
+
     fun updateFeeStatus(studentId: String, newStatus: FeeStatus, outstandingAmount: Double = 0.0) {
+        if (!requireFinanceRole("Modifying student fee status")) return
         viewModelScope.launch {
             val result = repository.updateFeeStatus(studentId, newStatus, outstandingAmount)
             if (result.isSuccess) {
@@ -443,6 +513,10 @@ class MainViewModel(
     }
 
     fun registerNewStudent(student: Student, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
+        if (!requireAdminRole("Registering new students")) {
+            onComplete(false, "Access Denied: Administrator role required.")
+            return
+        }
         viewModelScope.launch {
             val result = repository.addStudent(student)
             if (result.isSuccess) {
@@ -457,6 +531,10 @@ class MainViewModel(
     }
 
     fun updateStudentDetails(student: Student, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
+        if (!requireAdminRole("Updating student records")) {
+            onComplete(false, "Access Denied: Administrator role required.")
+            return
+        }
         viewModelScope.launch {
             val result = repository.updateStudent(student)
             if (result.isSuccess) {
@@ -476,6 +554,7 @@ class MainViewModel(
     }
 
     fun deleteStudentRecord(studentId: String) {
+        if (!requireAdminRole("Deleting student records")) return
         viewModelScope.launch {
             val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
             repository.deleteStudent(studentId)
@@ -488,6 +567,7 @@ class MainViewModel(
 
     // Card Lifecycle Actions
     fun reportCardLost(studentId: String, cardId: String, reason: String = "Reported lost by student/guardian") {
+        if (!requireAdminRole("Reporting or updating card status")) return
         viewModelScope.launch {
             val result = repository.reportCardLost(studentId, cardId, reason)
             if (result.isSuccess) {
@@ -500,6 +580,7 @@ class MainViewModel(
     }
 
     fun issueReplacementCard(studentId: String, oldCardId: String, reason: String = "Lost card replacement") {
+        if (!requireAdminRole("Issuing replacement cards")) return
         viewModelScope.launch {
             val result = repository.issueReplacementCard(studentId, oldCardId, reason)
             if (result.isSuccess) {
@@ -512,6 +593,7 @@ class MainViewModel(
     }
 
     fun deactivateCard(studentId: String, cardId: String, reason: String = "Deactivated by Administrator") {
+        if (!requireAdminRole("Deactivating student cards")) return
         viewModelScope.launch {
             val result = repository.deactivateCard(studentId, cardId, reason)
             if (result.isSuccess) {
@@ -523,6 +605,7 @@ class MainViewModel(
     }
 
     fun issueNewActiveCard(studentId: String, reason: String = "Manual card issuance") {
+        if (!requireAdminRole("Issuing new student cards")) return
         viewModelScope.launch {
             val result = repository.issueCard(studentId, null, reason)
             if (result.isSuccess) {
@@ -534,7 +617,87 @@ class MainViewModel(
         }
     }
 
+    /**
+     * Authenticated Supervisor Emergency Gate Override.
+     * Allows authorized supervisors to admit a student with outstanding fees/issues,
+     * while strictly recording the action in the audit log and preventing unknown card bypasses.
+     */
+    fun authorizeEmergencyOverride(
+        studentId: String,
+        supervisorName: String,
+        overridePin: String,
+        reason: String,
+        context: Context,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        if (!com.example.util.SecurityManager.verifySupervisorOverridePin(context, overridePin)) {
+            val err = "Invalid supervisor PIN. Emergency override denied."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+
+        val currentScan = _activeScanResult.value
+        // Critical: Unknown or invalid cards never become authorized through a bypass
+        if (currentScan !is StudentScanResult.Success && currentScan !is StudentScanResult.CardInactive) {
+            val err = "Security restriction: Emergency override cannot authorize unknown or invalid QR cards."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+
+        viewModelScope.launch {
+            val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
+            if (student == null) {
+                val err = "Student not found in school registry."
+                _userFeedbackMessage.value = err
+                onResult(false, err)
+                return@launch
+            }
+
+            val overrideReason = "EMERGENCY SUPERVISOR OVERRIDE: $reason (Authorized by $supervisorName)"
+
+            // Record this explicit emergency override in the persistent audit log
+            repository.logVerificationScan(
+                ScanLog(
+                    studentId = student.id,
+                    studentNumber = student.studentNumber,
+                    studentName = student.fullName,
+                    gradeClass = student.gradeClass,
+                    cardId = _currentScannedCard.value?.id,
+                    cardIdentifier = _currentScannedCard.value?.cardIdentifier ?: "CRD-OVERRIDE",
+                    qrPayload = _currentScannedCard.value?.qrPayload ?: "OVERRIDE:${student.studentNumber}",
+                    decision = GateVerificationDecision.APPROVED,
+                    feeStatus = student.feesStatus,
+                    cardStatus = _currentScannedCard.value?.status ?: CardStatus.ACTIVE,
+                    isDayScholar = student.isDayScholar,
+                    isApproved = true,
+                    reason = overrideReason,
+                    isOfflineDecision = true,
+                    guardName = "$supervisorName (Supervisor Override)",
+                    deviceIdentifier = "GateTerminal-01",
+                    gateLocation = "Gate 1 (Main Entrance)"
+                )
+            )
+
+            // Update active scan result to Approved with supervisor override attribution
+            _activeScanResult.value = StudentScanResult.Success(
+                student = student,
+                card = _currentScannedCard.value,
+                isApproved = true,
+                reason = overrideReason,
+                isOfflineData = true,
+                lastSyncTimestamp = System.currentTimeMillis()
+            )
+
+            com.example.util.FeedbackHelper.playFeedback(context, true)
+            _userFeedbackMessage.value = "Emergency gate access authorized by supervisor $supervisorName."
+            onResult(true, "Emergency override authorized.")
+        }
+    }
+
     fun issueExeatPass(pass: ExeatPass) {
+        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Issuing exeat passes")) return
         viewModelScope.launch {
             val result = repository.issueExeatPass(pass)
             if (result.isSuccess) {
@@ -546,6 +709,7 @@ class MainViewModel(
     }
 
     fun markExeatUsed(passId: String) {
+        if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Processing exeat gate exit")) return
         viewModelScope.launch {
             val result = repository.markExeatPassUsed(passId)
             if (result.isSuccess) {
@@ -555,6 +719,7 @@ class MainViewModel(
     }
 
     fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String) {
+        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Dispatching guardian SMS alerts")) return
         viewModelScope.launch {
             val notif = GuardianNotification(
                 studentId = "manual-dispatch",
@@ -573,6 +738,7 @@ class MainViewModel(
     }
 
     fun exportGateLogsCsv(context: Context) {
+        if (!requirePermission(StaffPermission.EXPORT_DATA, "Exporting gate logs")) return
         val logs = scanLogs.value
         if (logs.isEmpty()) {
             _userFeedbackMessage.value = "No gate scan records to export."
@@ -582,13 +748,14 @@ class MainViewModel(
         ExportUtils.shareData(
             context = context,
             content = csv,
-            subject = "Oakridge Gate Verification Logs (CSV)",
+            subject = "LTC Gate Verification Logs (CSV)",
             isCsv = true
         )
         _userFeedbackMessage.value = "Exported ${logs.size} log records to CSV share sheet."
     }
 
     fun exportAttendanceSummaryReport(context: Context) {
+        if (!requirePermission(StaffPermission.EXPORT_DATA, "Exporting attendance summary")) return
         val report = ExportUtils.generateAttendanceSummaryReport(
             allStudents = allStudents.value,
             scanLogs = scanLogs.value
@@ -596,7 +763,7 @@ class MainViewModel(
         ExportUtils.shareData(
             context = context,
             content = report,
-            subject = "Oakridge Gate Attendance Summary Report",
+            subject = "LTC Gate Attendance Summary Report",
             isCsv = false
         )
         _userFeedbackMessage.value = "Gate Attendance Summary Report opened in share sheet."
@@ -630,6 +797,7 @@ class MainViewModel(
     }
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
+        if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val parsed = QrCodeUtils.parseQrCode(rawCode)
         val students = allStudents.value
@@ -709,6 +877,7 @@ class MainViewModel(
     }
 
     fun handleRequirementBarcodeScan(rawCode: String) {
+        if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
         val parsed = QrCodeUtils.parseQrCode(rawCode)
         val students = allStudents.value
@@ -727,6 +896,7 @@ class MainViewModel(
     }
 
     fun toggleRequirementItem(studentId: String, itemKey: String) {
+        if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Modifying requirement checklist")) return
         val current = requirementsList.value.find { it.studentId == studentId } ?: return
         val updated = when (itemKey) {
             "uniform" -> current.copy(uniformComplete = !current.uniformComplete, updatedAt = System.currentTimeMillis())
@@ -742,6 +912,7 @@ class MainViewModel(
     }
 
     fun markAllRequirementsCleared(studentId: String) {
+        if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Clearing student requirements")) return
         val current = requirementsList.value.find { it.studentId == studentId } ?: return
         val updated = current.copy(
             uniformComplete = true,
@@ -758,6 +929,7 @@ class MainViewModel(
     }
 
     fun updateRequirementNotes(studentId: String, notes: String) {
+        if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Updating requirement notes")) return
         val current = requirementsList.value.find { it.studentId == studentId } ?: return
         val updated = current.copy(notes = notes, updatedAt = System.currentTimeMillis())
         _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
@@ -771,6 +943,7 @@ class MainViewModel(
     }
 
     fun exportDataset(context: Context, datasetType: String, format: ExportFormat) {
+        if (!requirePermission(StaffPermission.EXPORT_DATA, "Exporting dataset ($datasetType)")) return
         when (datasetType.uppercase()) {
             "STUDENTS" -> {
                 val list = allStudents.value
@@ -778,9 +951,9 @@ class MainViewModel(
                 ExportManager.downloadAndShare(
                     context = context,
                     content = content,
-                    baseFileName = "Oakridge_Student_Registry",
+                    baseFileName = "LTC_Student_Registry",
                     format = format,
-                    subject = "Oakridge Academy - Student Registry Directory"
+                    subject = "Lira Town College (LTC) - Student Registry Directory"
                 )
                 _userFeedbackMessage.value = "Exported ${list.size} student records as ${format.label}."
             }
@@ -790,9 +963,9 @@ class MainViewModel(
                 ExportManager.downloadAndShare(
                     context = context,
                     content = content,
-                    baseFileName = "Oakridge_Gate_Verification_Logs",
+                    baseFileName = "LTC_Gate_Verification_Logs",
                     format = format,
-                    subject = "Oakridge Academy - Gate Verification Logs"
+                    subject = "Lira Town College (LTC) - Gate Verification Logs"
                 )
                 _userFeedbackMessage.value = "Exported ${logs.size} gate logs as ${format.label}."
             }
@@ -802,9 +975,9 @@ class MainViewModel(
                 ExportManager.downloadAndShare(
                     context = context,
                     content = content,
-                    baseFileName = "Oakridge_Dining_Hall_Logs",
+                    baseFileName = "LTC_Dining_Hall_Logs",
                     format = format,
-                    subject = "Oakridge Academy - Dining Hall Access Log"
+                    subject = "Lira Town College (LTC) - Dining Hall Access Log"
                 )
                 _userFeedbackMessage.value = "Exported ${meals.size} meal serving logs as ${format.label}."
             }
@@ -814,9 +987,9 @@ class MainViewModel(
                 ExportManager.downloadAndShare(
                     context = context,
                     content = content,
-                    baseFileName = "Oakridge_Requirements_Clearance",
+                    baseFileName = "LTC_Requirements_Clearance",
                     format = format,
-                    subject = "Oakridge Academy - Requirements Compliance Report"
+                    subject = "Lira Town College (LTC) - Requirements Compliance Report"
                 )
                 _userFeedbackMessage.value = "Exported ${reqs.size} requirements records as ${format.label}."
             }
@@ -868,6 +1041,7 @@ class MainViewModel(
     }
 
     fun clearLogs() {
+        if (!requirePermission(StaffPermission.SYSTEM_CONFIGURATION, "Clearing gate activity audit logs")) return
         viewModelScope.launch {
             repository.clearScanLogs()
             _userFeedbackMessage.value = "Gate activity audit logs cleared."
@@ -875,6 +1049,7 @@ class MainViewModel(
     }
 
     fun resetDemoData() {
+        if (!requirePermission(StaffPermission.SYSTEM_CONFIGURATION, "Resetting local records")) return
         viewModelScope.launch {
             repository.resetToSampleData()
             _userFeedbackMessage.value = "All local records cleared."

@@ -336,7 +336,7 @@ fun GuardianAlertsScreen(
     if (showSendCustomDialog) {
         var studentNameInput by remember { mutableStateOf("") }
         var phoneInput by remember { mutableStateOf("+256 ") }
-        var messageInput by remember { mutableStateOf("Dear Parent, this is an official gate security update from Oakridge High School.") }
+        var messageInput by remember { mutableStateOf("Dear Parent, this is an official gate security update from Lira Town College (LTC).") }
 
         AlertDialog(
             onDismissRequest = { showSendCustomDialog = false },

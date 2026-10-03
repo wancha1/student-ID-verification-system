@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -64,6 +66,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.model.Card as StudentCard
 import com.example.model.CardStatus
 import com.example.model.Student
+import com.example.util.QrCodeGenerator
+import com.example.util.QrCodeUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -83,8 +87,12 @@ fun PrintableStudentIdCard(
         val ts = card?.issueDate ?: student.updatedAt
         SimpleDateFormat("MMM yyyy", Locale.US).format(Date(ts))
     }
-    val cardIdStr = card?.cardIdentifier ?: "CRD-${student.studentNumber.removePrefix("OAK-")}-01"
+    val cardIdStr = card?.cardIdentifier ?: "CRD-${student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")}-01"
     val cardStatus = card?.status ?: CardStatus.ACTIVE
+    val effectiveQrPayload = remember(card?.qrPayload, student.studentNumber, cardIdStr) {
+        if (card != null && card.qrPayload.isNotBlank()) card.qrPayload
+        else QrCodeUtils.createPayload(student.studentNumber, cardIdStr)
+    }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -130,14 +138,14 @@ fun PrintableStudentIdCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "OAKRIDGE HIGH SCHOOL",
+                                text = "LIRA TOWN COLLEGE",
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 13.sp,
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                text = "ENTEBBE, UGANDA • OFFICIAL STUDENT ID",
+                                text = "LIRA, UGANDA • OFFICIAL STUDENT ID",
                                 color = Color(0xFFFCD34D),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 8.5.sp,
@@ -177,28 +185,28 @@ fun PrintableStudentIdCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Student Avatar
+                        // Student Passport Avatar
                         Box(
                             modifier = Modifier
-                                .size(76.dp)
+                                .size(width = 82.dp, height = 102.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .border(2.dp, Color(0xFF1E3A8A), RoundedCornerShape(10.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             StudentAvatar(
                                 student = student,
-                                size = 76.dp
+                                size = 80.dp
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
 
                         // Student Metadata
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = student.fullName.uppercase(),
                                 fontWeight = FontWeight.Black,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
                                 color = Color(0xFF0F172A),
                                 maxLines = 1
                             )
@@ -213,29 +221,31 @@ fun PrintableStudentIdCard(
                                 text = "STUDENT NO: ${student.studentNumber}",
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
                                 color = Color(0xFF475569)
                             )
                             Text(
                                 text = "CARD ID: $cardIdStr",
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 10.5.sp,
+                                fontSize = 10.sp,
                                 color = Color(0xFF64748B)
                             )
                         }
 
-                        // QR Code Graphic
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Large Scannable QR Code with centered LTC monogram
                         Box(
                             modifier = Modifier
-                                .size(76.dp)
+                                .size(104.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color.White)
-                                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
+                                .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
                                 .padding(4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            VisualQrMatrix(payload = student.uniqueQrCode)
+                            VisualQrMatrix(payload = effectiveQrPayload)
                         }
                     }
 
@@ -297,7 +307,7 @@ fun PrintableStudentIdCard(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        text = "GATE VERIFICATION SYSTEM",
+                        text = "LTC GATE ACCESS VERIFICATION",
                         color = Color(0xFFF59E0B),
                         fontWeight = FontWeight.Bold,
                         fontSize = 8.5.sp
@@ -309,70 +319,37 @@ fun PrintableStudentIdCard(
 }
 
 /**
- * Algorithmic QR matrix representation for realistic physical rendering on cards.
+ * Authentic ZXing QR Matrix representation with centered LTC monogram.
+ * Uses Level H error correction for 100% reliable camera and hardware scanner readability.
  */
 @Composable
 fun VisualQrMatrix(
     payload: String,
-    modifier: Modifier = Modifier.fillMaxSize()
+    modifier: Modifier = Modifier.fillMaxSize(),
+    addLtcLogo: Boolean = true
 ) {
-    val seed = payload.hashCode()
-    Canvas(modifier = modifier) {
-        val gridSize = 17
-        val cellSize = size.width / gridSize
+    val bitmap = remember(payload, addLtcLogo) {
+        QrCodeGenerator.generateQrBitmap(
+            content = payload,
+            size = 500,
+            addLtcLogo = addLtcLogo
+        )
+    }
 
-        // Draw background white
-        drawRect(Color.White, Offset.Zero, size)
-
-        // Draw 3 standard corner finder patterns
-        drawFinderPattern(0f, 0f, cellSize)
-        drawFinderPattern((gridSize - 7) * cellSize, 0f, cellSize)
-        drawFinderPattern(0f, (gridSize - 7) * cellSize, cellSize)
-
-        // Pseudo-random data modules derived from payload
-        for (r in 0 until gridSize) {
-            for (c in 0 until gridSize) {
-                val inFinder1 = r < 7 && c < 7
-                val inFinder2 = r < 7 && c >= gridSize - 7
-                val inFinder3 = r >= gridSize - 7 && c < 7
-                if (!inFinder1 && !inFinder2 && !inFinder3) {
-                    val hash = abs((seed * 31 + r * 17 + c * 13).hashCode())
-                    if (hash % 3 == 0 || (r + c) % 2 == 0) {
-                        drawRect(
-                            Color(0xFF0F172A),
-                            Offset(c * cellSize, r * cellSize),
-                            Size(cellSize, cellSize)
-                        )
-                    }
-                }
-            }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "QR Code for $payload",
+            modifier = modifier
+        )
+    } else {
+        Box(
+            modifier = modifier.background(Color.White),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("QR ERROR", fontSize = 10.sp, color = Color.Red)
         }
     }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFinderPattern(
-    x: Float,
-    y: Float,
-    cellSize: Float
-) {
-    // 7x7 outer square
-    drawRect(
-        Color(0xFF0F172A),
-        Offset(x, y),
-        Size(7 * cellSize, 7 * cellSize)
-    )
-    // 5x5 inner white
-    drawRect(
-        Color.White,
-        Offset(x + cellSize, y + cellSize),
-        Size(5 * cellSize, 5 * cellSize)
-    )
-    // 3x3 inner black
-    drawRect(
-        Color(0xFF0F172A),
-        Offset(x + 2 * cellSize, y + 2 * cellSize),
-        Size(3 * cellSize, 3 * cellSize)
-    )
 }
 
 @Composable
@@ -478,8 +455,9 @@ fun DigitalIdCardDialog(
                 ) {
                     Button(
                         onClick = {
-                            // Test scan this student's unique QR payload
-                            onTestScan(student.uniqueQrCode)
+                            // Test scan this student's active card QR payload
+                            val testPayload = card?.qrPayload?.takeIf { it.isNotBlank() } ?: student.uniqueQrCode
+                            onTestScan(testPayload)
                             onDismiss()
                         },
                         modifier = Modifier

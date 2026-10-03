@@ -145,7 +145,7 @@ fun GateAccessLogsScreen(
                                 ExportUtils.shareData(
                                     context = context,
                                     content = csv,
-                                    subject = "Oakridge Gate Scan History (CSV)",
+                                    subject = "LTC Gate Scan History (CSV)",
                                     isCsv = true
                                 )
                             },

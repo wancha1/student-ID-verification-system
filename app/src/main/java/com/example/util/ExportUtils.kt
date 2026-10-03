@@ -67,7 +67,7 @@ object ExportUtils {
 
         val sb = StringBuilder()
         sb.append("========================================\n")
-        sb.append("OAKRIDGE HIGH SCHOOL • GATE ACCESS REPORT\n")
+        sb.append("LIRA TOWN COLLEGE (LTC) • GATE ACCESS REPORT\n")
         sb.append("Generated: $reportDate\n")
         sb.append("========================================\n\n")
 
@@ -86,7 +86,7 @@ object ExportUtils {
         }
 
         sb.append("\n========================================\n")
-        sb.append("Official Gate Security System • Oakridge High School\n")
+        sb.append("Official Gate Security System • Lira Town College (LTC)\n")
         return sb.toString()
     }
 
@@ -96,7 +96,7 @@ object ExportUtils {
     fun shareData(
         context: Context,
         content: String,
-        subject: String = "Oakridge Gate Access Report",
+        subject: String = "LTC Gate Access Report",
         isCsv: Boolean = false
     ) {
         val sendIntent = Intent(Intent.ACTION_SEND).apply {

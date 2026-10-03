@@ -125,7 +125,7 @@ fun BatchPrintIdCardsDialog(
                         Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = SchoolPrimary)
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Standard CR-80 High-Security PVC Dimensions. High-density 2D Barcode with tamper-evident Oakridge branding.",
+                            text = "Standard CR-80 High-Security PVC Dimensions. High-density 2D Barcode with tamper-evident Lira Town College (LTC) branding.",
                             style = MaterialTheme.typography.bodySmall,
                             color = SchoolPrimary,
                             fontWeight = FontWeight.Medium

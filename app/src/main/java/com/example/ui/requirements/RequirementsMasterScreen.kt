@@ -538,7 +538,7 @@ private fun StudentRequirementCard(
                     )
                     ReqCheckItem(
                         label = "Sports Kit & PE Gear",
-                        description = "Oakridge track jacket, house t-shirt, and running shoes",
+                        description = "LTC track jacket, house t-shirt, and running shoes",
                         checked = requirement.sportsKitComplete,
                         onCheckedChange = { onToggle("sports") }
                     )

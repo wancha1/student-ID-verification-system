@@ -1015,7 +1015,7 @@ private fun InvalidQrVerificationView(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Badges must follow the Oakridge secure format: 'OAKRIDGE:STU:OAK-2026-XXXX'. Ensure the student is presenting an authentic Oakridge School ID card.",
+                    text = "Badges must follow the Lira Town College secure format: 'LTC:V1:LTC-2026-XXXX'. Ensure the student is presenting an authentic LTC School ID card.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

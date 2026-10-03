@@ -1,5 +1,6 @@
 package com.example.data
 
+import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
 import com.example.data.local.PendingChangeEntity
@@ -59,6 +60,8 @@ class RoomStudentRepository(
 
     val pendingChangesFlow: Flow<List<PendingChangeEntity>> = database.pendingChangeDao().getPendingChangesFlow()
     val pendingCountFlow: Flow<Int> = database.pendingChangeDao().getPendingCountFlow()
+
+    internal var testFailureInterceptor: ((operation: String) -> Unit)? = null
 
     suspend fun initialize() = withContext(ioDispatcher) {
         syncManager.initialize()
@@ -253,34 +256,38 @@ class RoomStudentRepository(
                 if (newStatus == FeeStatus.CLEARED) AccessStatus.APPROVED else AccessStatus.RESTRICTED_FEES
             }
 
-            database.studentDao().updateFeeStatus(
-                studentId = studentId,
-                newStatus = newStatus.name,
-                outstandingAmount = outstandingAmount,
-                updatedAt = now
-            )
-            database.studentDao().updateAccessStatus(
-                studentId = studentId,
-                newStatus = newAccessStatus.name,
-                updatedAt = now
-            )
-            database.studentProfileDao().updateAccessStatus(
-                studentId = studentId,
-                newStatus = newAccessStatus.name,
-                updatedAt = now
-            )
-
-            // Durable offline tracking: Record fee status mutation in pending queue
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.FEE_STATUS,
-                    recordId = studentId,
-                    operationType = SyncOperationType.STATUS_CHANGE,
-                    payloadJson = "{\"feesStatus\":\"${newStatus.name}\",\"outstandingAmount\":$outstandingAmount}",
-                    createdAt = now
+            database.withTransaction {
+                database.studentDao().updateFeeStatus(
+                    studentId = studentId,
+                    newStatus = newStatus.name,
+                    outstandingAmount = outstandingAmount,
+                    updatedAt = now
                 )
-            )
+                database.studentDao().updateAccessStatus(
+                    studentId = studentId,
+                    newStatus = newAccessStatus.name,
+                    updatedAt = now
+                )
+                database.studentProfileDao().updateAccessStatus(
+                    studentId = studentId,
+                    newStatus = newAccessStatus.name,
+                    updatedAt = now
+                )
+
+                testFailureInterceptor?.invoke("updateFeeStatus_afterLocalWrites")
+
+                // Durable offline tracking: Record fee status mutation in pending queue
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.FEE_STATUS,
+                        recordId = studentId,
+                        operationType = SyncOperationType.STATUS_CHANGE,
+                        payloadJson = "{\"feesStatus\":\"${newStatus.name}\",\"outstandingAmount\":$outstandingAmount}",
+                        createdAt = now
+                    )
+                )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.updateRemoteFeeStatus(studentId, newStatus, outstandingAmount, now)
@@ -297,50 +304,55 @@ class RoomStudentRepository(
         val studentWithTimestamp = student.copy(updatedAt = now)
         val entity = StudentEntity.fromDomain(studentWithTimestamp)
 
+        // Automatically issue first active card for the new student
+        val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
+        val cardId = "CRD-$cleanStudentNum-01"
+        val firstCard = Card(
+            id = UUID.randomUUID().toString(),
+            cardIdentifier = cardId,
+            studentId = student.id,
+            studentNumber = student.studentNumber,
+            qrPayload = QrCodeUtils.createPayload(student.studentNumber, cardId),
+            status = CardStatus.ACTIVE,
+            issueDate = now,
+            activationDate = now,
+            reason = "Initial enrollment card issuance",
+            updatedAt = now
+        )
+        val cardEntity = CardEntity.fromDomain(firstCard)
+
         try {
-            database.studentDao().insertOrUpdateStudent(entity)
-            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
+            database.withTransaction {
+                database.studentDao().insertOrUpdateStudent(entity)
+                database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
+                database.cardDao().insertOrUpdateCard(cardEntity)
 
-            // Automatically issue first active card for the new student
-            val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
-            val cardId = "CRD-$cleanStudentNum-01"
-            val firstCard = Card(
-                id = UUID.randomUUID().toString(),
-                cardIdentifier = cardId,
-                studentId = student.id,
-                studentNumber = student.studentNumber,
-                qrPayload = QrCodeUtils.createPayload(student.studentNumber, cardId),
-                status = CardStatus.ACTIVE,
-                issueDate = now,
-                activationDate = now,
-                reason = "Initial enrollment card issuance",
-                updatedAt = now
-            )
-            database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(firstCard))
+                testFailureInterceptor?.invoke("addStudent_afterLocalWrites")
 
-            // Durable offline tracking: Record student and initial card creation
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.STUDENT,
-                    recordId = student.id,
-                    operationType = SyncOperationType.CREATE,
-                    createdAt = now
+                // Durable offline tracking: Record student and initial card creation
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.STUDENT,
+                        recordId = student.id,
+                        operationType = SyncOperationType.CREATE,
+                        createdAt = now
+                    )
                 )
-            )
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.CARD,
-                    recordId = firstCard.id,
-                    operationType = SyncOperationType.CREATE,
-                    createdAt = now
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = firstCard.id,
+                        operationType = SyncOperationType.CREATE,
+                        createdAt = now
+                    )
                 )
-            )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushStudentChanges(listOf(entity))
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(firstCard)))
+                remoteCloudDataSource.pushCardChanges(listOf(cardEntity))
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -354,19 +366,23 @@ class RoomStudentRepository(
         val entity = StudentEntity.fromDomain(studentWithTimestamp)
 
         try {
-            database.studentDao().insertOrUpdateStudent(entity)
-            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
+            database.withTransaction {
+                database.studentDao().insertOrUpdateStudent(entity)
+                database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
 
-            // Durable offline tracking: Record student update
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.STUDENT,
-                    recordId = student.id,
-                    operationType = SyncOperationType.UPDATE,
-                    createdAt = now
+                testFailureInterceptor?.invoke("updateStudent_afterLocalWrites")
+
+                // Durable offline tracking: Record student update
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.STUDENT,
+                        recordId = student.id,
+                        operationType = SyncOperationType.UPDATE,
+                        createdAt = now
+                    )
                 )
-            )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushStudentChanges(listOf(entity))
@@ -380,19 +396,23 @@ class RoomStudentRepository(
     override suspend fun deleteStudent(studentId: String): Result<Unit> = withContext(ioDispatcher) {
         val now = System.currentTimeMillis()
         try {
-            database.studentDao().softDeleteStudent(studentId, now)
-            database.studentProfileDao().deleteProfileById(studentId)
+            database.withTransaction {
+                database.studentDao().softDeleteStudent(studentId, now)
+                database.studentProfileDao().deleteProfileById(studentId)
 
-            // Durable offline tracking: Record soft deletion
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.STUDENT,
-                    recordId = studentId,
-                    operationType = SyncOperationType.DELETE,
-                    createdAt = now
+                testFailureInterceptor?.invoke("deleteStudent_afterLocalWrites")
+
+                // Durable offline tracking: Record soft deletion
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.STUDENT,
+                        recordId = studentId,
+                        operationType = SyncOperationType.DELETE,
+                        createdAt = now
+                    )
                 )
-            )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.deleteRemoteStudent(studentId, now)
@@ -446,26 +466,30 @@ class RoomStudentRepository(
         )
 
         try {
-            // Mark previous active cards as REPLACED
-            database.cardDao().markActiveCardsReplaced(
-                studentId = student.id,
-                newCardId = newCard.id,
-                deactivationDate = now,
-                reason = "Replaced by new card $cardIdentifier",
-                updatedAt = now
-            )
-            database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
-
-            // Durable offline tracking: Record newly issued card
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.CARD,
-                    recordId = newCard.id,
-                    operationType = SyncOperationType.CREATE,
-                    createdAt = now
+            database.withTransaction {
+                // Mark previous active cards as REPLACED
+                database.cardDao().markActiveCardsReplaced(
+                    studentId = student.id,
+                    newCardId = newCard.id,
+                    deactivationDate = now,
+                    reason = "Replaced by new card $cardIdentifier",
+                    updatedAt = now
                 )
-            )
+                database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
+
+                testFailureInterceptor?.invoke("issueCard_afterLocalWrites")
+
+                // Durable offline tracking: Record newly issued card
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = newCard.id,
+                        operationType = SyncOperationType.CREATE,
+                        createdAt = now
+                    )
+                )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
@@ -493,19 +517,23 @@ class RoomStudentRepository(
         )
 
         try {
-            database.cardDao().insertOrUpdateCard(updated)
+            database.withTransaction {
+                database.cardDao().insertOrUpdateCard(updated)
 
-            // Durable offline tracking: Record lost card status change
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.CARD,
-                    recordId = cardId,
-                    operationType = SyncOperationType.STATUS_CHANGE,
-                    payloadJson = "{\"status\":\"LOST\",\"reason\":\"$reason\"}",
-                    createdAt = now
+                testFailureInterceptor?.invoke("reportCardLost_afterLocalWrites")
+
+                // Durable offline tracking: Record lost card status change
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = cardId,
+                        operationType = SyncOperationType.STATUS_CHANGE,
+                        payloadJson = "{\"status\":\"LOST\",\"reason\":\"$reason\"}",
+                        createdAt = now
+                    )
                 )
-            )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.updateRemoteCard(updated)
@@ -546,38 +574,42 @@ class RoomStudentRepository(
         )
 
         try {
-            // Update old card status to REPLACED or LOST
-            database.cardDao().updateCardStatus(
-                cardId = oldCardId,
-                newStatus = CardStatus.REPLACED.name,
-                deactivationDate = now,
-                replacedByCardId = newCard.id,
-                reason = reason,
-                updatedAt = now
-            )
-
-            database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
-
-            // Durable offline tracking: Record replacement card and previous card status change
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.CARD,
-                    recordId = oldCardId,
-                    operationType = SyncOperationType.STATUS_CHANGE,
-                    payloadJson = "{\"status\":\"REPLACED\",\"replacedBy\":\"${newCard.id}\"}",
-                    createdAt = now
+            database.withTransaction {
+                // Update old card status to REPLACED or LOST
+                database.cardDao().updateCardStatus(
+                    cardId = oldCardId,
+                    newStatus = CardStatus.REPLACED.name,
+                    deactivationDate = now,
+                    replacedByCardId = newCard.id,
+                    reason = reason,
+                    updatedAt = now
                 )
-            )
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.CARD,
-                    recordId = newCard.id,
-                    operationType = SyncOperationType.CREATE,
-                    createdAt = now
+
+                database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
+
+                testFailureInterceptor?.invoke("issueReplacementCard_afterLocalWrites")
+
+                // Durable offline tracking: Record replacement card and previous card status change
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = oldCardId,
+                        operationType = SyncOperationType.STATUS_CHANGE,
+                        payloadJson = "{\"status\":\"REPLACED\",\"replacedBy\":\"${newCard.id}\"}",
+                        createdAt = now
+                    )
                 )
-            )
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = newCard.id,
+                        operationType = SyncOperationType.CREATE,
+                        createdAt = now
+                    )
+                )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
@@ -605,19 +637,23 @@ class RoomStudentRepository(
         )
 
         try {
-            database.cardDao().insertOrUpdateCard(updated)
+            database.withTransaction {
+                database.cardDao().insertOrUpdateCard(updated)
 
-            // Durable offline tracking: Record card deactivation
-            database.pendingChangeDao().enqueueChange(
-                PendingChangeEntity(
-                    changeId = UUID.randomUUID().toString(),
-                    entityType = SyncEntityType.CARD,
-                    recordId = cardId,
-                    operationType = SyncOperationType.STATUS_CHANGE,
-                    payloadJson = "{\"status\":\"DEACTIVATED\",\"reason\":\"$reason\"}",
-                    createdAt = now
+                testFailureInterceptor?.invoke("deactivateCard_afterLocalWrites")
+
+                // Durable offline tracking: Record card deactivation
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = cardId,
+                        operationType = SyncOperationType.STATUS_CHANGE,
+                        payloadJson = "{\"status\":\"DEACTIVATED\",\"reason\":\"$reason\"}",
+                        createdAt = now
+                    )
                 )
-            )
+            }
 
             if (syncManager.syncInfo.value.isOnline) {
                 remoteCloudDataSource.updateRemoteCard(updated)
@@ -677,6 +713,7 @@ class RoomStudentRepository(
 
     override suspend fun resetToSampleData() = withContext(ioDispatcher) {
         clearAllData()
+        seedInitialDataIfEmpty()
     }
 
     suspend fun clearAllData() = withContext(ioDispatcher) {
@@ -696,6 +733,137 @@ class RoomStudentRepository(
     override fun getLastSyncTimestamp(): Long = syncManager.getLastSyncTimestamp()
 
     fun getSyncManager(): SyncManager = syncManager
+
+    override suspend fun allocateNextStudentNumber(year: Int): String = withContext(ioDispatcher) {
+        val prefix = "LTC-$year-"
+        val lastNumber = database.studentDao().getLastStudentNumber("$prefix%")
+        val nextSeq = if (lastNumber != null && lastNumber.startsWith(prefix)) {
+            val suffix = lastNumber.removePrefix(prefix).takeWhile { it.isDigit() }
+            (suffix.toIntOrNull() ?: 0) + 1
+        } else {
+            val count = database.studentDao().getActiveCount()
+            count + 1
+        }
+        String.format(Locale.US, "LTC-%d-%04d", year, nextSeq)
+    }
+
+    private suspend fun seedInitialDataIfEmpty() {
+        if (database.studentDao().getActiveCount() > 0) return
+        val now = System.currentTimeMillis()
+        val initialStudents = listOf(
+            Student(
+                id = "stu-ltc-001",
+                studentNumber = "LTC-2026-0001",
+                firstName = "Emmanuel",
+                lastName = "Okello",
+                gradeClass = "Senior 3-A",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
+                transportRoute = "Bus #1 - Lira Main Line",
+                feesStatus = FeeStatus.CLEARED,
+                outstandingAmount = 0.0,
+                gender = "Male",
+                avatarColorSeed = 0xFF1E3A8A,
+                guardianName = "Okello Patrick",
+                guardianPhone = "+256 772 123456",
+                emergencyContact = "+256 772 123456",
+                homeroomTeacher = "Mr. Obua Denis",
+                academicYear = "2026",
+                notes = "Student council representative. All term supplies verified.",
+                qrToken = "LTC0001TOK",
+                updatedAt = now
+            ),
+            Student(
+                id = "stu-ltc-002",
+                studentNumber = "LTC-2026-0002",
+                firstName = "Sarah",
+                lastName = "Akello",
+                gradeClass = "Senior 4-B",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+                transportRoute = "Bicycle / Walking - Junior Quarters",
+                feesStatus = FeeStatus.CLEARED,
+                outstandingAmount = 0.0,
+                gender = "Female",
+                avatarColorSeed = 0xFF0D9488,
+                guardianName = "Akello Mary",
+                guardianPhone = "+256 782 234567",
+                emergencyContact = "+256 782 234567",
+                homeroomTeacher = "Ms. Aceng Betty",
+                academicYear = "2026",
+                notes = "Science club president. Cleared for laboratory access.",
+                qrToken = "LTC0002TOK",
+                updatedAt = now
+            ),
+            Student(
+                id = "stu-ltc-003",
+                studentNumber = "LTC-2026-0003",
+                firstName = "Moses",
+                lastName = "Opio",
+                gradeClass = "Senior 2-C",
+                isDayScholar = false,
+                dayScholarType = DayScholarStatus.BOARDER,
+                transportRoute = "Boarder - Oyam House",
+                feesStatus = FeeStatus.OUTSTANDING,
+                outstandingAmount = 380000.0,
+                gender = "Male",
+                avatarColorSeed = 0xFFD97706,
+                guardianName = "Opio David",
+                guardianPhone = "+256 701 345678",
+                emergencyContact = "+256 701 345678",
+                homeroomTeacher = "Mr. Ogwal Francis",
+                academicYear = "2026",
+                notes = "Bursar hold for Term 1 balance. Supervisor override permitted if guardian confirms deposit.",
+                qrToken = "LTC0003TOK",
+                updatedAt = now
+            ),
+            Student(
+                id = "stu-ltc-004",
+                studentNumber = "LTC-2026-0004",
+                firstName = "Harriet",
+                lastName = "Adongo",
+                gradeClass = "Senior 1-A",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_PRIVATE,
+                transportRoute = "Private Drop-off - Lira Town Centre",
+                feesStatus = FeeStatus.CLEARED,
+                outstandingAmount = 0.0,
+                gender = "Female",
+                avatarColorSeed = 0xFF7C3AED,
+                guardianName = "Adongo Grace",
+                guardianPhone = "+256 752 456789",
+                emergencyContact = "+256 752 456789",
+                homeroomTeacher = "Mrs. Atim Stella",
+                academicYear = "2026",
+                notes = "Prefect for library affairs. Authorized for late gate exit with exeat slip.",
+                qrToken = "LTC0004TOK",
+                updatedAt = now
+            )
+        )
+
+        database.withTransaction {
+            for (stu in initialStudents) {
+                val entity = StudentEntity.fromDomain(stu)
+                val profile = StudentProfileEntity.fromStudent(stu)
+                val cardIdentifier = "CRD-${stu.studentNumber.removePrefix("LTC-")}-01"
+                val card = Card(
+                    id = UUID.randomUUID().toString(),
+                    cardIdentifier = cardIdentifier,
+                    studentId = stu.id,
+                    studentNumber = stu.studentNumber,
+                    qrPayload = QrCodeUtils.createPayload(stu.studentNumber, cardIdentifier),
+                    status = CardStatus.ACTIVE,
+                    issueDate = now,
+                    activationDate = now,
+                    reason = "Initial enrollment card issuance",
+                    updatedAt = now
+                )
+                database.studentDao().insertOrUpdateStudent(entity)
+                database.studentProfileDao().insertOrUpdateProfile(profile)
+                database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(card))
+            }
+        }
+    }
 
     companion object {
         @Volatile

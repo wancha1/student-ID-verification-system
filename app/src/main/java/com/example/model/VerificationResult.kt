@@ -21,7 +21,7 @@ sealed class StudentScanResult {
         val isApproved: Boolean,
         val reason: String,
         val isOfflineData: Boolean,
-        val lastSyncTimestamp: Long
+        val lastSyncTimestamp: Long = System.currentTimeMillis()
     ) : StudentScanResult()
 
     data class CardInactive(
@@ -30,14 +30,14 @@ sealed class StudentScanResult {
         val cardStatus: CardStatus,
         val reason: String,
         val isOfflineData: Boolean,
-        val lastSyncTimestamp: Long
+        val lastSyncTimestamp: Long = System.currentTimeMillis()
     ) : StudentScanResult()
 
     data class StudentNotFound(
         val parsedIdentifier: String,
         val reason: String,
         val isOfflineData: Boolean,
-        val lastSyncTimestamp: Long
+        val lastSyncTimestamp: Long = System.currentTimeMillis()
     ) : StudentScanResult()
 
     data class InvalidQr(

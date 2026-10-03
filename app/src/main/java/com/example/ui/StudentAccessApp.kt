@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,6 +69,15 @@ import com.example.ui.logs.GateAccessLogsScreen
 import com.example.ui.notifications.GuardianAlertsScreen
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.SchoolPrimary
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Check
@@ -80,6 +90,14 @@ import com.example.ui.components.MultiFormatExportDialog
 import com.example.ui.meals.MealsMasterScreen
 import com.example.ui.requirements.RequirementsMasterScreen
 import com.example.util.ExportFormat
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.example.util.SecurityManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,10 +139,27 @@ fun StudentAccessApp(
     var showRoleSwitchMenu by remember { mutableStateOf(false) }
     var showAllExportsDialog by remember { mutableStateOf(false) }
     var exportDatasetTarget by remember { mutableStateOf("STUDENTS") }
+    var showAuthDialogForRole by remember { mutableStateOf<UserRole?>(null) }
+    var switchRolePin by remember { mutableStateOf("") }
+    var switchRolePinError by remember { mutableStateOf<String?>(null) }
+    var switchRoleRequestFinance by remember { mutableStateOf(false) }
 
     val isAnyScannerOpen = isScannerOpen || isMealScannerOpen || isRequirementScannerOpen
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.lockSessionOnBackground()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(userFeedbackMessage) {
         userFeedbackMessage?.let { msg ->
@@ -140,37 +175,32 @@ fun StudentAccessApp(
     val user = currentUser
     if (user == null) {
         LoginScreen(
-            onSelectRole = { role -> viewModel.loginAs(role) },
+            onSelectRole = { role, name, hasFinance -> viewModel.loginAs(role, name, hasFinance) },
             modifier = modifier
         )
     } else {
         val roleColor = when (user.role) {
-            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> SchoolPrimary
-            UserRole.REQUIREMENTS_MASTER -> Color(0xFF0284C7)
+            UserRole.GATE_STAFF -> SchoolPrimary
+            UserRole.BURSAR_FINANCE -> Color(0xFF0D9488)
             UserRole.ADMINISTRATOR -> GoldAccent
-            UserRole.MEALS_MASTER -> Color(0xFFE11D48)
+            UserRole.MEAL_SERVING_STAFF -> Color(0xFFE11D48)
+            UserRole.TEACHERS -> Color(0xFF4F46E5)
+            UserRole.EXAMINATION_STAFF -> Color(0xFF0284C7)
+            UserRole.HEAD_TEACHER_MANAGEMENT -> Color(0xFF7C3AED)
         }
 
         val roleIcon = when (user.role) {
-            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> Icons.Default.Security
-            UserRole.REQUIREMENTS_MASTER -> Icons.Default.FactCheck
+            UserRole.GATE_STAFF -> Icons.Default.Security
+            UserRole.BURSAR_FINANCE -> Icons.Default.AccountBalance
             UserRole.ADMINISTRATOR -> Icons.Default.AdminPanelSettings
-            UserRole.MEALS_MASTER -> Icons.Default.Restaurant
+            UserRole.MEAL_SERVING_STAFF -> Icons.Default.Restaurant
+            UserRole.TEACHERS -> Icons.Default.MenuBook
+            UserRole.EXAMINATION_STAFF -> Icons.Default.FactCheck
+            UserRole.HEAD_TEACHER_MANAGEMENT -> Icons.Default.SupervisorAccount
         }
 
-        val roleTitle = when (user.role) {
-            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> "Gate Keeper"
-            UserRole.REQUIREMENTS_MASTER -> "Requirements Master"
-            UserRole.ADMINISTRATOR -> "Administrator"
-            UserRole.MEALS_MASTER -> "Meals Master"
-        }
-
-        val roleSubtitle = when (user.role) {
-            UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> "Turnstile Gate 1 • Access Verification"
-            UserRole.REQUIREMENTS_MASTER -> "Checklist Clearance • Student Affairs"
-            UserRole.ADMINISTRATOR -> "Bursar & Records • Fees & Registry"
-            UserRole.MEALS_MASTER -> "Dining Hall Turnstile • Food Service"
-        }
+        val roleTitle = user.role.title
+        val roleSubtitle = user.role.subtitle
 
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -199,7 +229,7 @@ fun StudentAccessApp(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Oakridge Academy",
+                                        text = "Lira Town College (LTC)",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -250,55 +280,94 @@ fun StudentAccessApp(
                                     onDismissRequest = { showRoleSwitchMenu = false }
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text("Gate Keeper (Turnstile)") },
+                                        text = { Text("Gate Staff (Turnstile)") },
                                         leadingIcon = {
                                             Icon(Icons.Default.Security, contentDescription = null, tint = SchoolPrimary)
                                         },
                                         onClick = {
-                                            viewModel.loginAs(UserRole.GATE_KEEPER)
-                                            showLogsScreen = false
-                                            showGuardianAlertsScreen = false
-                                            showExeatScreen = false
                                             showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.GATE_STAFF
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = false
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Requirements Master (Checklist)") },
+                                        text = { Text("Bursar / Finance (Fees)") },
                                         leadingIcon = {
-                                            Icon(Icons.Default.FactCheck, contentDescription = null, tint = Color(0xFF0284C7))
+                                            Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF0D9488))
                                         },
                                         onClick = {
-                                            viewModel.loginAs(UserRole.REQUIREMENTS_MASTER)
-                                            showLogsScreen = false
-                                            showGuardianAlertsScreen = false
-                                            showExeatScreen = false
                                             showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.BURSAR_FINANCE
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = true
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Administrator (Registry & Fees)") },
+                                        text = { Text("Administrator (Registry)") },
                                         leadingIcon = {
                                             Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = GoldAccent)
                                         },
                                         onClick = {
-                                            viewModel.loginAs(UserRole.ADMINISTRATOR)
-                                            showLogsScreen = false
-                                            showGuardianAlertsScreen = false
-                                            showExeatScreen = false
                                             showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.ADMINISTRATOR
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = false
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Meals Master (Dining Hall)") },
+                                        text = { Text("Meal-Serving Staff (Dining Hall)") },
                                         leadingIcon = {
                                             Icon(Icons.Default.Restaurant, contentDescription = null, tint = Color(0xFFE11D48))
                                         },
                                         onClick = {
-                                            viewModel.loginAs(UserRole.MEALS_MASTER)
-                                            showLogsScreen = false
-                                            showGuardianAlertsScreen = false
-                                            showExeatScreen = false
                                             showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.MEAL_SERVING_STAFF
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Teachers (Classroom Roll Call)") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color(0xFF4F46E5))
+                                        },
+                                        onClick = {
+                                            showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.TEACHERS
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Examination Staff (Clearance)") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.FactCheck, contentDescription = null, tint = Color(0xFF0284C7))
+                                        },
+                                        onClick = {
+                                            showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.EXAMINATION_STAFF
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Head Teacher / Management") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.SupervisorAccount, contentDescription = null, tint = Color(0xFF7C3AED))
+                                        },
+                                        onClick = {
+                                            showRoleSwitchMenu = false
+                                            showAuthDialogForRole = UserRole.HEAD_TEACHER_MANAGEMENT
+                                            switchRolePin = ""
+                                            switchRolePinError = null
+                                            switchRoleRequestFinance = false
                                         }
                                     )
                                 }
@@ -517,7 +586,7 @@ fun StudentAccessApp(
                     )
                 } else {
                     when (user.role) {
-                        UserRole.GATE_KEEPER, UserRole.SECURITY_GUARD -> {
+                        UserRole.GATE_STAFF -> {
                             if (isScannerOpen) {
                                 GuardScannerScreen(
                                     onBarcodeDetected = { rawCode ->
@@ -545,7 +614,7 @@ fun StudentAccessApp(
                             }
                         }
 
-                        UserRole.REQUIREMENTS_MASTER -> {
+                        UserRole.EXAMINATION_STAFF -> {
                             if (isRequirementScannerOpen) {
                                 GuardScannerScreen(
                                     onBarcodeDetected = { rawCode ->
@@ -577,7 +646,7 @@ fun StudentAccessApp(
                             }
                         }
 
-                        UserRole.ADMINISTRATOR -> {
+                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.TEACHERS -> {
                             if (selectedStudentDetail != null) {
                                 StudentDetailScreen(
                                     student = selectedStudentDetail!!,
@@ -606,7 +675,6 @@ fun StudentAccessApp(
                                         viewModel.issueNewActiveCard(studentId, reason)
                                     },
                                     onTestScanAsGuard = { studentId ->
-                                        viewModel.loginAs(UserRole.GATE_KEEPER)
                                         viewModel.handleBarcodeScan(studentId, context)
                                         viewModel.selectStudentForDetail(null)
                                     }
@@ -646,7 +714,7 @@ fun StudentAccessApp(
                             }
                         }
 
-                        UserRole.MEALS_MASTER -> {
+                        UserRole.MEAL_SERVING_STAFF -> {
                             if (isMealScannerOpen) {
                                 GuardScannerScreen(
                                     onBarcodeDetected = { rawCode ->
@@ -681,6 +749,107 @@ fun StudentAccessApp(
                     BatchPrintIdCardsDialog(
                         students = allStudents,
                         onDismiss = { showBatchPrintDialog = false }
+                    )
+                }
+
+                // Privileged Role Switch Authentication Dialog
+                if (showAuthDialogForRole != null) {
+                    val targetRole = showAuthDialogForRole!!
+                    AlertDialog(
+                        onDismissRequest = {
+                            showAuthDialogForRole = null
+                            switchRolePin = ""
+                            switchRolePinError = null
+                            switchRoleRequestFinance = false
+                        },
+                        title = {
+                            Text("Authorize ${targetRole.title} Access", fontWeight = FontWeight.Bold)
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    text = "Role switching requires staff PIN authentication for ${targetRole.title} duty mode.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedTextField(
+                                    value = switchRolePin,
+                                    onValueChange = {
+                                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                                            switchRolePin = it
+                                            switchRolePinError = null
+                                        }
+                                    },
+                                    label = { Text("Enter Staff PIN") },
+                                    singleLine = true,
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                    isError = switchRolePinError != null,
+                                    supportingText = switchRolePinError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("input_role_switch_pin")
+                                )
+
+                                if (targetRole == UserRole.ADMINISTRATOR) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { switchRoleRequestFinance = !switchRoleRequestFinance }
+                                            .padding(vertical = 4.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = switchRoleRequestFinance,
+                                            onCheckedChange = { switchRoleRequestFinance = it },
+                                            modifier = Modifier.testTag("checkbox_switch_role_finance")
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Explicit Finance / Bursar Clearance Mode",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    if (SecurityManager.verifyRolePin(context, targetRole, switchRolePin)) {
+                                        val hasFinance = if (targetRole == UserRole.BURSAR_FINANCE) true else switchRoleRequestFinance
+                                        viewModel.loginAs(targetRole, null, hasFinance)
+                                        showLogsScreen = false
+                                        showGuardianAlertsScreen = false
+                                        showExeatScreen = false
+                                        showAuthDialogForRole = null
+                                        switchRolePin = ""
+                                        switchRolePinError = null
+                                    } else {
+                                        switchRolePinError = "Incorrect PIN. Role switch authorization denied."
+                                    }
+                                },
+                                modifier = Modifier.testTag("button_confirm_role_switch")
+                            ) {
+                                Text("Authorize")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showAuthDialogForRole = null
+                                    switchRolePin = ""
+                                    switchRolePinError = null
+                                    switchRoleRequestFinance = false
+                                },
+                                modifier = Modifier.testTag("button_cancel_role_switch")
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
                     )
                 }
 

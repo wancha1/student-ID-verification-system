@@ -107,7 +107,7 @@ object ExportManager {
             </style>
             </head>
             <body>
-            <div class="title">Oakridge High School — Student Registry Directory</div>
+            <div class="title">Lira Town College (LTC) — Student Registry Directory</div>
             <p>Generated: $generatedAt | Total Registered Students: ${students.size}</p>
             <table>
                 <tr>
@@ -153,7 +153,7 @@ object ExportManager {
             <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
             <head>
             <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-            <title>Oakridge Academy Student Registry</title>
+            <title>Lira Town College (LTC) Student Registry</title>
             <style>
                 body { font-family: 'Calibri', Arial, sans-serif; margin: 20px; }
                 h1 { color: #1E3A8A; font-size: 20pt; margin-bottom: 2px; text-align: center; }
@@ -198,7 +198,7 @@ object ExportManager {
 
         sb.append("""
             </table>
-            <div class="footer">Official Student Record • Oakridge Academy Day Scholar Access Management System</div>
+            <div class="footer">Official Student Record • Lira Town College (LTC) Day Scholar Access Management System</div>
             </body></html>
         """.trimIndent())
         return sb.toString()
@@ -207,7 +207,7 @@ object ExportManager {
     private fun generateStudentsTextReport(students: List<Student>): String {
         val sb = StringBuilder()
         sb.append("========================================================================================\n")
-        sb.append("OAKRIDGE HIGH SCHOOL • STUDENT DIRECTORY REPORT\n")
+        sb.append("LIRA TOWN COLLEGE (LTC) • STUDENT DIRECTORY REPORT\n")
         sb.append("Generated: ${dateTimeFormatter.format(Date())} | Total Students: ${students.size}\n")
         sb.append("========================================================================================\n\n")
         sb.append(String.format(Locale.US, "%-4s %-16s %-24s %-12s %-12s %-22s\n", "#", "STUDENT ID", "NAME", "CLASS", "FEES", "GUARDIAN"))
@@ -256,7 +256,7 @@ object ExportManager {
             </style>
             </head>
             <body>
-            <h2>Oakridge High School — Gate Access Verification Logs</h2>
+            <h2>Lira Town College (LTC) — Gate Access Verification Logs</h2>
             <p>Generated: $generatedAt | Total Scans: ${logs.size}</p>
             <table>
                 <tr>
@@ -393,7 +393,7 @@ object ExportManager {
                 .blocked { color: #DC2626; font-weight: bold; }
             </style>
             </head><body>
-            <h2>Oakridge High School — Dining Hall & Cafeteria Attendance Sheet</h2>
+            <h2>Lira Town College (LTC) — Dining Hall & Cafeteria Attendance Sheet</h2>
             <p>Generated: ${dateTimeFormatter.format(Date())} | Total Entries: ${records.size}</p>
             <table>
                 <tr>
@@ -546,7 +546,7 @@ object ExportManager {
                 .pending { color: #DC2626; font-weight: bold; }
             </style>
             </head><body>
-            <h2>Oakridge Academy — Student Requirements Clearance Sheet</h2>
+            <h2>Lira Town College (LTC) — Student Requirements Clearance Sheet</h2>
             <p>Generated: ${dateTimeFormatter.format(Date())} | Total Students: ${list.size}</p>
             <table>
                 <tr>
@@ -598,7 +598,7 @@ object ExportManager {
                 td { padding: 5px; border: 1px solid #CBD5E1; }
             </style>
             </head><body>
-            <h1>OAKRIDGE ACADEMY • REQUIREMENTS COMPLIANCE AUDIT</h1>
+            <h1>LIRA TOWN COLLEGE (LTC) • REQUIREMENTS COMPLIANCE AUDIT</h1>
             <p>Office of the Requirements Master | Date: ${SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.US).format(Date())}</p>
             <table>
                 <tr>
@@ -637,7 +637,7 @@ object ExportManager {
     private fun generateRequirementsTextReport(list: List<StudentRequirement>): String {
         val sb = StringBuilder()
         sb.append("===============================================================================\n")
-        sb.append("OAKRIDGE HIGH SCHOOL • STUDENT REQUIREMENTS STATUS REPORT\n")
+        sb.append("LIRA TOWN COLLEGE (LTC) • STUDENT REQUIREMENTS STATUS REPORT\n")
         sb.append("Generated: ${dateTimeFormatter.format(Date())} | Total Students: ${list.size}\n")
         sb.append("===============================================================================\n\n")
         sb.append(String.format(Locale.US, "%-15s %-22s %-10s %-12s %-14s\n", "STUDENT ID", "NAME", "CLASS", "COMPLIANCE", "STATUS"))
@@ -663,7 +663,7 @@ object ExportManager {
         content: String,
         baseFileName: String,
         format: ExportFormat,
-        subject: String = "Oakridge High School Report"
+        subject: String = "LTC Report"
     ) {
         try {
             val exportDir = File(context.cacheDir, "exports")

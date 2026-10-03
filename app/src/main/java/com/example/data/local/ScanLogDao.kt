@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ScanLogDao {
 
+    @Query("SELECT * FROM gate_scan_logs WHERE id = :logId LIMIT 1")
+    suspend fun getScanLogById(logId: String): ScanLogEntity?
+
     @Query("SELECT * FROM gate_scan_logs ORDER BY timestamp DESC")
     fun getAllLogsFlow(): Flow<List<ScanLogEntity>>
 
@@ -23,6 +26,9 @@ interface ScanLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: ScanLogEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertScanLog(log: ScanLogEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLogs(logs: List<ScanLogEntity>)

@@ -24,6 +24,9 @@ interface StudentDao {
     @Query("SELECT * FROM students")
     suspend fun getAllStudentsSnapshot(): List<StudentEntity>
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertStudent(student: StudentEntity)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateStudent(student: StudentEntity)
 
