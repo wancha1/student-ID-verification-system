@@ -11,6 +11,7 @@ import com.example.model.StudentScanResult
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.SyncSummary
+import com.example.util.CardCryptoManager
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import kotlinx.coroutines.flow.Flow
@@ -63,6 +64,16 @@ class MockStudentRepository : StudentRepository {
         }
     }
 
+    override suspend fun getStudentByCardIdentifier(cardIdentifier: String): Student? {
+        val clean = cardIdentifier.trim().uppercase()
+        val card = _cards.value.firstOrNull {
+            it.cardIdentifier.equals(clean, ignoreCase = true) || it.id.equals(clean, ignoreCase = true)
+        } ?: return null
+        return _students.value.firstOrNull {
+            (it.id == card.studentId || it.studentNumber == card.studentNumber) && !it.isDeleted
+        }
+    }
+
     override suspend fun verifyStudentByQr(rawQrCode: String): StudentScanResult {
         val lastSync = lastSyncTime
         val isOffline = !_syncInfo.value.isOnline
@@ -75,27 +86,110 @@ class MockStudentRepository : StudentRepository {
                     errorReason = parseResult.reason
                 )
             }
-            is QrParseResult.ValidStudentNumber -> {
-                val student = getStudentByStudentNumber(parseResult.studentNumber)
-                if (student != null) {
-                    evaluateStudentAndCard(student, isOffline, lastSync)
-                } else {
-                    StudentScanResult.StudentNotFound(
-                        parsedIdentifier = parseResult.studentNumber,
-                        reason = "Student Number '${parseResult.studentNumber}' not found in the local gate database.",
+            is QrParseResult.LegacyUnsigned -> {
+                StudentScanResult.InvalidQr(
+                    rawScannedString = rawQrCode,
+                    errorReason = "Rejected: Legacy unsigned QR format (${parseResult.formatDescription}) is not permitted on the production gate verification path. Reissue to authenticated V2 badge required."
+                )
+            }
+            is QrParseResult.ValidV2Card -> {
+                // 1. Cryptographically verify signature against trusted public key
+                val isAuthentic = CardCryptoManager.verifyCardSignature(
+                    cardId = parseResult.cardId,
+                    signatureBase64Url = parseResult.signature
+                )
+                if (!isAuthentic) {
+                    return StudentScanResult.InvalidQr(
+                        rawScannedString = rawQrCode,
+                        errorReason = "Cryptographic signature verification failed for card '${parseResult.cardId}'. Potential forgery, tampering, or invalid issuer key."
+                    )
+                }
+
+                // 2. Query exact card record corresponding to the scanned cardId
+                val card = _cards.value.firstOrNull {
+                    it.cardIdentifier.equals(parseResult.cardId, ignoreCase = true) ||
+                    it.id.equals(parseResult.cardId, ignoreCase = true)
+                }
+
+                if (card == null) {
+                    return StudentScanResult.StudentNotFound(
+                        parsedIdentifier = parseResult.cardId,
+                        reason = "Card '${parseResult.cardId}' is cryptographically authentic but not registered in the school database.",
                         isOfflineData = isOffline,
                         lastSyncTimestamp = lastSync
                     )
                 }
-            }
-            is QrParseResult.ValidInternalId -> {
-                val student = getStudentById(parseResult.internalId)
-                if (student != null) {
-                    evaluateStudentAndCard(student, isOffline, lastSync)
+
+                // 3. Card MUST be ACTIVE. NO fallback to another active card!
+                if (card.status != CardStatus.ACTIVE) {
+                    val student = _students.value.firstOrNull {
+                        it.id == card.studentId || it.studentNumber == card.studentNumber
+                    } ?: Student(
+                        id = card.studentId,
+                        studentNumber = card.studentNumber,
+                        firstName = "Student",
+                        lastName = "Cardholder",
+                        gradeClass = "Unknown"
+                    )
+
+                    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.US)
+                    val dateStr = dateFormat.format(Date(card.deactivationDate ?: card.updatedAt))
+                    val reason = when (card.status) {
+                        CardStatus.LOST -> "Card ${card.cardIdentifier} was reported LOST on $dateStr. Access Denied."
+                        CardStatus.REPLACED -> "Card ${card.cardIdentifier} was REPLACED on $dateStr. Access Denied. Please present newly issued active card."
+                        CardStatus.DEACTIVATED -> "Card ${card.cardIdentifier} has been DEACTIVATED (${card.reason ?: "Administrative lock"}). Access Denied."
+                        CardStatus.ACTIVE -> "Card status unverified."
+                    }
+                    return StudentScanResult.CardInactive(
+                        student = student,
+                        card = card,
+                        cardStatus = card.status,
+                        reason = reason,
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
+                // 4. Retrieve associated student and verify not deleted
+                val student = _students.value.firstOrNull {
+                    (it.id == card.studentId || it.studentNumber == card.studentNumber) && !it.isDeleted
+                }
+
+                if (student == null) {
+                    return StudentScanResult.StudentNotFound(
+                        parsedIdentifier = parseResult.cardId,
+                        reason = "Associated student record (${card.studentNumber}) was not found or has been deactivated/deleted.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
+                // 5. Evaluate fee and day-scholar gate access rules
+                if (!student.isDayScholar) {
+                    StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
+                    val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
+                    StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
                 } else {
-                    StudentScanResult.StudentNotFound(
-                        parsedIdentifier = parseResult.internalId,
-                        reason = "Student ID '${parseResult.internalId}' not found in the local gate database.",
+                    StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = true,
+                        reason = "Entry Approved: Authentic V2 Card (${card.cardIdentifier}) verified & Fees Cleared.",
                         isOfflineData = isOffline,
                         lastSyncTimestamp = lastSync
                     )
@@ -217,13 +311,14 @@ class MockStudentRepository : StudentRepository {
         _students.update { list ->
             listOf(student) + list
         }
-        // Issue active card for new student
+        // Issue active authenticated V2 card for new student
+        val newCardId = CardCryptoManager.generateSecureRandomCardId()
         val firstCard = Card(
             id = UUID.randomUUID().toString(),
-            cardIdentifier = "CRD-${student.studentNumber.removePrefix("OAK-")}-01",
+            cardIdentifier = newCardId,
             studentId = student.id,
             studentNumber = student.studentNumber,
-            qrPayload = "OAKRIDGE:STU:${student.studentNumber}",
+            qrPayload = CardCryptoManager.signCardPayload(newCardId),
             status = CardStatus.ACTIVE,
             reason = "Initial issuance"
         )
@@ -275,14 +370,15 @@ class MockStudentRepository : StudentRepository {
     ): Result<Card> {
         val student = getStudentById(studentId) ?: return Result.failure(Exception("Student not found"))
         val now = System.currentTimeMillis()
-        val count = _cards.value.count { it.studentId == studentId } + 1
-        val cardIdentifier = customIdentifier ?: "CRD-${student.studentNumber.removePrefix("OAK-")}-${String.format(Locale.US, "%02d", count)}"
+        val cardIdentifier = customIdentifier?.trim()?.uppercase() ?: CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = CardCryptoManager.signCardPayload(cardIdentifier)
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = cardIdentifier,
             studentId = student.id,
             studentNumber = student.studentNumber,
+            qrPayload = signedPayload,
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,
@@ -327,14 +423,15 @@ class MockStudentRepository : StudentRepository {
     ): Result<Card> {
         val student = getStudentById(studentId) ?: return Result.failure(Exception("Student not found"))
         val now = System.currentTimeMillis()
-        val count = _cards.value.count { it.studentId == studentId } + 1
-        val newCardIdentifier = "CRD-${student.studentNumber.removePrefix("OAK-")}-${String.format(Locale.US, "%02d", count)}"
+        val newCardIdentifier = CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = CardCryptoManager.signCardPayload(newCardIdentifier)
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = newCardIdentifier,
             studentId = student.id,
             studentNumber = student.studentNumber,
+            qrPayload = signedPayload,
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,
@@ -349,6 +446,43 @@ class MockStudentRepository : StudentRepository {
                 } else it
             }
             listOf(newCard) + marked
+        }
+        return Result.success(newCard)
+    }
+
+    override suspend fun reissueCardToSecureV2(studentId: String): Result<Card> {
+        val student = getStudentById(studentId) ?: return Result.failure(Exception("Student not found"))
+        val now = System.currentTimeMillis()
+        val newCardIdentifier = CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = CardCryptoManager.signCardPayload(newCardIdentifier)
+
+        val newCard = Card(
+            id = UUID.randomUUID().toString(),
+            cardIdentifier = newCardIdentifier,
+            studentId = student.id,
+            studentNumber = student.studentNumber,
+            qrPayload = signedPayload,
+            status = CardStatus.ACTIVE,
+            issueDate = now,
+            activationDate = now,
+            reason = "Upgraded to cryptographically authenticated V2 badge",
+            notes = "Issued with Ed25519 digital signature",
+            updatedAt = now
+        )
+
+        _cards.update { current ->
+            val updatedOld = current.map {
+                if (it.studentId == studentId && it.status == CardStatus.ACTIVE) {
+                    it.copy(
+                        status = CardStatus.REPLACED,
+                        deactivationDate = now,
+                        replacedByCardId = newCard.id,
+                        reason = "Replaced by authenticated V2 card $newCardIdentifier",
+                        updatedAt = now
+                    )
+                } else it
+            }
+            listOf(newCard) + updatedOld
         }
         return Result.success(newCard)
     }
@@ -508,9 +642,9 @@ class MockStudentRepository : StudentRepository {
         )
         _students.value = listOf(s1, s2, s3)
         _cards.value = listOf(
-            Card(id = "card-001", studentId = s1.id, studentNumber = s1.studentNumber, cardIdentifier = "CARD-0001", qrPayload = "OAKRIDGE:STU:OAK-2026-0001", status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis()),
-            Card(id = "card-002", studentId = s2.id, studentNumber = s2.studentNumber, cardIdentifier = "CARD-0002", qrPayload = "OAKRIDGE:STU:OAK-2026-0002", status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis()),
-            Card(id = "card-003", studentId = s3.id, studentNumber = s3.studentNumber, cardIdentifier = "CARD-0003", qrPayload = "LTC:STU:LTC-2026-0001", status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis())
+            Card(id = "card-001", studentId = s1.id, studentNumber = s1.studentNumber, cardIdentifier = "CARD-0001", qrPayload = CardCryptoManager.signCardPayload("CARD-0001"), status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis()),
+            Card(id = "card-002", studentId = s2.id, studentNumber = s2.studentNumber, cardIdentifier = "CARD-0002", qrPayload = CardCryptoManager.signCardPayload("CARD-0002"), status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis()),
+            Card(id = "card-003", studentId = s3.id, studentNumber = s3.studentNumber, cardIdentifier = "CARD-0003", qrPayload = CardCryptoManager.signCardPayload("CARD-0003"), status = CardStatus.ACTIVE, issueDate = System.currentTimeMillis())
         )
         _scanLogs.value = emptyList()
         _guardianNotifications.value = emptyList()

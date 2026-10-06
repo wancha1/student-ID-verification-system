@@ -24,6 +24,7 @@ import com.example.model.StaffPermission
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
+import com.example.util.CardCryptoManager
 import com.example.util.ExportFormat
 import com.example.util.ExportManager
 import com.example.util.ExportUtils
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
 
@@ -800,21 +802,15 @@ class MainViewModel(
         if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val parsed = QrCodeUtils.parseQrCode(rawCode)
-        val students = allStudents.value
 
         val student = when (parsed) {
-            is QrParseResult.ValidStudentNumber -> {
-                students.find { it.studentNumber.equals(parsed.studentNumber, ignoreCase = true) }
+            is QrParseResult.ValidV2Card -> {
+                if (CardCryptoManager.verifyCardSignature(parsed.cardId, parsed.signature)) {
+                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
+                } else null
             }
-            is QrParseResult.ValidInternalId -> {
-                students.find { it.id.equals(parsed.internalId, ignoreCase = true) }
-            }
-            is QrParseResult.Invalid -> {
-                students.find {
-                    it.studentNumber.equals(rawCode.trim(), ignoreCase = true) ||
-                    it.uniqueQrCode.equals(rawCode.trim(), ignoreCase = true)
-                }
-            }
+            is QrParseResult.LegacyUnsigned -> null
+            is QrParseResult.Invalid -> null
         }
 
         if (student == null) {
@@ -880,11 +876,14 @@ class MainViewModel(
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
         val parsed = QrCodeUtils.parseQrCode(rawCode)
-        val students = allStudents.value
         val student = when (parsed) {
-            is QrParseResult.ValidStudentNumber -> students.find { it.studentNumber.equals(parsed.studentNumber, ignoreCase = true) }
-            is QrParseResult.ValidInternalId -> students.find { it.id.equals(parsed.internalId, ignoreCase = true) }
-            is QrParseResult.Invalid -> students.find { it.studentNumber.equals(rawCode.trim(), ignoreCase = true) }
+            is QrParseResult.ValidV2Card -> {
+                if (CardCryptoManager.verifyCardSignature(parsed.cardId, parsed.signature)) {
+                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
+                } else null
+            }
+            is QrParseResult.LegacyUnsigned -> null
+            is QrParseResult.Invalid -> null
         }
         if (student != null) {
             _scannedRequirementStudentId.value = student.id

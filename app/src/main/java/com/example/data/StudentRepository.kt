@@ -24,6 +24,7 @@ interface StudentRepository {
 
     suspend fun getStudentById(id: String): Student?
     suspend fun getStudentByStudentNumber(studentNumber: String): Student?
+    suspend fun getStudentByCardIdentifier(cardIdentifier: String): Student?
 
     /**
      * Core Gate Scanning Verification:
@@ -46,6 +47,7 @@ interface StudentRepository {
     suspend fun reportCardLost(studentId: String, cardId: String, reason: String = "Reported lost by student/guardian"): Result<Card>
     suspend fun issueReplacementCard(studentId: String, oldCardId: String, reason: String = "Replacement card issued"): Result<Card>
     suspend fun deactivateCard(studentId: String, cardId: String, reason: String = "Deactivated by Administrator"): Result<Unit>
+    suspend fun reissueCardToSecureV2(studentId: String): Result<Card>
 
     // Audit Logging
     suspend fun logVerificationScan(log: ScanLog)

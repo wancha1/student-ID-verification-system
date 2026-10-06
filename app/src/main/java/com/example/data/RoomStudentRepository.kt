@@ -23,6 +23,7 @@ import com.example.model.Student
 import com.example.model.StudentScanResult
 import com.example.model.SyncInfo
 import com.example.model.SyncSummary
+import com.example.util.CardCryptoManager
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import kotlinx.coroutines.CoroutineDispatcher
@@ -76,14 +77,30 @@ class RoomStudentRepository(
         database.studentDao().getStudentByStudentNumber(studentNumber.trim().uppercase())?.toDomain()
     }
 
+    override suspend fun getStudentByCardIdentifier(cardIdentifier: String): Student? = withContext(ioDispatcher) {
+        val cleanCardId = cardIdentifier.trim().uppercase()
+        val cardEntity = database.cardDao().getCardByIdentifier(cleanCardId)
+            ?: database.cardDao().getCardById(cleanCardId)
+            ?: return@withContext null
+
+        val studentEntity = database.studentDao().getStudentById(cardEntity.studentId)
+            ?: database.studentDao().getStudentByStudentNumber(cardEntity.studentNumber)
+            ?: return@withContext null
+
+        if (studentEntity.isDeleted) return@withContext null
+        studentEntity.toDomain()
+    }
+
     /**
      * Complete Hierarchical Gate Verification Decision Tree:
      * 1. QR valid format? -> NO: INVALID QR CODE
-     * 2. QR recognized (Student found)? -> NO: STUDENT NOT FOUND
-     * 3. Card active? -> NO: CARD INACTIVE (LOST, REPLACED, DEACTIVATED)
-     * 4. Student day scholar eligible? -> NO: NOT APPROVED
-     * 5. Fees cleared? -> NO: NOT APPROVED (OUTSTANDING)
-     * 6. Everything valid? -> YES: ENTRY APPROVED
+     * 2. Cryptographic signature authentic? -> NO: INVALID QR CODE
+     * 3. QR recognized (Exact Card record found)? -> NO: STUDENT NOT FOUND / UNREGISTERED CARD
+     * 4. Card active? -> NO: CARD INACTIVE (LOST, REPLACED, DEACTIVATED) - NO fallback to another card!
+     * 5. Associated student active and not deleted? -> NO: STUDENT NOT FOUND
+     * 6. Student day scholar eligible? -> NO: NOT APPROVED
+     * 7. Fees cleared? -> NO: NOT APPROVED (OUTSTANDING)
+     * 8. Everything valid? -> YES: ENTRY APPROVED
      */
     override suspend fun verifyStudentByQr(rawQrCode: String): StudentScanResult = withContext(ioDispatcher) {
         val lastSync = syncManager.getLastSyncTimestamp()
@@ -97,27 +114,111 @@ class RoomStudentRepository(
                     errorReason = parseResult.reason
                 )
             }
-            is QrParseResult.ValidStudentNumber -> {
-                val student = database.studentDao().getStudentByStudentNumber(parseResult.studentNumber)?.toDomain()
-                if (student != null) {
-                    evaluateStudentAndCardAccess(student, isOffline, lastSync, parseResult.cardIdentifier)
-                } else {
-                    StudentScanResult.StudentNotFound(
-                        parsedIdentifier = parseResult.studentNumber,
-                        reason = "Student Number '${parseResult.studentNumber}' not found in the local gate database.",
+            is QrParseResult.LegacyUnsigned -> {
+                StudentScanResult.InvalidQr(
+                    rawScannedString = rawQrCode,
+                    errorReason = "Rejected: Legacy unsigned QR badge format (${parseResult.formatDescription}) is not permitted on the production gate verification path. Reissue to authenticated V2 badge required."
+                )
+            }
+            is QrParseResult.ValidV2Card -> {
+                // 1. Cryptographically verify signature using trusted public key
+                val isAuthentic = CardCryptoManager.verifyCardSignature(
+                    cardId = parseResult.cardId,
+                    signatureBase64Url = parseResult.signature
+                )
+                if (!isAuthentic) {
+                    return@withContext StudentScanResult.InvalidQr(
+                        rawScannedString = rawQrCode,
+                        errorReason = "Cryptographic signature verification failed for card '${parseResult.cardId}'. Potential forgery, tampering, or invalid issuer key."
+                    )
+                }
+
+                // 2. Query exact card record corresponding to the scanned cardId
+                val cardEntity = database.cardDao().getCardByIdentifier(parseResult.cardId)
+                    ?: database.cardDao().getCardById(parseResult.cardId)
+
+                if (cardEntity == null) {
+                    return@withContext StudentScanResult.StudentNotFound(
+                        parsedIdentifier = parseResult.cardId,
+                        reason = "Card '${parseResult.cardId}' is cryptographically authentic but not registered in the school database.",
                         isOfflineData = isOffline,
                         lastSyncTimestamp = lastSync
                     )
                 }
-            }
-            is QrParseResult.ValidInternalId -> {
-                val student = database.studentDao().getStudentById(parseResult.internalId)?.toDomain()
-                if (student != null) {
-                    evaluateStudentAndCardAccess(student, isOffline, lastSync)
+
+                val card = cardEntity.toDomain()
+
+                // 3. Card MUST be ACTIVE. Absolutely NO fallback to another active card!
+                if (card.status != CardStatus.ACTIVE) {
+                    val studentEntity = database.studentDao().getStudentById(card.studentId)
+                        ?: database.studentDao().getStudentByStudentNumber(card.studentNumber)
+                    val student = studentEntity?.toDomain() ?: Student(
+                        id = card.studentId,
+                        studentNumber = card.studentNumber,
+                        firstName = "Student",
+                        lastName = "Cardholder",
+                        gradeClass = "Unknown"
+                    )
+
+                    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.US)
+                    val dateStr = dateFormat.format(Date(card.deactivationDate ?: card.updatedAt))
+                    val reason = when (card.status) {
+                        CardStatus.LOST -> "Card ${card.cardIdentifier} was reported LOST on $dateStr. Access Denied."
+                        CardStatus.REPLACED -> "Card ${card.cardIdentifier} was REPLACED on $dateStr. Access Denied. Please present newly issued active card."
+                        CardStatus.DEACTIVATED -> "Card ${card.cardIdentifier} has been DEACTIVATED (${card.reason ?: "Administrative lock"}). Access Denied."
+                        CardStatus.ACTIVE -> "Card status unverified."
+                    }
+                    return@withContext StudentScanResult.CardInactive(
+                        student = student,
+                        card = card,
+                        cardStatus = card.status,
+                        reason = reason,
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
+                // 4. Retrieve associated student and ensure active/not deleted
+                val studentEntity = database.studentDao().getStudentById(card.studentId)
+                    ?: database.studentDao().getStudentByStudentNumber(card.studentNumber)
+
+                if (studentEntity == null || studentEntity.isDeleted) {
+                    return@withContext StudentScanResult.StudentNotFound(
+                        parsedIdentifier = parseResult.cardId,
+                        reason = "Associated student record (${card.studentNumber}) was not found or has been deactivated/deleted.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
+                val student = studentEntity.toDomain()
+
+                // 5. Evaluate fee and day-scholar gate access rules
+                if (!student.isDayScholar) {
+                    StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
+                    val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
+                    StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
                 } else {
-                    StudentScanResult.StudentNotFound(
-                        parsedIdentifier = parseResult.internalId,
-                        reason = "Student ID '${parseResult.internalId}' not found in the local gate database.",
+                    StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = true,
+                        reason = "Entry Approved: Authentic V2 Card (${card.cardIdentifier}) verified & Fees Cleared.",
                         isOfflineData = isOffline,
                         lastSyncTimestamp = lastSync
                     )
@@ -446,18 +547,15 @@ class RoomStudentRepository(
             ?: return@withContext Result.failure(NoSuchElementException("Student $studentId not found"))
 
         val now = System.currentTimeMillis()
-        val existingCards = database.cardDao().getCardsForStudent(studentId)
-        val seqNumber = existingCards.size + 1
-        val formattedSeq = String.format(Locale.US, "%02d", seqNumber)
-        val cleanNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
-        val cardIdentifier = customIdentifier ?: "CRD-$cleanNum-$formattedSeq"
+        val cardIdentifier = customIdentifier?.trim()?.uppercase() ?: CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = CardCryptoManager.signCardPayload(cardIdentifier)
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = cardIdentifier,
             studentId = student.id,
             studentNumber = student.studentNumber,
-            qrPayload = QrCodeUtils.createPayload(student.studentNumber, cardIdentifier),
+            qrPayload = signedPayload,
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,
@@ -553,18 +651,15 @@ class RoomStudentRepository(
             ?: return@withContext Result.failure(NoSuchElementException("Student $studentId not found"))
 
         val now = System.currentTimeMillis()
-        val existingCards = database.cardDao().getCardsForStudent(studentId)
-        val seqNumber = existingCards.size + 1
-        val formattedSeq = String.format(Locale.US, "%02d", seqNumber)
-        val cleanNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
-        val newCardIdentifier = "CRD-$cleanNum-$formattedSeq"
+        val newCardIdentifier = CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = CardCryptoManager.signCardPayload(newCardIdentifier)
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = newCardIdentifier,
             studentId = student.id,
             studentNumber = student.studentNumber,
-            qrPayload = QrCodeUtils.createPayload(student.studentNumber, newCardIdentifier),
+            qrPayload = signedPayload,
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,
@@ -600,6 +695,61 @@ class RoomStudentRepository(
                         createdAt = now
                     )
                 )
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.CARD,
+                        recordId = newCard.id,
+                        operationType = SyncOperationType.CREATE,
+                        createdAt = now
+                    )
+                )
+            }
+
+            if (syncManager.syncInfo.value.isOnline) {
+                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
+            }
+            Result.success(newCard)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun reissueCardToSecureV2(studentId: String): Result<Card> = withContext(ioDispatcher) {
+        val student = database.studentDao().getStudentById(studentId)
+            ?: return@withContext Result.failure(NoSuchElementException("Student $studentId not found"))
+
+        val now = System.currentTimeMillis()
+        val newCardIdentifier = CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = CardCryptoManager.signCardPayload(newCardIdentifier)
+
+        val newCard = Card(
+            id = UUID.randomUUID().toString(),
+            cardIdentifier = newCardIdentifier,
+            studentId = student.id,
+            studentNumber = student.studentNumber,
+            qrPayload = signedPayload,
+            status = CardStatus.ACTIVE,
+            issueDate = now,
+            activationDate = now,
+            reason = "Reissued to cryptographically authentic V2 card",
+            notes = "Issued with Ed25519 digital signature",
+            updatedAt = now
+        )
+
+        try {
+            database.withTransaction {
+                // Mark previous active cards as REPLACED
+                database.cardDao().markActiveCardsReplaced(
+                    studentId = student.id,
+                    newCardId = newCard.id,
+                    deactivationDate = now,
+                    reason = "Upgraded to secure V2 card $newCardIdentifier",
+                    updatedAt = now
+                )
+                database.cardDao().insertOrUpdateCard(CardEntity.fromDomain(newCard))
+
+                // Durable offline tracking
                 database.pendingChangeDao().enqueueChange(
                     PendingChangeEntity(
                         changeId = UUID.randomUUID().toString(),

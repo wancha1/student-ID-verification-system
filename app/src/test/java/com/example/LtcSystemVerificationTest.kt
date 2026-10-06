@@ -22,6 +22,7 @@ import com.example.model.Student
 import com.example.model.StudentScanResult
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
+import com.example.util.CardCryptoManager
 import com.example.util.QrCodeGenerator
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
@@ -57,29 +58,45 @@ class LtcSystemVerificationTest {
         val studentNum = "LTC-2026-0042"
         val cardId = "CRD-2026-0042-01"
 
-        // 1. Versioned modern format
-        val payloadV1 = QrCodeUtils.createPayload(studentNum, cardId)
-        assertEquals("LTC:V1:LTC-2026-0042:CRD-2026-0042-01", payloadV1)
+        // 1. Authenticated Protocol V2 payload: LTC:V2:<cardId>:<signature>
+        val payloadV2 = QrCodeUtils.createPayload(studentNum, cardId)
+        assertTrue("V2 payload must start with LTC:V2:", payloadV2.startsWith("LTC:V2:"))
 
-        val parseResultV1 = QrCodeUtils.parseQrCode(payloadV1)
-        assertTrue("Parsing versioned payload must succeed", parseResultV1 is QrParseResult.ValidStudentNumber)
-        val validV1 = parseResultV1 as QrParseResult.ValidStudentNumber
-        assertEquals(studentNum, validV1.studentNumber)
-        assertEquals(cardId, validV1.cardIdentifier)
+        val parseResultV2 = QrCodeUtils.parseQrCode(payloadV2)
+        assertTrue("Parsing V2 payload must succeed as ValidV2Card", parseResultV2 is QrParseResult.ValidV2Card)
+        val validV2 = parseResultV2 as QrParseResult.ValidV2Card
+        assertEquals(cardId, validV2.cardId)
+        assertTrue("Signature must not be empty", validV2.signature.isNotBlank())
+        assertTrue(
+            "Cryptographic signature must be authentic against trusted key",
+            CardCryptoManager.verifyCardSignature(validV2.cardId, validV2.signature)
+        )
 
-        // 2. Standard LTC STU prefix
-        val payloadStu = QrCodeUtils.createPayload(studentNum, null)
-        assertEquals("LTC:STU:LTC-2026-0042", payloadStu)
-        val parseResultStu = QrCodeUtils.parseQrCode(payloadStu)
-        assertTrue(parseResultStu is QrParseResult.ValidStudentNumber)
-        assertEquals(studentNum, (parseResultStu as QrParseResult.ValidStudentNumber).studentNumber)
+        // 2. Reject Legacy LTC:V1 from production verification path
+        val legacyV1 = QrCodeUtils.createLegacyV1Payload(studentNum, cardId)
+        val parseResultLegacyV1 = QrCodeUtils.parseQrCode(legacyV1)
+        assertTrue("LTC:V1 must be rejected from production verification path", parseResultLegacyV1 is QrParseResult.Invalid)
 
-        // 3. Backward-compatible Oakridge format
-        val legacyResult = QrCodeUtils.parseQrCode("OAKRIDGE:STU:OAK-2026-0001")
-        assertTrue(legacyResult is QrParseResult.ValidStudentNumber)
-        assertEquals("OAK-2026-0001", (legacyResult as QrParseResult.ValidStudentNumber).studentNumber)
+        // Isolated legacy parser extracts metadata for administrative tools
+        val isolatedV1 = QrCodeUtils.parseLegacyCardIsolated(legacyV1)
+        assertNotNull(isolatedV1)
+        assertEquals(studentNum, isolatedV1?.studentNumber)
+        assertEquals(cardId, isolatedV1?.cardIdentifier)
 
-        // 4. Malformed, empty, and security-violating inputs
+        // 3. Reject Legacy LTC:STU and OAKRIDGE from production verification path
+        val legacyOakridge = "OAKRIDGE:STU:OAK-2026-0001"
+        val parseOakridge = QrCodeUtils.parseQrCode(legacyOakridge)
+        assertTrue("OAKRIDGE:STU must be rejected from production verification path", parseOakridge is QrParseResult.Invalid)
+
+        val isolatedOak = QrCodeUtils.parseLegacyCardIsolated(legacyOakridge)
+        assertNotNull(isolatedOak)
+        assertEquals("OAK-2026-0001", isolatedOak?.studentNumber)
+
+        // 4. Reject Bare student numbers and bare UUIDs
+        assertTrue(QrCodeUtils.parseQrCode("LTC-2026-0042") is QrParseResult.Invalid)
+        assertTrue(QrCodeUtils.parseQrCode("12345678-1234-1234-1234-123456789abc") is QrParseResult.Invalid)
+
+        // 5. Malformed, empty, and security-violating inputs
         assertTrue(QrCodeUtils.parseQrCode("") is QrParseResult.Invalid)
         assertTrue(QrCodeUtils.parseQrCode("   ") is QrParseResult.Invalid)
         assertTrue(QrCodeUtils.parseQrCode("UNKNOWN_INVALID_BARCODE") is QrParseResult.Invalid)
@@ -88,7 +105,7 @@ class LtcSystemVerificationTest {
 
     @Test
     fun testQrCodeBitmapGenerationAndZXingDecodability() {
-        val payload = "LTC:V1:LTC-2026-0042:CRD-2026-0042-01"
+        val payload = QrCodeUtils.createPayload("LTC-2026-0042", "CRD-2026-0042-01")
 
         // Generate QR code with centered high-contrast LTC monogram
         val bitmap = QrCodeGenerator.generateQrBitmap(
@@ -335,7 +352,7 @@ class LtcSystemVerificationTest {
                 accessStatus = AccessStatus.RESTRICTED_FEES
             )
             repository.addStudent(outstandingStudent)
-            repository.issueCard(outstandingStudent.id, "CRD-0002", "Initial card")
+            val card = repository.issueCard(outstandingStudent.id, "CRD-0002", "Initial card").getOrThrow()
 
             val viewModel = MainViewModel(repository)
             val context = ApplicationProvider.getApplicationContext<Context>()
@@ -343,9 +360,9 @@ class LtcSystemVerificationTest {
 
             viewModel.loginAs(UserRole.GATE_KEEPER)
 
-            // Student with outstanding fees
+            // Student with outstanding fees scanned via authentic V2 card
             val studentNumber = outstandingStudent.studentNumber
-            viewModel.handleBarcodeScan("LTC:STU:$studentNumber", context)
+            viewModel.handleBarcodeScan(card.qrPayload, context)
 
             val initialScan = viewModel.activeScanResult.value
             assertTrue(initialScan is StudentScanResult.Success)
@@ -376,7 +393,7 @@ class LtcSystemVerificationTest {
             assertFalse("Emergency override must NEVER authorize an invalid or unknown QR code", invalidOverrideSuccess)
 
             // 3. Valid supervisor override on identified student -> Approved & Logged!
-            viewModel.handleBarcodeScan("LTC:STU:$studentNumber", context)
+            viewModel.handleBarcodeScan(card.qrPayload, context)
             var validOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
                 studentId = studentNumber,
@@ -499,7 +516,8 @@ class LtcSystemVerificationTest {
             assertEquals("Student Test 3000", sampleStudent3000?.name)
 
             // Indexed lookup by QR payload
-            val sampleCard = database.cardDao().getCardByQrPayload("LTC:V1:LTC-2026-01500:CRD-2026-01500-01")
+            val expectedPayload = QrCodeUtils.createPayload("LTC-2026-01500", "CRD-2026-01500-01")
+            val sampleCard = database.cardDao().getCardByQrPayload(expectedPayload)
             assertNotNull(sampleCard)
             assertEquals("stu-scale-1500", sampleCard?.studentId)
 
