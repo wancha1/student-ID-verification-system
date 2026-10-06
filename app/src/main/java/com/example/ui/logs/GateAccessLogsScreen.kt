@@ -1,5 +1,6 @@
 package com.example.ui.logs
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -107,6 +108,8 @@ fun GateAccessLogsScreen(
     val approvedCount = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
     val deniedCount = scanLogs.count { it.decision != GateVerificationDecision.APPROVED }
     val context = LocalContext.current
+
+    BackHandler(onBack = onBack)
 
     Scaffold(
         topBar = {

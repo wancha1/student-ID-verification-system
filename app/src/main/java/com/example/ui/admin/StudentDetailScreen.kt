@@ -1,6 +1,7 @@
 package com.example.ui.admin
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -136,6 +137,8 @@ fun StudentDetailScreen(
     val isCleared = student.feesStatus == FeeStatus.CLEARED
     val activeCard = cards.firstOrNull { it.status == CardStatus.ACTIVE }
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.US) }
+
+    BackHandler(onBack = onBack)
 
     LazyColumn(
         modifier = modifier

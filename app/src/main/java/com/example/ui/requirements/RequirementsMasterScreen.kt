@@ -1,9 +1,11 @@
 package com.example.ui.requirements
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.ui.theme.LocalRoleTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -103,6 +105,8 @@ fun RequirementsMasterScreen(
     val clearedCount = requirementsList.count { it.isFullyCleared }
     val pendingCount = totalCount - clearedCount
 
+    val roleTheme = LocalRoleTheme.current
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -112,7 +116,8 @@ fun RequirementsMasterScreen(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 2.dp
+            shadowElevation = 3.dp,
+            border = BorderStroke(1.dp, roleTheme.accentBorderColor.copy(alpha = 0.25f))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -122,29 +127,42 @@ fun RequirementsMasterScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            modifier = Modifier.size(42.dp),
-                            shape = CircleShape,
-                            color = Color(0xFF0284C7).copy(alpha = 0.15f)
+                            modifier = Modifier.size(46.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = roleTheme.primaryColor.copy(alpha = 0.12f),
+                            border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.5f))
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.FactCheck,
+                                    imageVector = roleTheme.icon,
                                     contentDescription = "Requirements Master",
-                                    tint = Color(0xFF0284C7),
-                                    modifier = Modifier.size(24.dp)
+                                    tint = roleTheme.primaryColor,
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Requirements Master",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Surface(shape = RoundedCornerShape(4.dp), color = roleTheme.containerColor) {
+                                    Text(
+                                        text = roleTheme.stationBadge,
+                                        color = roleTheme.badgeTextColor,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
                             Text(
-                                text = "Requirements Master",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = user.station,
+                                text = "${user.station} • ${user.name}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -157,7 +175,7 @@ fun RequirementsMasterScreen(
                             onClick = onOpenScanner,
                             modifier = Modifier.testTag("button_req_scan_qr"),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF0284C7)
+                                containerColor = roleTheme.primaryColor
                             ),
                             contentPadding = ButtonDefaults.ButtonWithIconContentPadding
                         ) {

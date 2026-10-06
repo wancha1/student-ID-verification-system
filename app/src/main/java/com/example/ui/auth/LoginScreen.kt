@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.UserRole
 import com.example.ui.theme.GoldAccent
+import com.example.ui.theme.RoleThemes
 import com.example.ui.theme.SchoolPrimary
 import com.example.util.SecurityManager
 
@@ -553,6 +554,7 @@ fun LoginScreen(
         // Dialog: Mandatory Role Authentication
         if (showPinDialog && rolePendingAuth != null) {
             val targetRole = rolePendingAuth!!
+            val targetTheme = RoleThemes.getThemeForRole(targetRole)
             AlertDialog(
                 onDismissRequest = {
                     showPinDialog = false
@@ -562,8 +564,16 @@ fun LoginScreen(
                 },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = targetTheme.primaryColor
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(targetTheme.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text("${targetRole.title} Authentication", fontWeight = FontWeight.Bold)
                     }
                 },
@@ -652,6 +662,7 @@ fun LoginScreen(
                                 pinError = "Incorrect staff PIN. Access denied."
                             }
                         },
+                        colors = ButtonDefaults.buttonColors(containerColor = targetTheme.primaryColor),
                         modifier = Modifier.testTag("button_confirm_pin")
                     ) {
                         Text("Authenticate")
@@ -695,20 +706,23 @@ private fun DutyRoleCard(
     testTag: String,
     onClick: () -> Unit
 ) {
+    val theme = RoleThemes.getThemeForRole(role)
+    val accentColor = theme.primaryColor
+
     Card(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.5.dp, pressedElevation = 5.dp),
         modifier = Modifier
             .testTag(testTag)
             .fillMaxWidth()
             .border(
                 1.5.dp,
-                color.copy(alpha = 0.4f),
-                RoundedCornerShape(18.dp)
+                accentColor.copy(alpha = 0.35f),
+                RoundedCornerShape(20.dp)
             )
     ) {
         Row(
@@ -717,44 +731,85 @@ private fun DutyRoleCard(
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(color.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
+            // Role Emblem with Ambient Luminous Glow
+            Surface(
+                modifier = Modifier.size(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = accentColor.copy(alpha = 0.12f),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, theme.accentGlowColor.copy(alpha = 0.5f))
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = role.title,
-                    tint = color,
-                    modifier = Modifier.size(24.dp)
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = theme.icon,
+                        contentDescription = role.title,
+                        tint = accentColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = role.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = role.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color = theme.containerColor,
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, accentColor.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = theme.stationBadge,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Black,
+                            color = theme.badgeTextColor,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = role.subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.5.sp
+                    fontSize = 11.5.sp,
+                    maxLines = 1
+                )
+                Text(
+                    text = theme.dutyMotto,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = accentColor,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
-            Icon(
-                imageVector = Icons.Default.ArrowForward,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(18.dp)
-            )
+            Surface(
+                modifier = Modifier.size(34.dp),
+                shape = CircleShape,
+                color = accentColor.copy(alpha = 0.12f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.35f))
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 }

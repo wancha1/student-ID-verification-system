@@ -1,9 +1,12 @@
 package com.example.ui.admin
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.model.UserRole
+import com.example.ui.theme.LocalRoleTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +25,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -103,6 +109,9 @@ fun AdminDashboardScreen(
     val outstandingCount = allStudents.count { it.feesStatus == FeeStatus.OUTSTANDING }
     val totalScans = scanLogs.size
 
+    val roleTheme = LocalRoleTheme.current
+    val roleColor = roleTheme.primaryColor
+
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var studentToEdit by remember { mutableStateOf<Student?>(null) }
     var studentToDelete by remember { mutableStateOf<Student?>(null) }
@@ -115,15 +124,15 @@ fun AdminDashboardScreen(
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp)
         ) {
-            // Admin Header
+            // Admin / Staff Dynamic Role Header
             item {
                 Card(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                        .border(1.5.dp, roleTheme.accentBorderColor.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
                 ) {
                     Row(
                         modifier = Modifier
@@ -131,39 +140,64 @@ fun AdminDashboardScreen(
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(GoldAccent.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            modifier = Modifier.size(52.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = roleColor.copy(alpha = 0.12f),
+                            border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.5f))
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AdminPanelSettings,
-                                contentDescription = "Admin",
-                                tint = GoldAccent,
-                                modifier = Modifier.size(28.dp)
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = roleTheme.icon,
+                                    contentDescription = roleTheme.departmentTagline,
+                                    tint = roleColor,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.width(14.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = roleTheme.departmentTagline,
+                                    color = roleColor,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    letterSpacing = 1.sp
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = roleTheme.containerColor
+                                ) {
+                                    Text(
+                                        text = roleTheme.stationBadge,
+                                        color = roleTheme.badgeTextColor,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "BURSAR & RECORDS OFFICE",
-                                color = GoldAccent,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                text = "Student Access Management",
+                                text = when (user.role) {
+                                    UserRole.BURSAR_FINANCE -> "Tuition Roster & Fee Ledger"
+                                    UserRole.HEAD_TEACHER_MANAGEMENT -> "Institutional Oversight & Analytics"
+                                    UserRole.TEACHERS -> "Classroom Attendance & Roll Call"
+                                    else -> "Student Access Management"
+                                },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Logged in as ${user.name}",
+                                text = "Authenticated Officer: ${user.name}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -173,14 +207,14 @@ fun AdminDashboardScreen(
                             onClick = onViewScanLogs,
                             modifier = Modifier
                                 .testTag("button_admin_view_logs")
-                                .size(40.dp)
-                                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                                .size(42.dp)
+                                .background(roleColor.copy(alpha = 0.1f), CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.History,
                                 contentDescription = "Gate Activity Logs",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                tint = roleColor,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
@@ -241,27 +275,31 @@ fun AdminDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     HubButton(
-                        icon = androidx.compose.material.icons.Icons.Default.History,
+                        icon = Icons.Default.History,
                         title = "Gate Logs",
                         onClick = onViewScanLogs,
+                        testTag = "button_hub_gate_logs",
                         modifier = Modifier.weight(1f)
                     )
                     HubButton(
-                        icon = androidx.compose.material.icons.Icons.Default.Clear, // or notifications
+                        icon = Icons.Default.Notifications,
                         title = "SMS Alerts",
                         onClick = onViewGuardianAlerts,
+                        testTag = "button_hub_sms_alerts",
                         modifier = Modifier.weight(1f)
                     )
                     HubButton(
-                        icon = androidx.compose.material.icons.Icons.Default.AdminPanelSettings,
+                        icon = Icons.Default.ConfirmationNumber,
                         title = "Exeat Passes",
                         onClick = onViewExeatPasses,
+                        testTag = "button_hub_exeat_passes",
                         modifier = Modifier.weight(1f)
                     )
                     HubButton(
-                        icon = androidx.compose.material.icons.Icons.Default.Edit,
+                        icon = Icons.Default.Badge,
                         title = "Print Badges",
                         onClick = onViewBatchPrint,
+                        testTag = "button_hub_print_badges",
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -555,7 +593,7 @@ fun AdminDashboardScreen(
             onClick = { showAddStudentDialog = true },
             icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
             text = { Text("Register Student", fontWeight = FontWeight.Bold) },
-            containerColor = SchoolPrimary,
+            containerColor = roleTheme.primaryColor,
             contentColor = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -630,12 +668,14 @@ private fun KpiCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = bgColor,
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+        shadowElevation = 1.dp,
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 10.dp),
+            modifier = Modifier.padding(vertical = 14.dp, horizontal = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -645,10 +685,10 @@ private fun KpiCard(
                 color = color,
                 letterSpacing = 0.5.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = count,
-                fontSize = 20.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Black,
                 color = color
             )
@@ -661,12 +701,14 @@ private fun HubButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     onClick: () -> Unit,
+    testTag: String = "",
     modifier: Modifier = Modifier
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         modifier = modifier
+            .then(if (testTag.isNotEmpty()) Modifier.testTag(testTag) else Modifier)
             .clickable(onClick = onClick)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
     ) {
@@ -678,7 +720,7 @@ private fun HubButton(
             Icon(
                 imageVector = icon,
                 contentDescription = title,
-                tint = SchoolPrimary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))

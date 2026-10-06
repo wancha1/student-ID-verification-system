@@ -3,9 +3,11 @@ package com.example.ui.guard
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.ui.theme.LocalRoleTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,6 +110,7 @@ fun GuardDashboardScreen(
 ) {
     var showManualInputDialog by remember { mutableStateOf(false) }
     var manualIdText by remember { mutableStateOf("") }
+    val roleTheme = LocalRoleTheme.current
 
     // If a student verification is active, display the full-bleed Verification result view
     if (activeScanResult != null) {
@@ -156,10 +159,12 @@ fun GuardDashboardScreen(
         // 2. GATE & GUARD STATION BANNER
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SchoolPrimary),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = roleTheme.primaryColor),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
             ) {
                 Row(
                     modifier = Modifier
@@ -169,7 +174,7 @@ fun GuardDashboardScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
@@ -178,20 +183,35 @@ fun GuardDashboardScreen(
                             imageVector = Icons.Default.Security,
                             contentDescription = "Guard Badge",
                             tint = Color.White,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "SECURITY ACCESS DESK",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            letterSpacing = 1.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "SECURITY ACCESS DESK",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color.White.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = roleTheme.stationBadge,
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                         Text(
                             text = user.station,
                             color = Color.White,

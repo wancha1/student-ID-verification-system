@@ -339,7 +339,7 @@ class LtcSystemVerificationTest {
 
             val viewModel = MainViewModel(repository)
             val context = ApplicationProvider.getApplicationContext<Context>()
-            SecurityManager.configureTestCredentials(context, adminPin = "2026", supervisorPin = "2026")
+            SecurityManager.configureTestCredentials(context, adminPin = "7891", supervisorPin = "7891")
 
             viewModel.loginAs(UserRole.GATE_KEEPER)
 
@@ -369,7 +369,7 @@ class LtcSystemVerificationTest {
             viewModel.authorizeEmergencyOverride(
                 studentId = "unknown-id",
                 supervisorName = "Mrs. Clara Nambi",
-                overridePin = "2026",
+                overridePin = "7891",
                 reason = "Manual bypass attempt",
                 context = context
             ) { success, _ -> invalidOverrideSuccess = success }
@@ -381,7 +381,7 @@ class LtcSystemVerificationTest {
             viewModel.authorizeEmergencyOverride(
                 studentId = studentNumber,
                 supervisorName = "Mrs. Clara Nambi",
-                overridePin = "2026",
+                overridePin = "7891",
                 reason = "Guardian signed payment commitment note with Principal",
                 context = context
             ) { success, _ -> validOverrideSuccess = success }
@@ -1609,5 +1609,142 @@ class LtcSystemVerificationTest {
             viewModel.deleteStudentRecord(targetStudent.id)
             assertTrue("Gate Staff cannot delete students", viewModel.userFeedbackMessage.value?.contains("Administrator privileges") == true)
         }
+    }
+
+    @Test
+    fun testUnauthenticatedUsersCannotEnterAnyProtectedDutyModeOrPerformOperations() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            SecurityManager.resetForTesting(context)
+            assertFalse(SecurityManager.isProvisioned(context))
+
+            val repository = MockStudentRepository()
+            val student = Student(
+                id = "sec-unauth-01",
+                studentNumber = "LTC-2026-0901",
+                firstName = "David",
+                lastName = "Okello",
+                gradeClass = "Senior 3-C",
+                feesStatus = FeeStatus.CLEARED
+            )
+            repository.addStudent(student)
+            val viewModel = MainViewModel(repository)
+
+            // 1. Terminal is unprovisioned: all login attempts must fail
+            val unauthLogin = viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "1234")
+            assertFalse("Unprovisioned login must fail", unauthLogin)
+            assertNull("Current user must remain null", viewModel.currentUser.value)
+
+            // 2. Unauthenticated calls to sensitive methods are blocked
+            viewModel.handleBarcodeScan("LTC:STU:LTC-2026-0901", context)
+            assertTrue("Unauthenticated scan must be denied", viewModel.scanError.value?.contains("Access Denied") == true)
+
+            viewModel.updateFeeStatus(student.id, FeeStatus.OUTSTANDING, 100000.0)
+            assertTrue("Unauthenticated fee modification must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
+
+            var regSuccess = false
+            viewModel.registerNewStudent(student.copy(id = "new-id", studentNumber = "LTC-2026-0902")) { success, _ ->
+                regSuccess = success
+            }
+            assertFalse("Unauthenticated student registration must be denied", regSuccess)
+
+            viewModel.deleteStudentRecord(student.id)
+            assertTrue("Unauthenticated student deletion must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
+
+            viewModel.verifyAndServeMeal("LTC:STU:LTC-2026-0901", context)
+            assertTrue("Unauthenticated meal serving must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
+
+            viewModel.toggleRequirementItem(student.id, "uniform")
+            assertTrue("Unauthenticated requirements modification must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
+
+            viewModel.clearLogs()
+            assertTrue("Unauthenticated clearing logs must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
+
+            viewModel.exportGateLogsCsv(context)
+            assertTrue("Unauthenticated export must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
+        }
+    }
+
+    @Test
+    fun testGateKeeperCannotBypassAuthenticationAndRoleSwitchingRequiresCredentials() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            SecurityManager.resetForTesting(context)
+            SecurityManager.provisionInitialAdmin(context, "Head Teacher", "9911")
+            SecurityManager.setRolePin(context, UserRole.GATE_STAFF, "4422")
+            SecurityManager.setRolePin(context, UserRole.BURSAR_FINANCE, "5533")
+
+            val repository = MockStudentRepository()
+            val viewModel = MainViewModel(repository)
+
+            // 1. Gate Keeper CANNOT bypass authentication: wrong PINs rejected
+            assertFalse("Empty PIN must be rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, ""))
+            assertFalse("Short PIN must be rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "12"))
+            assertFalse("Wrong PIN must be rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "0000"))
+            assertFalse("Default 2026 PIN must be rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "2026"))
+
+            val loginFailed = viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "0000")
+            assertFalse("Authenticate with wrong PIN must fail", loginFailed)
+            assertNull(viewModel.currentUser.value)
+
+            // 2. Gate Keeper authenticates with correct PIN
+            val loginSuccess = viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "4422", "Officer Ronald")
+            assertTrue("Authenticate with correct PIN must succeed", loginSuccess)
+            assertEquals(UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
+            assertEquals("Officer Ronald", viewModel.currentUser.value?.name)
+
+            // 3. User cannot switch role merely by request: switching to Bursar with wrong PIN is blocked
+            val switchFailed = viewModel.authenticateAndLogin(context, UserRole.BURSAR_FINANCE, "4422") // using gate PIN
+            assertFalse("Cannot switch to Bursar using Gate Staff PIN", switchFailed)
+            // Current role is unchanged
+            assertEquals(UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
+
+            // 4. Switching to Bursar with correct Bursar PIN succeeds
+            val switchSuccess = viewModel.authenticateAndLogin(context, UserRole.BURSAR_FINANCE, "5533", "Bursar Florence")
+            assertTrue("Switching to Bursar with correct PIN succeeds", switchSuccess)
+            assertEquals(UserRole.BURSAR_FINANCE, viewModel.currentUser.value?.role)
+            assertEquals("Bursar Florence", viewModel.currentUser.value?.name)
+        }
+    }
+
+    @Test
+    fun testTerminalSessionLockingAndBackgroundProtection() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            SecurityManager.resetForTesting(context)
+            SecurityManager.provisionInitialAdmin(context, "Admin", "6655")
+
+            val repository = MockStudentRepository()
+            val viewModel = MainViewModel(repository)
+
+            // Authenticate session
+            viewModel.authenticateAndLogin(context, UserRole.ADMINISTRATOR, "6655")
+            assertNotNull(viewModel.currentUser.value)
+
+            // Explicit lock session
+            viewModel.lockSession()
+            assertNull("Explicit session lock must clear current user", viewModel.currentUser.value)
+
+            // Re-authenticate
+            viewModel.authenticateAndLogin(context, UserRole.ADMINISTRATOR, "6655")
+            assertNotNull(viewModel.currentUser.value)
+
+            // Background lifecycle lock
+            viewModel.lockSessionOnBackground()
+            assertNull("Background lifecycle trigger must lock terminal session", viewModel.currentUser.value)
+        }
+    }
+
+    @Test
+    fun testInvalidCredentialsAreRejectedAndDoNotCreateSession() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        SecurityManager.resetForTesting(context)
+        SecurityManager.provisionInitialAdmin(context, "Administrator", "1234")
+
+        // Invalid credentials tests
+        assertFalse("3-digit PIN cannot be set", SecurityManager.setRolePin(context, UserRole.GATE_STAFF, "123"))
+        assertFalse("Non-numeric PIN cannot be set", SecurityManager.setRolePin(context, UserRole.GATE_STAFF, "abcd"))
+        assertFalse("Wrong PIN rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "9999"))
+        assertFalse("Old default 2026 rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "2026"))
     }
 }

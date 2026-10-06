@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
@@ -31,6 +33,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -68,7 +73,11 @@ import com.example.ui.guard.GuardScannerScreen
 import com.example.ui.logs.GateAccessLogsScreen
 import com.example.ui.notifications.GuardianAlertsScreen
 import com.example.ui.theme.GoldAccent
+import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.RoleThemeWrapper
+import com.example.ui.theme.RoleThemes
 import com.example.ui.theme.SchoolPrimary
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
@@ -92,6 +101,7 @@ import com.example.ui.requirements.RequirementsMasterScreen
 import com.example.util.ExportFormat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.text.KeyboardOptions
@@ -171,109 +181,146 @@ fun StudentAccessApp(
         }
     }
 
-    // Top Level Container
-    val user = currentUser
-    if (user == null) {
-        LoginScreen(
-            onSelectRole = { role, name, hasFinance -> viewModel.loginAs(role, name, hasFinance) },
-            modifier = modifier
-        )
-    } else {
-        val roleColor = when (user.role) {
-            UserRole.GATE_STAFF -> SchoolPrimary
-            UserRole.BURSAR_FINANCE -> Color(0xFF0D9488)
-            UserRole.ADMINISTRATOR -> GoldAccent
-            UserRole.MEAL_SERVING_STAFF -> Color(0xFFE11D48)
-            UserRole.TEACHERS -> Color(0xFF4F46E5)
-            UserRole.EXAMINATION_STAFF -> Color(0xFF0284C7)
-            UserRole.HEAD_TEACHER_MANAGEMENT -> Color(0xFF7C3AED)
-        }
+    // Top Level Container with Role Dynamic Theme
+    RoleThemeWrapper(role = currentUser?.role) {
+        val user = currentUser
+        if (user == null) {
+            LoginScreen(
+                onSelectRole = { role, name, hasFinance -> viewModel.loginAs(role, name, hasFinance) },
+                modifier = modifier
+            )
+        } else {
+            val roleTheme = LocalRoleTheme.current
+            val roleColor = roleTheme.primaryColor
+            val roleIcon = roleTheme.icon
+            val roleTitle = user.role.title
+            val roleSubtitle = user.role.subtitle
+            val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showGuardianAlertsScreen || showExeatScreen || (selectedStudentDetail != null)
 
-        val roleIcon = when (user.role) {
-            UserRole.GATE_STAFF -> Icons.Default.Security
-            UserRole.BURSAR_FINANCE -> Icons.Default.AccountBalance
-            UserRole.ADMINISTRATOR -> Icons.Default.AdminPanelSettings
-            UserRole.MEAL_SERVING_STAFF -> Icons.Default.Restaurant
-            UserRole.TEACHERS -> Icons.Default.MenuBook
-            UserRole.EXAMINATION_STAFF -> Icons.Default.FactCheck
-            UserRole.HEAD_TEACHER_MANAGEMENT -> Icons.Default.SupervisorAccount
-        }
+            // Systematic Android Back Navigation Handling
+            BackHandler(enabled = showAuthDialogForRole != null) {
+                showAuthDialogForRole = null
+                switchRolePin = ""
+                switchRolePinError = null
+                switchRoleRequestFinance = false
+            }
+            BackHandler(enabled = showBatchPrintDialog) {
+                showBatchPrintDialog = false
+            }
+            BackHandler(enabled = showAllExportsDialog) {
+                showAllExportsDialog = false
+            }
+            BackHandler(enabled = showLogsScreen) {
+                showLogsScreen = false
+            }
+            BackHandler(enabled = showGuardianAlertsScreen) {
+                showGuardianAlertsScreen = false
+            }
+            BackHandler(enabled = showExeatScreen) {
+                showExeatScreen = false
+            }
+            BackHandler(enabled = selectedStudentDetail != null) {
+                viewModel.selectStudentForDetail(null)
+            }
+            BackHandler(enabled = isScannerOpen) {
+                viewModel.closeScanner()
+            }
+            BackHandler(enabled = isMealScannerOpen) {
+                viewModel.closeMealScanner()
+            }
+            BackHandler(enabled = isRequirementScannerOpen) {
+                viewModel.closeRequirementScanner()
+            }
 
-        val roleTitle = user.role.title
-        val roleSubtitle = user.role.subtitle
-
-        Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                if (!isAnyScannerOpen) {
-                    TopAppBar(
-                        title = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    modifier = Modifier.size(34.dp),
-                                    shape = CircleShape,
-                                    color = roleColor
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                topBar = {
+                    if (!isSubScreenOpen) {
+                        TopAppBar(
+                            title = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        modifier = Modifier.size(38.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = roleColor,
+                                        border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.7f)),
+                                        shadowElevation = 3.dp
                                     ) {
-                                        Icon(
-                                            imageVector = roleIcon,
-                                            contentDescription = roleTitle,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = roleIcon,
+                                                contentDescription = roleTitle,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
                                     }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Lira Town College (LTC)",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "$roleTitle • $roleSubtitle",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 11.sp,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        },
-                        actions = {
-                            // Quick Role Switcher Pill with Dropdown
-                            Box {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = roleColor.copy(alpha = 0.12f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, roleColor.copy(alpha = 0.35f)),
-                                    modifier = Modifier
-                                        .testTag("button_switch_role")
-                                        .clickable { showRoleSwitchMenu = true }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.SwapHoriz,
-                                            contentDescription = "Switch Role",
-                                            tint = roleColor,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
                                         Text(
-                                            text = roleTitle,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = roleColor,
-                                            fontSize = 11.sp
+                                            text = "Lira Town College (LTC)",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
                                         )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = roleTheme.containerColor
+                                            ) {
+                                                Text(
+                                                    text = roleTheme.stationBadge,
+                                                    color = roleTheme.badgeTextColor,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Black,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "$roleTitle • ${user.name}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 11.sp,
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
+                            },
+                            actions = {
+                                // Quick Role Switcher Pill with Dropdown
+                                Box {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = roleColor.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, roleTheme.accentBorderColor.copy(alpha = 0.5f)),
+                                        modifier = Modifier
+                                            .testTag("button_switch_role")
+                                            .clickable { showRoleSwitchMenu = true }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.SwapHoriz,
+                                                contentDescription = "Switch Role",
+                                                tint = roleColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = roleTitle,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = roleColor,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
 
                                 DropdownMenu(
                                     expanded = showRoleSwitchMenu,
@@ -371,6 +418,18 @@ fun StudentAccessApp(
                                         }
                                     )
                                 }
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = { viewModel.lockSession() },
+                                modifier = Modifier.testTag("button_lock_session")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Lock Terminal",
+                                    tint = roleColor
+                                )
                             }
 
                             // Overflow Menu
@@ -529,15 +588,15 @@ fun StudentAccessApp(
                                         modifier = Modifier.testTag("menu_clear_logs")
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Switch / Log Out") },
+                                        text = { Text("Lock Terminal / Log Out") },
                                         leadingIcon = {
                                             Icon(
-                                                imageVector = Icons.Default.ExitToApp,
+                                                imageVector = Icons.Default.Lock,
                                                 contentDescription = null
                                             )
                                         },
                                         onClick = {
-                                            viewModel.logout()
+                                            viewModel.lockSession()
                                             showOptionsMenu = false
                                         },
                                         modifier = Modifier.testTag("menu_logout")
@@ -549,6 +608,194 @@ fun StudentAccessApp(
                             containerColor = MaterialTheme.colorScheme.surface
                         )
                     )
+                }
+            },
+            bottomBar = {
+                if (!isAnyScannerOpen && selectedStudentDetail == null) {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 6.dp,
+                        modifier = Modifier.testTag("main_navigation_bar")
+                    ) {
+                        when (user.role) {
+                            UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.TEACHERS -> {
+                                val isDashboard = !showLogsScreen && !showGuardianAlertsScreen && !showExeatScreen
+                                NavigationBarItem(
+                                    selected = isDashboard,
+                                    onClick = {
+                                        showLogsScreen = false
+                                        showGuardianAlertsScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.School, contentDescription = "Students") },
+                                    label = { Text("Students", fontSize = 11.sp, fontWeight = if (isDashboard) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_students")
+                                )
+                                NavigationBarItem(
+                                    selected = showLogsScreen,
+                                    onClick = {
+                                        showLogsScreen = true
+                                        showGuardianAlertsScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.History, contentDescription = "Gate Logs") },
+                                    label = { Text("Gate Logs", fontSize = 11.sp, fontWeight = if (showLogsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_logs")
+                                )
+                                NavigationBarItem(
+                                    selected = showExeatScreen,
+                                    onClick = {
+                                        showExeatScreen = true
+                                        showLogsScreen = false
+                                        showGuardianAlertsScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = "Exeat Passes") },
+                                    label = { Text("Exeat Passes", fontSize = 11.sp, fontWeight = if (showExeatScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_exeat")
+                                )
+                                NavigationBarItem(
+                                    selected = showGuardianAlertsScreen,
+                                    onClick = {
+                                        showGuardianAlertsScreen = true
+                                        showLogsScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.Notifications, contentDescription = "SMS Alerts") },
+                                    label = { Text("SMS Alerts", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_alerts")
+                                )
+                            }
+
+                            UserRole.GATE_STAFF -> {
+                                val isGateDashboard = !showLogsScreen && !showExeatScreen
+                                NavigationBarItem(
+                                    selected = isGateDashboard,
+                                    onClick = {
+                                        showLogsScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.Security, contentDescription = "Turnstile") },
+                                    label = { Text("Turnstile", fontSize = 11.sp, fontWeight = if (isGateDashboard) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_turnstile")
+                                )
+                                NavigationBarItem(
+                                    selected = showLogsScreen,
+                                    onClick = {
+                                        showLogsScreen = true
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.History, contentDescription = "Gate Logs") },
+                                    label = { Text("Gate Logs", fontSize = 11.sp, fontWeight = if (showLogsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_logs")
+                                )
+                                NavigationBarItem(
+                                    selected = showExeatScreen,
+                                    onClick = {
+                                        showExeatScreen = true
+                                        showLogsScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = "Exeat Passes") },
+                                    label = { Text("Exeat Passes", fontSize = 11.sp, fontWeight = if (showExeatScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_exeat")
+                                )
+                            }
+
+                            UserRole.MEAL_SERVING_STAFF -> {
+                                NavigationBarItem(
+                                    selected = !showAllExportsDialog,
+                                    onClick = { showAllExportsDialog = false },
+                                    icon = { Icon(Icons.Default.Restaurant, contentDescription = "Dining Hall") },
+                                    label = { Text("Dining Hall", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_dining")
+                                )
+                                NavigationBarItem(
+                                    selected = showAllExportsDialog,
+                                    onClick = {
+                                        exportDatasetTarget = "MEALS"
+                                        showAllExportsDialog = true
+                                    },
+                                    icon = { Icon(Icons.Default.TableChart, contentDescription = "Export") },
+                                    label = { Text("Export Log", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_export")
+                                )
+                            }
+
+                            UserRole.EXAMINATION_STAFF -> {
+                                NavigationBarItem(
+                                    selected = !showAllExportsDialog,
+                                    onClick = { showAllExportsDialog = false },
+                                    icon = { Icon(Icons.Default.FactCheck, contentDescription = "Clearance") },
+                                    label = { Text("Requirements", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_requirements")
+                                )
+                                NavigationBarItem(
+                                    selected = showAllExportsDialog,
+                                    onClick = {
+                                        exportDatasetTarget = "REQUIREMENTS"
+                                        showAllExportsDialog = true
+                                    },
+                                    icon = { Icon(Icons.Default.TableChart, contentDescription = "Export") },
+                                    label = { Text("Export Clearances", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_export")
+                                )
+                            }
+                        }
+                    }
                 }
             },
             modifier = modifier
@@ -755,6 +1002,7 @@ fun StudentAccessApp(
                 // Privileged Role Switch Authentication Dialog
                 if (showAuthDialogForRole != null) {
                     val targetRole = showAuthDialogForRole!!
+                    val targetTheme = RoleThemes.getThemeForRole(targetRole)
                     AlertDialog(
                         onDismissRequest = {
                             showAuthDialogForRole = null
@@ -763,7 +1011,24 @@ fun StudentAccessApp(
                             switchRoleRequestFinance = false
                         },
                         title = {
-                            Text("Authorize ${targetRole.title} Access", fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    modifier = Modifier.size(34.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = targetTheme.primaryColor
+                                ) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = targetTheme.icon,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text("Authorize ${targetRole.title}", fontWeight = FontWeight.Bold)
+                            }
                         },
                         text = {
                             Column {
@@ -832,6 +1097,7 @@ fun StudentAccessApp(
                                         switchRolePinError = "Incorrect PIN. Role switch authorization denied."
                                     }
                                 },
+                                colors = ButtonDefaults.buttonColors(containerColor = targetTheme.primaryColor),
                                 modifier = Modifier.testTag("button_confirm_role_switch")
                             ) {
                                 Text("Authorize")
@@ -879,3 +1145,5 @@ fun StudentAccessApp(
         }
     }
 }
+}
+

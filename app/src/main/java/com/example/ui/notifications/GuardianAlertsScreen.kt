@@ -1,5 +1,6 @@
 package com.example.ui.notifications
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,6 +98,8 @@ fun GuardianAlertsScreen(
             else -> notifications
         }
     }
+
+    BackHandler(onBack = onBack)
 
     Scaffold(
         topBar = {

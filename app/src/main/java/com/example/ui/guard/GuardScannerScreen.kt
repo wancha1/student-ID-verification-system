@@ -2,6 +2,7 @@ package com.example.ui.guard
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -87,6 +88,7 @@ fun GuardScannerScreen(
     onCloseScanner: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onCloseScanner)
     val context = LocalContext.current
     var hasCameraPermission by remember {
         mutableStateOf(
