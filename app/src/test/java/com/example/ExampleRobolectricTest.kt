@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.MockStudentRepository
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
@@ -35,6 +36,8 @@ class ExampleRobolectricTest {
 
     @Before
     fun setup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        TrustedIssuerRegistry.initialize(context)
         repository = MockStudentRepository.getInstance()
         runBlocking {
             repository.resetToSampleData()

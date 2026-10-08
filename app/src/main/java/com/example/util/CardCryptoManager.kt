@@ -1,52 +1,57 @@
 package com.example.util
 
-import java.security.KeyFactory
+import com.example.crypto.CardCryptoUtils
+import com.example.crypto.CardDateUtils
+import com.example.crypto.CardSigner
+import com.example.crypto.KeystoreIssuerManager
+import com.example.crypto.SoftwareCardSigner
+import com.example.crypto.TrustedIssuerRegistry
 import java.security.KeyPair
-import java.security.KeyPairGenerator
-import java.security.PrivateKey
 import java.security.PublicKey
-import java.security.SecureRandom
-import java.security.Signature
-import java.security.spec.PKCS8EncodedKeySpec
-import java.security.spec.X509EncodedKeySpec
-import java.util.Base64
 
 /**
- * Manages Ed25519 cryptographic key generation, card signing, and offline signature verification
- * for the Lira Town College (LTC) Student QR Identity System (Protocol V2).
+ * High-level cryptographic coordinator for the Lira Town College (LTC)
+ * Student QR Identity System (Protocol V2 Authenticated Trust Model).
  *
- * Trust Model:
- * 1. PRIVATE SIGNING KEY:
- *    - Held exclusively on authoritative administrative / card-issuing stations.
- *    - Never embedded in QR codes, gate turnstiles, or plain SharedPreferences.
- *    - Gate devices strip this key using [clearIssuerPrivateKey] so physical theft of a scanner
- *      yields zero card-forgery capability.
- * 2. PUBLIC VERIFICATION KEY:
- *    - Deployed to gate scanning devices for offline signature verification.
- *    - Verification requires no internet connection or backend server.
- * 3. CANONICAL V2 MESSAGE:
- *    - Deterministic byte sequence: UTF-8 encoding of "LTC:V2:<cardId>".
- *    - Domain-separated protocol prefix prevents cross-protocol signature reuse.
+ * Separation of Responsibilities:
+ * 1. ISSUER DEVICE:
+ *    - Holds an active [CardSigner] (backed by Android Keystore hardware via [KeystoreIssuerManager]).
+ *    - Private keys are NEVER exportable, NEVER stored in Room, SharedPreferences, or plain memory.
+ *    - Performs authoritative card issuance and replacement signing.
+ * 2. VERIFIER / GATE DEVICE:
+ *    - Holds [TrustedIssuerRegistry] containing trusted issuer PUBLIC keys only.
+ *    - Possesses ZERO private keys or signing capabilities.
+ *    - Does NOT automatically generate signing keys.
+ *    - Validates cards offline by verifying ECDSA P-256 signatures against the canonical message.
  */
 object CardCryptoManager {
 
     const val PROTOCOL_VERSION = "V2"
     const val PREFIX_LTC_V2 = "LTC:V2:"
-    private const val ALGORITHM_ED25519 = "Ed25519"
-    private const val EXPECTED_SIGNATURE_LENGTH = 64
-
-    private val secureRandom = SecureRandom()
-
-    // Key storage
-    @Volatile
-    private var activeIssuerPrivateKey: PrivateKey? = null
 
     @Volatile
-    private var activeVerificationPublicKey: PublicKey? = null
+    private var activeSigner: CardSigner? = null
 
-    init {
-        // Initialize an active key pair for authoritative operations
-        initializeDefaultAuthorityKeys()
+    /**
+     * Checks if this terminal holds private signing capability.
+     * Gate terminals should report false.
+     */
+    fun hasIssuerPrivateKey(): Boolean = activeSigner != null
+
+    /**
+     * Explicitly sets the active signer for authoritative operations.
+     * In production, this is configured during issuer enrollment.
+     */
+    fun setActiveSigner(signer: CardSigner?) {
+        activeSigner = signer
+    }
+
+    /**
+     * Gate-only device hardening: removes any active signing capability completely.
+     * After this call, the device can strictly only VERIFY cards.
+     */
+    fun clearIssuerPrivateKey() {
+        activeSigner = null
     }
 
     /**
@@ -55,166 +60,236 @@ object CardCryptoManager {
      * Format: "CRD-" followed by 32 uppercase hexadecimal characters (16 random bytes).
      */
     fun generateSecureRandomCardId(): String {
-        val randomBytes = ByteArray(16) // Exactly 128 bits of cryptographic entropy
-        secureRandom.nextBytes(randomBytes)
-        val hex = randomBytes.joinToString("") { "%02X".format(it) }
-        return "CRD-$hex"
+        return CardCryptoUtils.generateSecureRandomCardId()
     }
 
     /**
-     * Deterministic, unambiguous byte representation of the canonical message to be signed.
-     * Format: "LTC:V2:<cardId>" encoded in UTF-8.
+     * Deterministic canonical byte representation of the security-sensitive fields.
+     * Format: "LTC-V2|<kid>|<cardId>|<validFrom>|<validUntil>" encoded in UTF-8.
+     */
+    fun getCanonicalMessageBytes(
+        kid: String,
+        cardId: String,
+        validFrom: String,
+        validUntil: String
+    ): ByteArray {
+        return CardCryptoUtils.buildCanonicalMessage(
+            kid = kid.trim().lowercase(),
+            cardId = cardId.trim().uppercase(),
+            validFrom = validFrom.trim(),
+            validUntil = validUntil.trim()
+        )
+    }
+
+    /**
+     * Compatibility helper: builds canonical message using active signer's kid
+     * and default validity dates if available.
      */
     fun getCanonicalMessageBytes(cardId: String): ByteArray {
-        val cleanCardId = cardId.trim().uppercase()
-        return "$PREFIX_LTC_V2$cleanCardId".toByteArray(Charsets.UTF_8)
+        val kid = activeSigner?.keyId ?: "0000000000000000"
+        val (from, until) = CardDateUtils.getDefaultValidityRange()
+        return getCanonicalMessageBytes(kid, cardId, from, until)
     }
 
     /**
-     * Generates a fresh Ed25519 key pair using standard Java Cryptography Architecture.
-     */
-    fun generateKeyPair(): KeyPair {
-        val kpg = KeyPairGenerator.getInstance(ALGORITHM_ED25519)
-        return kpg.generateKeyPair()
-    }
-
-    /**
-     * Signs a card identifier using the private key and formats the canonical V2 QR payload.
-     * Payload structure: "LTC:V2:<cardId>:<signatureBase64Url>"
+     * Signs a card credential using the active [CardSigner] and formats the canonical V2 QR payload.
      *
-     * @throws IllegalStateException if no private signing key is configured on this terminal.
+     * Payload structure: "LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signatureBase64Url>"
+     *
+     * @throws IllegalStateException if this device has no active issuer signing capability.
      */
-    fun signCardPayload(cardId: String, privateKey: PrivateKey? = null): String {
-        val signingKey = privateKey ?: activeIssuerPrivateKey
-            ?: throw IllegalStateException("Cannot sign card payload: Private signing key is not installed on this terminal.")
+    fun signCardPayload(
+        cardId: String,
+        validFrom: String? = null,
+        validUntil: String? = null,
+        signer: CardSigner? = null
+    ): String {
+        val effectiveSigner = signer ?: activeSigner
+            ?: throw IllegalStateException(
+                "Cannot sign card payload: Device is operating in Gate / Verifier mode with no Issuer Signing Key configured. " +
+                "Card issuance requires an authoritative Issuer device."
+            )
 
         val cleanCardId = cardId.trim().uppercase()
         require(cleanCardId.isNotBlank()) { "Card ID must not be blank" }
 
-        val canonicalBytes = getCanonicalMessageBytes(cleanCardId)
-        val signer = Signature.getInstance(ALGORITHM_ED25519)
-        signer.initSign(signingKey)
-        signer.update(canonicalBytes)
-        val rawSignature = signer.sign()
+        val (defaultFrom, defaultUntil) = CardDateUtils.getDefaultValidityRange()
+        val effectiveFrom = if (!validFrom.isNullOrBlank()) validFrom.trim() else defaultFrom
+        val effectiveUntil = if (!validUntil.isNullOrBlank()) validUntil.trim() else defaultUntil
 
-        val signatureBase64Url = Base64.getUrlEncoder().withoutPadding().encodeToString(rawSignature)
-        return "$PREFIX_LTC_V2$cleanCardId:$signatureBase64Url"
+        val canonicalBytes = CardCryptoUtils.buildCanonicalMessage(
+            kid = effectiveSigner.keyId,
+            cardId = cleanCardId,
+            validFrom = effectiveFrom,
+            validUntil = effectiveUntil
+        )
+
+        val rawSignature = effectiveSigner.sign(canonicalBytes)
+        val signatureBase64Url = CardCryptoUtils.encodeBase64UrlNoPadding(rawSignature)
+
+        return CardCryptoUtils.buildV2QrPayload(
+            kid = effectiveSigner.keyId,
+            cardId = cleanCardId,
+            validFrom = effectiveFrom,
+            validUntil = effectiveUntil,
+            signatureBase64Url = signatureBase64Url
+        )
     }
 
     /**
-     * Cryptographically verifies that a V2 card payload was signed by the authoritative issuer.
-     * Operates completely offline using the public verification key.
-     *
-     * @return true if the signature is authentic and untampered; false otherwise.
+     * Compatibility overload for legacy test callers or callers without validity arguments.
+     */
+    fun signCardPayload(cardId: String, privateKeyOrSigner: Any?): String {
+        return when (privateKeyOrSigner) {
+            is CardSigner -> signCardPayload(cardId = cardId, signer = privateKeyOrSigner)
+            is KeyPair -> {
+                val signer = SoftwareCardSigner(privateKeyOrSigner)
+                signCardPayload(cardId = cardId, signer = signer)
+            }
+            else -> signCardPayload(cardId = cardId)
+        }
+    }
+
+    /**
+     * Cryptographically verifies that a V2 card payload was signed by an authoritative issuer.
+     * Operates completely offline using the trusted public key registered for [kid].
+     */
+    fun verifyCardSignature(
+        kid: String,
+        cardId: String,
+        validFrom: String,
+        validUntil: String,
+        signatureBase64Url: String,
+        publicKey: PublicKey? = null
+    ): Boolean {
+        val cleanKid = kid.trim().lowercase()
+        val cleanCardId = cardId.trim().uppercase()
+        if (cleanKid.isBlank() || cleanCardId.isBlank() || signatureBase64Url.isBlank()) return false
+
+        val verifierKey = publicKey ?: TrustedIssuerRegistry.getPublicKey(cleanKid) ?: return false
+
+        val canonicalBytes = CardCryptoUtils.buildCanonicalMessage(
+            kid = cleanKid,
+            cardId = cleanCardId,
+            validFrom = validFrom.trim(),
+            validUntil = validUntil.trim()
+        )
+
+        return try {
+            val signatureBytes = CardCryptoUtils.decodeBase64Url(signatureBase64Url)
+            CardCryptoUtils.verifyEcdsaSignature(verifierKey, canonicalBytes, signatureBytes)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Verifies signature from a parsed [QrParseResult.ValidV2Card].
+     */
+    fun verifyCardSignature(validV2: QrCodeUtils.ValidV2CardData): Boolean {
+        return verifyCardSignature(
+            kid = validV2.kid,
+            cardId = validV2.cardId,
+            validFrom = validV2.validFrom,
+            validUntil = validV2.validUntil,
+            signatureBase64Url = validV2.signature
+        )
+    }
+
+    /**
+     * Compatibility overload for calls passing (cardId, signatureBase64Url, optionalPublicKey).
      */
     fun verifyCardSignature(
         cardId: String,
         signatureBase64Url: String,
         publicKey: PublicKey? = null
     ): Boolean {
-        val verifierKey = publicKey ?: activeVerificationPublicKey ?: return false
-        val cleanCardId = cardId.trim().uppercase()
-        if (cleanCardId.isBlank() || signatureBase64Url.isBlank()) return false
-
-        return try {
-            val signatureBytes = Base64.getUrlDecoder().decode(signatureBase64Url)
-            if (signatureBytes.size != EXPECTED_SIGNATURE_LENGTH) {
-                return false
-            }
-
-            val canonicalBytes = getCanonicalMessageBytes(cleanCardId)
-            val verifier = Signature.getInstance(ALGORITHM_ED25519)
-            verifier.initVerify(verifierKey)
-            verifier.update(canonicalBytes)
-            verifier.verify(signatureBytes)
-        } catch (_: Exception) {
-            // Malformed base64, incorrect format, or signature exceptions return false without crashing
-            false
+        // If an explicit publicKey is passed:
+        if (publicKey != null) {
+            val kid = CardCryptoUtils.computeKeyId(publicKey)
+            val (from, until) = CardDateUtils.getDefaultValidityRange()
+            return verifyCardSignature(
+                kid = kid,
+                cardId = cardId,
+                validFrom = from,
+                validUntil = until,
+                signatureBase64Url = signatureBase64Url,
+                publicKey = publicKey
+            )
         }
+
+        // Try looking up in all active trusted issuers if kid was omitted
+        val issuers = TrustedIssuerRegistry.getAllIssuers().filter { !it.isRevoked }
+        val (from, until) = CardDateUtils.getDefaultValidityRange()
+        for (issuer in issuers) {
+            val key = TrustedIssuerRegistry.getPublicKey(issuer.kid) ?: continue
+            val valid = verifyCardSignature(
+                kid = issuer.kid,
+                cardId = cardId,
+                validFrom = from,
+                validUntil = until,
+                signatureBase64Url = signatureBase64Url,
+                publicKey = key
+            )
+            if (valid) return true
+        }
+
+        // Also check if activeSigner public key matches (e.g. in test environment)
+        val signer = activeSigner
+        if (signer != null) {
+            return verifyCardSignature(
+                kid = signer.keyId,
+                cardId = cardId,
+                validFrom = from,
+                validUntil = until,
+                signatureBase64Url = signatureBase64Url,
+                publicKey = signer.publicKey
+            )
+        }
+
+        return false
+    }
+
+    // =========================================================================
+    // Test & Bootstrap Helpers
+    // =========================================================================
+
+    /**
+     * Configures a software test signer and enrolls its public key into the trusted registry.
+     */
+    fun configureTestKeyPair(keyPair: KeyPair): CardSigner {
+        val signer = SoftwareCardSigner(keyPair)
+        activeSigner = signer
+        TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Test Issuer Authority")
+        return signer
     }
 
     /**
-     * Checks if this terminal holds private signing capability.
+     * Generates a standard EC P-256 key pair for test execution.
      */
-    fun hasIssuerPrivateKey(): Boolean = activeIssuerPrivateKey != null
-
-    /**
-     * Configures the trusted public verification key on this device.
-     */
-    fun setVerificationPublicKey(publicKey: PublicKey) {
-        activeVerificationPublicKey = publicKey
+    fun generateKeyPair(): KeyPair {
+        return SoftwareCardSigner.generateP256KeyPair()
     }
 
     /**
-     * Retrieves the current trusted public verification key.
-     */
-    fun getVerificationPublicKey(): PublicKey? = activeVerificationPublicKey
-
-    /**
-     * Configures the private card signing key on an authoritative administrator terminal.
-     */
-    fun setIssuerPrivateKey(privateKey: PrivateKey) {
-        activeIssuerPrivateKey = privateKey
-    }
-
-    /**
-     * Gate-only device hardening: removes the private signing key completely.
-     * After this call, the terminal can ONLY verify cards; it cannot forge or issue cards.
-     */
-    fun clearIssuerPrivateKey() {
-        activeIssuerPrivateKey = null
-    }
-
-    /**
-     * Test-only configuration: installs an isolated test key pair.
-     */
-    fun configureTestKeyPair(keyPair: KeyPair) {
-        activeIssuerPrivateKey = keyPair.private
-        activeVerificationPublicKey = keyPair.public
-    }
-
-    /**
-     * Resets keys to a freshly generated default key pair for test isolation.
+     * Resets state for unit/Robolectric test isolation.
      */
     fun resetForTesting() {
-        initializeDefaultAuthorityKeys()
+        activeSigner = null
+        TrustedIssuerRegistry.clearAll()
     }
 
     /**
-     * Exports a public key to Base64 (X.509 format) for distribution to gate terminals.
+     * Exports an EC public key to Base64 (X.509 format).
      */
     fun exportPublicKeyBase64(publicKey: PublicKey): String {
-        return Base64.getEncoder().encodeToString(publicKey.encoded)
+        return CardCryptoUtils.encodePublicKeyToBase64(publicKey)
     }
 
     /**
-     * Imports a public key from Base64 (X.509 format).
+     * Imports an EC public key from Base64 (X.509 format).
      */
     fun importPublicKeyBase64(base64String: String): PublicKey {
-        val bytes = Base64.getDecoder().decode(base64String.trim())
-        val keyFactory = KeyFactory.getInstance(ALGORITHM_ED25519)
-        return keyFactory.generatePublic(X509EncodedKeySpec(bytes))
-    }
-
-    /**
-     * Exports a private key to Base64 (PKCS#8 format).
-     */
-    fun exportPrivateKeyBase64(privateKey: PrivateKey): String {
-        return Base64.getEncoder().encodeToString(privateKey.encoded)
-    }
-
-    /**
-     * Imports a private key from Base64 (PKCS#8 format).
-     */
-    fun importPrivateKeyBase64(base64String: String): PrivateKey {
-        val bytes = Base64.getDecoder().decode(base64String.trim())
-        val keyFactory = KeyFactory.getInstance(ALGORITHM_ED25519)
-        return keyFactory.generatePrivate(PKCS8EncodedKeySpec(bytes))
-    }
-
-    private fun initializeDefaultAuthorityKeys() {
-        val keyPair = generateKeyPair()
-        activeIssuerPrivateKey = keyPair.private
-        activeVerificationPublicKey = keyPair.public
+        return CardCryptoUtils.decodePublicKeyFromBase64(base64String)
     }
 }

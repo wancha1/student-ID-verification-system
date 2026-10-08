@@ -39,6 +39,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Before
+import org.junit.After
+import com.example.crypto.TrustedIssuerRegistry
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -48,6 +51,21 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class LtcSystemVerificationTest {
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        TrustedIssuerRegistry.initialize(context)
+        if (!CardCryptoManager.hasIssuerPrivateKey()) {
+            val keyPair = CardCryptoManager.generateKeyPair()
+            CardCryptoManager.configureTestKeyPair(keyPair)
+        }
+    }
+
+    @After
+    fun tearDown() {
+        // Keep clean state
+    }
 
     // =========================================================================
     // PRIORITY 1: QR CODE LIFECYCLE, LTC MONOGRAM, AND DECODABILITY TESTS
@@ -516,7 +534,7 @@ class LtcSystemVerificationTest {
             assertEquals("Student Test 3000", sampleStudent3000?.name)
 
             // Indexed lookup by QR payload
-            val expectedPayload = QrCodeUtils.createPayload("LTC-2026-01500", "CRD-2026-01500-01")
+            val expectedPayload = cardEntities[1499].qrPayload
             val sampleCard = database.cardDao().getCardByQrPayload(expectedPayload)
             assertNotNull(sampleCard)
             assertEquals("stu-scale-1500", sampleCard?.studentId)

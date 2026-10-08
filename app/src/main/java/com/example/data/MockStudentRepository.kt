@@ -11,6 +11,9 @@ import com.example.model.StudentScanResult
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.SyncSummary
+import com.example.crypto.CardDateUtils
+import com.example.crypto.ValidityCheckResult
+import com.example.crypto.TrustedIssuerRegistry
 import com.example.util.CardCryptoManager
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
@@ -93,15 +96,47 @@ class MockStudentRepository : StudentRepository {
                 )
             }
             is QrParseResult.ValidV2Card -> {
-                // 1. Cryptographically verify signature against trusted public key
+                // 1. Enforce credential date validity
+                when (val dateCheck = CardDateUtils.checkValidity(parseResult.validFrom, parseResult.validUntil)) {
+                    is ValidityCheckResult.NotYetValid -> {
+                        return StudentScanResult.InvalidQr(
+                            rawScannedString = rawQrCode,
+                            errorReason = "Card '${parseResult.cardId}' is not yet valid (valid from ${dateCheck.validFrom}). Access Denied."
+                        )
+                    }
+                    is ValidityCheckResult.Expired -> {
+                        return StudentScanResult.InvalidQr(
+                            rawScannedString = rawQrCode,
+                            errorReason = "Card '${parseResult.cardId}' expired on ${dateCheck.validUntil}. Access Denied. Please report to administration for renewal."
+                        )
+                    }
+                    is ValidityCheckResult.MalformedDates -> {
+                        return StudentScanResult.InvalidQr(
+                            rawScannedString = rawQrCode,
+                            errorReason = "Card '${parseResult.cardId}' has invalid validity dates: ${dateCheck.reason}"
+                        )
+                    }
+                    is ValidityCheckResult.Valid -> { /* Valid date range */ }
+                }
+
+                // 2. Cryptographically verify signature against trusted public key
                 val isAuthentic = CardCryptoManager.verifyCardSignature(
+                    kid = parseResult.kid,
                     cardId = parseResult.cardId,
+                    validFrom = parseResult.validFrom,
+                    validUntil = parseResult.validUntil,
                     signatureBase64Url = parseResult.signature
                 )
                 if (!isAuthentic) {
+                    val isUntrustedIssuer = !TrustedIssuerRegistry.isTrusted(parseResult.kid)
+                    val errorReason = if (isUntrustedIssuer) {
+                        "Untrusted issuer key '${parseResult.kid}'. Card was issued by an unrecognized or revoked key authority."
+                    } else {
+                        "Cryptographic signature verification failed for card '${parseResult.cardId}'. Potential forgery, tampering, or invalid signature."
+                    }
                     return StudentScanResult.InvalidQr(
                         rawScannedString = rawQrCode,
-                        errorReason = "Cryptographic signature verification failed for card '${parseResult.cardId}'. Potential forgery, tampering, or invalid issuer key."
+                        errorReason = errorReason
                     )
                 }
 
@@ -604,6 +639,10 @@ class MockStudentRepository : StudentRepository {
     }
 
     override suspend fun resetToSampleData() {
+        if (!CardCryptoManager.hasIssuerPrivateKey()) {
+            val keyPair = CardCryptoManager.generateKeyPair()
+            CardCryptoManager.configureTestKeyPair(keyPair)
+        }
         val s1 = Student(
             id = "stu-001",
             studentNumber = "OAK-2026-0001",

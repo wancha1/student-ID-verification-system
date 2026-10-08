@@ -2,17 +2,19 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.crypto.CardCryptoUtils
+import com.example.crypto.CardDateUtils
+import com.example.crypto.SoftwareCardSigner
+import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.MockStudentRepository
 import com.example.data.RoomStudentRepository
 import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
 import com.example.data.local.StudentEntity
 import com.example.model.AccessStatus
-import com.example.model.Card
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
-import com.example.model.Student
 import com.example.model.StudentScanResult
 import com.example.util.CardCryptoManager
 import com.example.util.QrCodeUtils
@@ -23,6 +25,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,7 +36,7 @@ import java.util.UUID
 
 /**
  * Executable security audit tests for the Lira Town College (LTC)
- * Student QR Identity System (Protocol V2 Authenticated Trust Model).
+ * Student QR Identity System (Protocol V2 Authenticated ECDSA P-256 Trust Model).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -43,22 +46,31 @@ class QrSecurityTrustModelTest {
     private lateinit var roomRepository: RoomStudentRepository
     private lateinit var mockRepository: MockStudentRepository
     private lateinit var testKeyPair: KeyPair
+    private lateinit var testSigner: SoftwareCardSigner
 
     private val studentId1 = "stu-test-001"
     private val studentNum1 = "LTC-2026-0001"
     private lateinit var cardId1: String
     private lateinit var validPayload1: String
+    private val validFrom = "2026-01-01"
+    private val validUntil = "2026-12-31"
 
     @Before
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        TrustedIssuerRegistry.initialize(context)
+        TrustedIssuerRegistry.clearAll()
+        CardCryptoManager.resetForTesting()
+
         database = AppDatabase.createInMemory(context)
         roomRepository = RoomStudentRepository(database)
         mockRepository = MockStudentRepository.getInstance()
 
-        // Generate isolated test-only key pair for cryptographic key management testing
+        // Generate isolated test-only P-256 key pair and configure test signer
         testKeyPair = CardCryptoManager.generateKeyPair()
-        CardCryptoManager.configureTestKeyPair(testKeyPair)
+        testSigner = SoftwareCardSigner(testKeyPair)
+        CardCryptoManager.setActiveSigner(testSigner)
+        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Primary Test Issuer Authority")
 
         runBlocking {
             mockRepository.resetToSampleData()
@@ -66,7 +78,12 @@ class QrSecurityTrustModelTest {
 
             val now = System.currentTimeMillis()
             cardId1 = CardCryptoManager.generateSecureRandomCardId()
-            validPayload1 = CardCryptoManager.signCardPayload(cardId1, testKeyPair.private)
+            validPayload1 = CardCryptoManager.signCardPayload(
+                cardId = cardId1,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                signer = testSigner
+            )
 
             // Seed active student 1 in Room
             val s1 = StudentEntity(
@@ -121,8 +138,8 @@ class QrSecurityTrustModelTest {
     @After
     fun tearDown() {
         database.close()
-        // Reset authority keys to clean state
         CardCryptoManager.resetForTesting()
+        TrustedIssuerRegistry.clearAll()
     }
 
     // =========================================================================
@@ -134,11 +151,14 @@ class QrSecurityTrustModelTest {
         assertTrue("Parsing must yield ValidV2Card", parseResult is QrParseResult.ValidV2Card)
         val valid = parseResult as QrParseResult.ValidV2Card
         assertEquals(cardId1, valid.cardId)
+        assertEquals(testSigner.keyId, valid.kid)
+        assertEquals(validFrom, valid.validFrom)
+        assertEquals(validUntil, valid.validUntil)
 
         // Cryptographic check
         assertTrue(
-            "Cryptographic signature must verify against public key",
-            CardCryptoManager.verifyCardSignature(valid.cardId, valid.signature)
+            "Cryptographic signature must verify against trusted public key",
+            CardCryptoManager.verifyCardSignature(valid)
         )
 
         // End-to-end Room verification
@@ -156,14 +176,24 @@ class QrSecurityTrustModelTest {
     @Test
     fun test2_ModifyingCardIdCausesSignatureVerificationToFail() = runBlocking {
         val parts = validPayload1.split(":")
-        val signature = parts[3]
+        assertEquals(7, parts.size)
+        val kid = parts[2]
+        val from = parts[4]
+        val until = parts[5]
+        val signature = parts[6]
         val tamperedCardId = "CRD-TAMPERED99999999999999999999"
-        val tamperedPayload = "LTC:V2:$tamperedCardId:$signature"
+        val tamperedPayload = "LTC:V2:$kid:$tamperedCardId:$from:$until:$signature"
 
         // Cryptographic check
         assertFalse(
-            "Altered cardId must fail Ed25519 signature verification",
-            CardCryptoManager.verifyCardSignature(tamperedCardId, signature)
+            "Altered cardId must fail ECDSA P-256 signature verification",
+            CardCryptoManager.verifyCardSignature(
+                kid = kid,
+                cardId = tamperedCardId,
+                validFrom = from,
+                validUntil = until,
+                signatureBase64Url = signature
+            )
         )
 
         // End-to-end verification must reject
@@ -176,19 +206,66 @@ class QrSecurityTrustModelTest {
     // =========================================================================
     @Test
     fun test3_ModifyingAnySignedFieldCausesVerificationToFail() {
-        val canonicalBytes = CardCryptoManager.getCanonicalMessageBytes(cardId1)
-        val modifiedCanonical = "LTC:V2:${cardId1}_EXTRA".toByteArray(Charsets.UTF_8)
-        assertFalse("Byte representation must be deterministic and sensitive to alteration",
-            canonicalBytes.contentEquals(modifiedCanonical))
-
         val parts = validPayload1.split(":")
-        val signature = parts[3]
+        val kid = parts[2]
+        val from = parts[4]
+        val until = parts[5]
+        val signature = parts[6]
+
+        val canonicalBytes = CardCryptoManager.getCanonicalMessageBytes(kid, cardId1, from, until)
+        val modifiedCanonical = "LTC-V2|$kid|${cardId1}_EXTRA|$from|$until".toByteArray(Charsets.UTF_8)
+        assertFalse("Canonical byte representation must be deterministic and sensitive to alteration",
+            canonicalBytes.contentEquals(modifiedCanonical))
 
         // Alter single byte of cardId
         val slightlyModifiedCardId = cardId1.dropLast(1) + if (cardId1.last() == 'A') 'B' else 'A'
         assertFalse(
             "Single character modification in cardId must break signature",
-            CardCryptoManager.verifyCardSignature(slightlyModifiedCardId, signature)
+            CardCryptoManager.verifyCardSignature(
+                kid = kid,
+                cardId = slightlyModifiedCardId,
+                validFrom = from,
+                validUntil = until,
+                signatureBase64Url = signature
+            )
+        )
+
+        // Alter validFrom date
+        assertFalse(
+            "Modification in validFrom date must break signature",
+            CardCryptoManager.verifyCardSignature(
+                kid = kid,
+                cardId = cardId1,
+                validFrom = "2025-01-01",
+                validUntil = until,
+                signatureBase64Url = signature
+            )
+        )
+
+        // Alter validUntil date
+        assertFalse(
+            "Modification in validUntil date must break signature",
+            CardCryptoManager.verifyCardSignature(
+                kid = kid,
+                cardId = cardId1,
+                validFrom = from,
+                validUntil = "2027-12-31",
+                signatureBase64Url = signature
+            )
+        )
+
+        // Alter kid
+        val fakeKid = "ffffffffffffffff"
+        assertFalse(
+            "Modification in kid must break signature",
+            CardCryptoManager.verifyCardSignature(
+                kid = fakeKid,
+                cardId = cardId1,
+                validFrom = from,
+                validUntil = until,
+                signatureBase64Url = signature,
+                publicKey = testSigner.publicKey
+            )
         )
     }
 
@@ -212,7 +289,7 @@ class QrSecurityTrustModelTest {
         assertTrue("Unsigned LTC:V2 must be rejected", parseUnsigned is QrParseResult.Invalid)
 
         // 3. Fake dummy signature
-        val fakeSigned = "LTC:V2:$randomCardId:notarealsignature"
+        val fakeSigned = "LTC:V2:${testSigner.keyId}:$randomCardId:$validFrom:$validUntil:notarealsignature"
         val scanFake = roomRepository.verifyStudentByQr(fakeSigned)
         assertTrue("Fake signature must be rejected", scanFake is StudentScanResult.InvalidQr)
     }
@@ -301,19 +378,26 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 9. A valid signature for Card A cannot be changed to Card B by editing QR text.
+    // 9. A valid signature for Card A cannot be transferred to Card B.
     // =========================================================================
     @Test
     fun test9_ValidSignatureForCardACannotBeTransferredToCardB() = runBlocking {
         val cardBId = CardCryptoManager.generateSecureRandomCardId()
-        val signatureA = validPayload1.split(":")[3]
+        val parts = validPayload1.split(":")
+        val signatureA = parts[6]
 
-        // Attacker attempts signature reuse: "LTC:V2:<cardBId>:<signatureA>"
-        val forgedCardBPayload = "LTC:V2:$cardBId:$signatureA"
+        // Attacker attempts signature reuse: "LTC:V2:<kid>:<cardBId>:<from>:<until>:<signatureA>"
+        val forgedCardBPayload = "LTC:V2:${parts[2]}:$cardBId:${parts[4]}:${parts[5]}:$signatureA"
 
         assertFalse(
             "Signature for Card A must fail verification when paired with Card B",
-            CardCryptoManager.verifyCardSignature(cardBId, signatureA)
+            CardCryptoManager.verifyCardSignature(
+                kid = parts[2],
+                cardId = cardBId,
+                validFrom = parts[4],
+                validUntil = parts[5],
+                signatureBase64Url = signatureA
+            )
         )
 
         val scanResult = roomRepository.verifyStudentByQr(forgedCardBPayload)
@@ -326,12 +410,17 @@ class QrSecurityTrustModelTest {
     @Test
     fun test10_UnknownCardIdWithValidSignatureIsRejected() = runBlocking {
         val unknownCardId = CardCryptoManager.generateSecureRandomCardId()
-        val validPayloadForUnknownCard = CardCryptoManager.signCardPayload(unknownCardId, testKeyPair.private)
+        val validPayloadForUnknownCard = CardCryptoManager.signCardPayload(
+            cardId = unknownCardId,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            signer = testSigner
+        )
 
         // Signature is cryptographically authentic, but card does NOT exist in Room
         val scanResult = roomRepository.verifyStudentByQr(validPayloadForUnknownCard)
         assertTrue(
-            "Cryptographically authentic but unregistered card must yield StudentNotFound / Unregistered",
+            "Cryptographically authentic but unregistered card must yield StudentNotFound",
             scanResult is StudentScanResult.StudentNotFound
         )
         val notFound = scanResult as StudentScanResult.StudentNotFound
@@ -344,11 +433,11 @@ class QrSecurityTrustModelTest {
     @Test
     fun test11_MalformedSignatureIsRejectedWithoutCrashing() = runBlocking {
         val malformedSignatures = listOf(
-            "LTC:V2:$cardId1:!!!NOT_BASE_64!!!",
-            "LTC:V2:$cardId1:",
-            "LTC:V2:$cardId1:AAAA", // Too short for 64-byte Ed25519 signature
-            "LTC:V2:$cardId1:${"A".repeat(200)}", // Wrong length
-            "LTC:V2:$cardId1:====="
+            "LTC:V2:${testSigner.keyId}:$cardId1:$validFrom:$validUntil:!!!NOT_BASE_64!!!",
+            "LTC:V2:${testSigner.keyId}:$cardId1:$validFrom:$validUntil:",
+            "LTC:V2:${testSigner.keyId}:$cardId1:$validFrom:$validUntil:AAAA",
+            "LTC:V2:${testSigner.keyId}:$cardId1:$validFrom:$validUntil:${"A".repeat(200)}",
+            "LTC:V2:${testSigner.keyId}:$cardId1:$validFrom:$validUntil:====="
         )
 
         for (badPayload in malformedSignatures) {
@@ -430,7 +519,7 @@ class QrSecurityTrustModelTest {
             cardIdentifier = cardId2,
             studentId = studentId1,
             studentNumber = studentNum1,
-            qrPayload = CardCryptoManager.signCardPayload(cardId2, testKeyPair.private),
+            qrPayload = CardCryptoManager.signCardPayload(cardId2, validFrom, validUntil, testSigner),
             status = CardStatus.ACTIVE.name,
             issueDate = now + 1000,
             activationDate = now + 1000,
@@ -463,68 +552,208 @@ class QrSecurityTrustModelTest {
 
         // Scanning an unknown cardId must NOT fall back to any active card for the student
         val unknownCardId = CardCryptoManager.generateSecureRandomCardId()
-        val unknownSigned = CardCryptoManager.signCardPayload(unknownCardId, testKeyPair.private)
+        val unknownSigned = CardCryptoManager.signCardPayload(unknownCardId, validFrom, validUntil, testSigner)
         val scanResultUnknown = roomRepository.verifyStudentByQr(unknownSigned)
         assertTrue("Unknown card must yield StudentNotFound and not fall back to active student card",
             scanResultUnknown is StudentScanResult.StudentNotFound)
     }
 
     // =========================================================================
-    // KEY MANAGEMENT TESTING
+    // 16. An expired card is rejected.
     // =========================================================================
     @Test
-    fun testKeyManagement_SignatureVerificationAndTamperResistance() {
-        val authorityKeyPair = CardCryptoManager.generateKeyPair()
-        val attackerKeyPair = CardCryptoManager.generateKeyPair()
-
-        // Configure system with authority public key
-        CardCryptoManager.setVerificationPublicKey(authorityKeyPair.public)
-        CardCryptoManager.setIssuerPrivateKey(authorityKeyPair.private)
-
-        val cardId = CardCryptoManager.generateSecureRandomCardId()
-
-        // 1. Authoritative signature verifies with public key
-        val legitimatePayload = CardCryptoManager.signCardPayload(cardId, authorityKeyPair.private)
-        val validParse = QrCodeUtils.parseQrCode(legitimatePayload) as QrParseResult.ValidV2Card
-        assertTrue(
-            "Trusted public key must verify legitimate signature",
-            CardCryptoManager.verifyCardSignature(validParse.cardId, validParse.signature, authorityKeyPair.public)
+    fun test16_ExpiredCardIsRejected() = runBlocking {
+        val expiredCardId = CardCryptoManager.generateSecureRandomCardId()
+        val expiredPayload = CardCryptoManager.signCardPayload(
+            cardId = expiredCardId,
+            validFrom = "2020-01-01",
+            validUntil = "2020-12-31",
+            signer = testSigner
         )
 
-        // 2. Attacker signature generated with attacker private key fails verification
-        val forgedPayload = CardCryptoManager.signCardPayload(cardId, attackerKeyPair.private)
-        val forgedParse = QrCodeUtils.parseQrCode(forgedPayload) as QrParseResult.ValidV2Card
-        assertFalse(
-            "Attacker private key cannot produce valid signature against authority public key",
-            CardCryptoManager.verifyCardSignature(forgedParse.cardId, forgedParse.signature, authorityKeyPair.public)
+        // Seed in database
+        val now = System.currentTimeMillis()
+        val card = CardEntity(
+            id = "crd-db-expired",
+            cardIdentifier = expiredCardId,
+            studentId = studentId1,
+            studentNumber = studentNum1,
+            qrPayload = expiredPayload,
+            status = CardStatus.ACTIVE.name,
+            issueDate = now,
+            activationDate = now,
+            deactivationDate = null,
+            replacedByCardId = null,
+            reason = "Expired card",
+            notes = "Test expired",
+            updatedAt = now,
+            isDeleted = false
         )
+        database.cardDao().insertOrUpdateCard(card)
 
-        // 3. Gate device hardening: Clearing private key retains full offline verification capability
-        CardCryptoManager.clearIssuerPrivateKey()
-        assertFalse("Device without issuer private key cannot sign", CardCryptoManager.hasIssuerPrivateKey())
-        assertTrue(
-            "Device without issuer private key can still verify valid cards offline",
-            CardCryptoManager.verifyCardSignature(validParse.cardId, validParse.signature)
-        )
+        val scanResult = roomRepository.verifyStudentByQr(expiredPayload)
+        assertTrue("Expired card must be rejected as InvalidQr", scanResult is StudentScanResult.InvalidQr)
+        val invalid = scanResult as StudentScanResult.InvalidQr
+        assertTrue("Error message must mention expiration", invalid.errorReason.contains("expired", ignoreCase = true))
     }
 
+    // =========================================================================
+    // 17. A card that is not yet valid is rejected.
+    // =========================================================================
     @Test
-    fun testKeyExportAndImportRoundTrip() {
-        val originalKeyPair = CardCryptoManager.generateKeyPair()
-
-        val pubBase64 = CardCryptoManager.exportPublicKeyBase64(originalKeyPair.public)
-        val privBase64 = CardCryptoManager.exportPrivateKeyBase64(originalKeyPair.private)
-
-        val restoredPublic = CardCryptoManager.importPublicKeyBase64(pubBase64)
-        val restoredPrivate = CardCryptoManager.importPrivateKeyBase64(privBase64)
-
-        val cardId = CardCryptoManager.generateSecureRandomCardId()
-        val signedPayload = CardCryptoManager.signCardPayload(cardId, restoredPrivate)
-        val parseResult = QrCodeUtils.parseQrCode(signedPayload) as QrParseResult.ValidV2Card
-
-        assertTrue(
-            "Imported public key must verify signatures produced with imported private key",
-            CardCryptoManager.verifyCardSignature(parseResult.cardId, parseResult.signature, restoredPublic)
+    fun test17_NotYetValidCardIsRejected() = runBlocking {
+        val futureCardId = CardCryptoManager.generateSecureRandomCardId()
+        val futurePayload = CardCryptoManager.signCardPayload(
+            cardId = futureCardId,
+            validFrom = "2099-01-01",
+            validUntil = "2099-12-31",
+            signer = testSigner
         )
+
+        val now = System.currentTimeMillis()
+        val card = CardEntity(
+            id = "crd-db-future",
+            cardIdentifier = futureCardId,
+            studentId = studentId1,
+            studentNumber = studentNum1,
+            qrPayload = futurePayload,
+            status = CardStatus.ACTIVE.name,
+            issueDate = now,
+            activationDate = now,
+            deactivationDate = null,
+            replacedByCardId = null,
+            reason = "Future card",
+            notes = "Test future",
+            updatedAt = now,
+            isDeleted = false
+        )
+        database.cardDao().insertOrUpdateCard(card)
+
+        val scanResult = roomRepository.verifyStudentByQr(futurePayload)
+        assertTrue("Future card must be rejected as InvalidQr", scanResult is StudentScanResult.InvalidQr)
+        val invalid = scanResult as StudentScanResult.InvalidQr
+        assertTrue("Error message must indicate card not yet valid", invalid.errorReason.contains("not yet valid", ignoreCase = true))
+    }
+
+    // =========================================================================
+    // 18. An untrusted issuer key is rejected.
+    // =========================================================================
+    @Test
+    fun test18_UntrustedIssuerKeyIsRejected() = runBlocking {
+        // Generate an untrusted / rogue issuer key pair that is NOT in TrustedIssuerRegistry
+        val rogueKeyPair = CardCryptoManager.generateKeyPair()
+        val rogueSigner = SoftwareCardSigner(rogueKeyPair)
+
+        val rogueCardId = CardCryptoManager.generateSecureRandomCardId()
+        val roguePayload = CardCryptoManager.signCardPayload(
+            cardId = rogueCardId,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            signer = rogueSigner
+        )
+
+        assertFalse(
+            "Rogue issuer key must not be trusted",
+            TrustedIssuerRegistry.isTrusted(rogueSigner.keyId)
+        )
+
+        val scanResult = roomRepository.verifyStudentByQr(roguePayload)
+        assertTrue("Card with untrusted issuer key must be rejected as InvalidQr", scanResult is StudentScanResult.InvalidQr)
+        val invalid = scanResult as StudentScanResult.InvalidQr
+        assertTrue(invalid.errorReason.contains("Untrusted issuer", ignoreCase = true))
+    }
+
+    // =========================================================================
+    // 19. A revoked issuer key is rejected.
+    // =========================================================================
+    @Test
+    fun test19_RevokedIssuerKeyIsRejected() = runBlocking {
+        // Valid card verifies initially
+        val initialScan = roomRepository.verifyStudentByQr(validPayload1)
+        assertTrue("Card must verify before key revocation", initialScan is StudentScanResult.Success)
+
+        // Revoke the issuer key in TrustedIssuerRegistry
+        TrustedIssuerRegistry.revokeIssuer(testSigner.keyId)
+        assertFalse("Key must now report as not trusted", TrustedIssuerRegistry.isTrusted(testSigner.keyId))
+
+        // Scanning the same card now fails immediately
+        val revokedScan = roomRepository.verifyStudentByQr(validPayload1)
+        assertTrue("Card from revoked issuer must be rejected as InvalidQr", revokedScan is StudentScanResult.InvalidQr)
+        val invalid = revokedScan as StudentScanResult.InvalidQr
+        assertTrue(invalid.errorReason.contains("Untrusted issuer", ignoreCase = true) ||
+                   invalid.errorReason.contains("revoked", ignoreCase = true))
+    }
+
+    // =========================================================================
+    // 20. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+    // =========================================================================
+    @Test
+    fun test20_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
+        // Issuer 1 issued Card 1 (seeded in setup)
+        val scan1 = roomRepository.verifyStudentByQr(validPayload1)
+        assertTrue("Card 1 must verify with Issuer 1 key", scan1 is StudentScanResult.Success)
+
+        // Introduce Issuer 2 (Key Rotation)
+        val issuer2KeyPair = CardCryptoManager.generateKeyPair()
+        val issuer2Signer = SoftwareCardSigner(issuer2KeyPair)
+        TrustedIssuerRegistry.registerTrustedKey(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
+
+        // Issuer 2 issues Card 2
+        val cardId2 = CardCryptoManager.generateSecureRandomCardId()
+        val payload2 = CardCryptoManager.signCardPayload(
+            cardId = cardId2,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            signer = issuer2Signer
+        )
+
+        val now = System.currentTimeMillis()
+        val c2 = CardEntity(
+            id = "crd-db-rot-2",
+            cardIdentifier = cardId2,
+            studentId = studentId1,
+            studentNumber = studentNum1,
+            qrPayload = payload2,
+            status = CardStatus.ACTIVE.name,
+            issueDate = now,
+            activationDate = now,
+            deactivationDate = null,
+            replacedByCardId = null,
+            reason = "Rotated key card",
+            notes = "Issuer 2 card",
+            updatedAt = now,
+            isDeleted = false
+        )
+        database.cardDao().insertOrUpdateCard(c2)
+
+        // Verify BOTH cards concurrently!
+        val scanCard1Again = roomRepository.verifyStudentByQr(validPayload1)
+        assertTrue("Card 1 from Issuer 1 must still verify after rotation", scanCard1Again is StudentScanResult.Success)
+
+        val scanCard2 = roomRepository.verifyStudentByQr(payload2)
+        assertTrue("Card 2 from Issuer 2 must verify successfully", scanCard2 is StudentScanResult.Success)
+    }
+
+    // =========================================================================
+    // 21. Gate devices operate without any private keys.
+    // =========================================================================
+    @Test
+    fun test21_GateDeviceHasZeroPrivateKeysAndVerifiesFullyOffline() = runBlocking {
+        // Gate terminal hardening: remove all active private signing keys
+        CardCryptoManager.clearIssuerPrivateKey()
+        assertFalse("Gate terminal must report zero private keys", CardCryptoManager.hasIssuerPrivateKey())
+
+        // Gate terminal attempts to sign a card -> MUST FAIL with IllegalStateException
+        try {
+            CardCryptoManager.signCardPayload("CRD-NEW-ATTEMPT")
+            fail("Gate device must not be able to sign card payloads")
+        } catch (e: IllegalStateException) {
+            assertTrue("Exception message must indicate Gate / Verifier mode",
+                e.message!!.contains("Gate / Verifier mode", ignoreCase = true))
+        }
+
+        // Gate terminal can STILL fully verify authentic cards using public keys in registry!
+        val scanResult = roomRepository.verifyStudentByQr(validPayload1)
+        assertTrue("Gate device without private key must verify valid cards offline", scanResult is StudentScanResult.Success)
     }
 }

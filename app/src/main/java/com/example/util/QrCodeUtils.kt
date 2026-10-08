@@ -1,15 +1,22 @@
 package com.example.util
 
+import com.example.crypto.CardCryptoUtils
+import com.example.crypto.CardDateUtils
+
 sealed class QrParseResult {
     /**
-     * Authenticated Protocol V2 QR payload: "LTC:V2:<cardId>:<signature>".
-     * Syntactically valid V2 payload containing random cardId and Ed25519 signature.
+     * Authenticated Protocol V2 QR payload: "LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signature>".
+     * Syntactically valid V2 payload containing deterministic kid, random cardId, validFrom, validUntil, and ECDSA signature.
      */
     data class ValidV2Card(
-        val cardId: String,
-        val signature: String,
+        override val kid: String,
+        override val cardId: String,
+        override val validFrom: String,
+        override val validUntil: String,
+        override val signature: String,
+        val canonicalMessage: String,
         val rawPayload: String
-    ) : QrParseResult()
+    ) : QrParseResult(), QrCodeUtils.ValidV2CardData
 
     /**
      * Explicitly isolated legacy format result.
@@ -31,6 +38,14 @@ sealed class QrParseResult {
 
 object QrCodeUtils {
 
+    interface ValidV2CardData {
+        val kid: String
+        val cardId: String
+        val validFrom: String
+        val validUntil: String
+        val signature: String
+    }
+
     const val CURRENT_VERSION = "V2"
     const val PREFIX_LTC_V2 = "LTC:V2:"
 
@@ -47,28 +62,46 @@ object QrCodeUtils {
     // Regex for standard UUIDs (36 characters with hyphens)
     private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
+    // Regex for valid 16-hex key ID (kid)
+    private val KID_REGEX = Regex("^[0-9a-fA-F]{16}$")
+
     /**
      * Builds an authenticated, versioned, non-sensitive V2 QR payload for Lira Town College.
-     * Canonical structure: "LTC:V2:<cardId>:<signatureBase64Url>"
+     * Canonical structure: "LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signatureBase64Url>"
      *
      * Never includes student personal info, fees, guardian contacts, or sensitive data.
      */
-    fun createV2Payload(cardIdentifier: String): String {
-        return CardCryptoManager.signCardPayload(cardIdentifier)
+    fun createV2Payload(
+        cardIdentifier: String,
+        validFrom: String? = null,
+        validUntil: String? = null
+    ): String {
+        return CardCryptoManager.signCardPayload(cardIdentifier, validFrom, validUntil)
     }
 
     /**
      * Builds standardized QR payload.
-     * In V2, creates an Ed25519-signed canonical payload for the given [cardIdentifier].
+     * In V2, creates an ECDSA P-256 signed canonical payload for the given [cardIdentifier].
      * If no card identifier is provided, generates a secure random 128-bit card ID and signs it.
      */
-    fun createPayload(studentNumber: String, cardIdentifier: String? = null): String {
+    fun createPayload(
+        studentNumber: String,
+        cardIdentifier: String? = null,
+        validFrom: String? = null,
+        validUntil: String? = null
+    ): String {
         val effectiveCardId = if (!cardIdentifier.isNullOrBlank()) {
             cardIdentifier.trim().uppercase()
         } else {
             CardCryptoManager.generateSecureRandomCardId()
         }
-        return CardCryptoManager.signCardPayload(effectiveCardId)
+        return try {
+            CardCryptoManager.signCardPayload(effectiveCardId, validFrom, validUntil)
+        } catch (_: IllegalStateException) {
+            val (defaultFrom, defaultUntil) = CardDateUtils.getDefaultValidityRange()
+            val kid = "0000000000000000"
+            "$PREFIX_LTC_V2$kid:$effectiveCardId:$defaultFrom:$defaultUntil:UNSIGNED_PREVIEW_PAYLOAD"
+        }
     }
 
     /**
@@ -87,7 +120,7 @@ object QrCodeUtils {
     /**
      * Strict production QR parser.
      * Enforces the V2 Trust Model:
-     * - ONLY canonical "LTC:V2:<cardId>:<signature>" payloads are accepted for verification.
+     * - ONLY canonical "LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signature>" payloads are accepted.
      * - Bare student numbers, bare UUIDs, OAKRIDGE:* legacy formats, and unsigned V1 payloads
      *   are explicitly rejected.
      */
@@ -97,24 +130,32 @@ object QrCodeUtils {
             return QrParseResult.Invalid(trimmed, "QR code content is empty or unreadable.")
         }
 
-        // 1. Strict Protocol V2 Check: "LTC:V2:<cardId>:<signature>"
+        // 1. Strict Protocol V2 Check: "LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signature>"
         if (trimmed.startsWith(PREFIX_LTC_V2, ignoreCase = true)) {
             val parts = trimmed.split(":")
-            if (parts.size != 4) {
+            if (parts.size != 7) {
                 return QrParseResult.Invalid(
                     trimmed,
-                    "Malformed V2 QR syntax. Expected 'LTC:V2:<cardId>:<signature>' with exactly 4 segments."
+                    "Malformed V2 QR syntax. Expected 'LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signature>' with exactly 7 segments."
                 )
             }
             if (!parts[0].equals("LTC", ignoreCase = true) || !parts[1].equals("V2", ignoreCase = true)) {
                 return QrParseResult.Invalid(trimmed, "Invalid protocol header. Expected 'LTC:V2'.")
             }
 
-            val cardId = parts[2].trim().uppercase()
-            val signature = parts[3].trim()
+            val kid = parts[2].trim().lowercase()
+            val cardId = parts[3].trim().uppercase()
+            val validFrom = parts[4].trim()
+            val validUntil = parts[5].trim()
+            val signature = parts[6].trim()
 
-            if (cardId.isBlank() || signature.isBlank()) {
-                return QrParseResult.Invalid(trimmed, "Malformed V2 QR code: card identifier or signature segment is empty.")
+            if (kid.isBlank() || cardId.isBlank() || validFrom.isBlank() || validUntil.isBlank() || signature.isBlank()) {
+                return QrParseResult.Invalid(trimmed, "Malformed V2 QR code: one or more segments are empty.")
+            }
+
+            // Key ID must be 16 hexadecimal characters
+            if (!KID_REGEX.matches(kid)) {
+                return QrParseResult.Invalid(trimmed, "Malformed key identifier (kid) in V2 QR code. Expected 16 hexadecimal characters.")
             }
 
             // Card ID must contain only valid safe characters
@@ -122,9 +163,20 @@ object QrCodeUtils {
                 return QrParseResult.Invalid(trimmed, "Malformed card identifier character set in V2 QR code.")
             }
 
+            // Validity dates must match YYYY-MM-DD
+            if (!CardDateUtils.isValidDateFormat(validFrom) || !CardDateUtils.isValidDateFormat(validUntil)) {
+                return QrParseResult.Invalid(trimmed, "Malformed date format in V2 QR code. Expected 'YYYY-MM-DD'.")
+            }
+
+            val canonical = "${CardCryptoUtils.CANONICAL_PREFIX}|$kid|$cardId|$validFrom|$validUntil"
+
             return QrParseResult.ValidV2Card(
+                kid = kid,
                 cardId = cardId,
+                validFrom = validFrom,
+                validUntil = validUntil,
                 signature = signature,
+                canonicalMessage = canonical,
                 rawPayload = trimmed
             )
         }
@@ -187,7 +239,7 @@ object QrCodeUtils {
 
         return QrParseResult.Invalid(
             trimmed,
-            "Invalid QR format. Expected cryptographically signed Lira Town College badge ('LTC:V2:<cardId>:<signature>')."
+            "Invalid QR format. Expected cryptographically signed Lira Town College badge ('LTC:V2:<kid>:<cardId>:<validFrom>:<validUntil>:<signature>')."
         )
     }
 

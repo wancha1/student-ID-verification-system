@@ -23,6 +23,9 @@ import com.example.model.Student
 import com.example.model.StudentScanResult
 import com.example.model.SyncInfo
 import com.example.model.SyncSummary
+import com.example.crypto.CardDateUtils
+import com.example.crypto.ValidityCheckResult
+import com.example.crypto.TrustedIssuerRegistry
 import com.example.util.CardCryptoManager
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
@@ -121,15 +124,47 @@ class RoomStudentRepository(
                 )
             }
             is QrParseResult.ValidV2Card -> {
-                // 1. Cryptographically verify signature using trusted public key
+                // 1. Enforce credential date validity
+                when (val dateCheck = CardDateUtils.checkValidity(parseResult.validFrom, parseResult.validUntil)) {
+                    is ValidityCheckResult.NotYetValid -> {
+                        return@withContext StudentScanResult.InvalidQr(
+                            rawScannedString = rawQrCode,
+                            errorReason = "Card '${parseResult.cardId}' is not yet valid (valid from ${dateCheck.validFrom}). Access Denied."
+                        )
+                    }
+                    is ValidityCheckResult.Expired -> {
+                        return@withContext StudentScanResult.InvalidQr(
+                            rawScannedString = rawQrCode,
+                            errorReason = "Card '${parseResult.cardId}' expired on ${dateCheck.validUntil}. Access Denied. Please report to administration for renewal."
+                        )
+                    }
+                    is ValidityCheckResult.MalformedDates -> {
+                        return@withContext StudentScanResult.InvalidQr(
+                            rawScannedString = rawQrCode,
+                            errorReason = "Card '${parseResult.cardId}' has invalid validity dates: ${dateCheck.reason}"
+                        )
+                    }
+                    is ValidityCheckResult.Valid -> { /* Valid date range */ }
+                }
+
+                // 2. Cryptographically verify signature using trusted public key
                 val isAuthentic = CardCryptoManager.verifyCardSignature(
+                    kid = parseResult.kid,
                     cardId = parseResult.cardId,
+                    validFrom = parseResult.validFrom,
+                    validUntil = parseResult.validUntil,
                     signatureBase64Url = parseResult.signature
                 )
                 if (!isAuthentic) {
+                    val isUntrustedIssuer = !TrustedIssuerRegistry.isTrusted(parseResult.kid)
+                    val errorReason = if (isUntrustedIssuer) {
+                        "Untrusted issuer key '${parseResult.kid}'. Card was issued by an unrecognized or revoked key authority."
+                    } else {
+                        "Cryptographic signature verification failed for card '${parseResult.cardId}'. Potential forgery, tampering, or invalid signature."
+                    }
                     return@withContext StudentScanResult.InvalidQr(
                         rawScannedString = rawQrCode,
-                        errorReason = "Cryptographic signature verification failed for card '${parseResult.cardId}'. Potential forgery, tampering, or invalid issuer key."
+                        errorReason = errorReason
                     )
                 }
 
@@ -548,7 +583,11 @@ class RoomStudentRepository(
 
         val now = System.currentTimeMillis()
         val cardIdentifier = customIdentifier?.trim()?.uppercase() ?: CardCryptoManager.generateSecureRandomCardId()
-        val signedPayload = CardCryptoManager.signCardPayload(cardIdentifier)
+        val signedPayload = try {
+            CardCryptoManager.signCardPayload(cardIdentifier)
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
@@ -652,7 +691,11 @@ class RoomStudentRepository(
 
         val now = System.currentTimeMillis()
         val newCardIdentifier = CardCryptoManager.generateSecureRandomCardId()
-        val signedPayload = CardCryptoManager.signCardPayload(newCardIdentifier)
+        val signedPayload = try {
+            CardCryptoManager.signCardPayload(newCardIdentifier)
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
@@ -721,7 +764,11 @@ class RoomStudentRepository(
 
         val now = System.currentTimeMillis()
         val newCardIdentifier = CardCryptoManager.generateSecureRandomCardId()
-        val signedPayload = CardCryptoManager.signCardPayload(newCardIdentifier)
+        val signedPayload = try {
+            CardCryptoManager.signCardPayload(newCardIdentifier)
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
 
         val newCard = Card(
             id = UUID.randomUUID().toString(),
@@ -733,7 +780,7 @@ class RoomStudentRepository(
             issueDate = now,
             activationDate = now,
             reason = "Reissued to cryptographically authentic V2 card",
-            notes = "Issued with Ed25519 digital signature",
+            notes = "Issued with ECDSA P-256 digital signature",
             updatedAt = now
         )
 

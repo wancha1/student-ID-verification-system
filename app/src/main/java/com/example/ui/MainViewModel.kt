@@ -24,6 +24,9 @@ import com.example.model.StaffPermission
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
+import com.example.crypto.KeystoreIssuerManager
+import com.example.crypto.TrustedIssuerRegistry
+import com.example.crypto.TrustedIssuerEntry
 import com.example.util.CardCryptoManager
 import com.example.util.ExportFormat
 import com.example.util.ExportManager
@@ -805,7 +808,7 @@ class MainViewModel(
 
         val student = when (parsed) {
             is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed.cardId, parsed.signature)) {
+                if (CardCryptoManager.verifyCardSignature(parsed)) {
                     runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
                 } else null
             }
@@ -878,7 +881,7 @@ class MainViewModel(
         val parsed = QrCodeUtils.parseQrCode(rawCode)
         val student = when (parsed) {
             is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed.cardId, parsed.signature)) {
+                if (CardCryptoManager.verifyCardSignature(parsed)) {
                     runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
                 } else null
             }
@@ -1052,6 +1055,42 @@ class MainViewModel(
         viewModelScope.launch {
             repository.resetToSampleData()
             _userFeedbackMessage.value = "All local records cleared."
+        }
+    }
+
+    // Cryptographic Issuer & Verifier Authority Management
+    fun setupAuthoritativeIssuerKey(preferStrongBox: Boolean = true) {
+        if (!requireAdminRole("Enrolling Issuer Signing Key")) return
+        try {
+            val keyInfo = KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
+            val signer = KeystoreIssuerManager.getSigner()
+            CardCryptoManager.setActiveSigner(signer)
+            if (signer != null) {
+                TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Local Device (${keyInfo.securityLevel.name})")
+            }
+            _userFeedbackMessage.value = "Issuer Key enrolled in Keystore! Level: ${keyInfo.securityLevel.name}, kid: ${keyInfo.keyId}"
+        } catch (e: Exception) {
+            _userFeedbackMessage.value = "Failed to enroll Keystore key: ${e.message}"
+        }
+    }
+
+    fun enrollTrustedIssuerPublicKey(base64: String, label: String = "Remote Issuer") {
+        if (!requireAdminRole("Enrolling trusted public key")) return
+        try {
+            val entry = TrustedIssuerRegistry.registerTrustedKeyBase64(base64, label)
+            _userFeedbackMessage.value = "Trusted Issuer enrolled! kid: ${entry.kid} (${entry.label})"
+        } catch (e: Exception) {
+            _userFeedbackMessage.value = "Failed to enroll public key: ${e.message}"
+        }
+    }
+
+    fun revokeTrustedIssuer(kid: String) {
+        if (!requireAdminRole("Revoking trusted issuer key")) return
+        val success = TrustedIssuerRegistry.revokeIssuer(kid)
+        if (success) {
+            _userFeedbackMessage.value = "Issuer key '$kid' revoked! Associated badges will now be rejected."
+        } else {
+            _userFeedbackMessage.value = "Key '$kid' not found in trusted registry."
         }
     }
 
