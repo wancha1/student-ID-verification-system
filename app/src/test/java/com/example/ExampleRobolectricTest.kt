@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.MockStudentRepository
+import com.example.testutil.TestCardCryptoHelper
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
@@ -38,6 +39,8 @@ class ExampleRobolectricTest {
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
+        val testKeyPair = TestCardCryptoHelper.generateKeyPair()
+        TestCardCryptoHelper.configureTestKeyPair(testKeyPair)
         repository = MockStudentRepository.getInstance()
         runBlocking {
             repository.resetToSampleData()

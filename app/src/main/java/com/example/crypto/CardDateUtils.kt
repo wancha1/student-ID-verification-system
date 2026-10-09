@@ -3,6 +3,7 @@ package com.example.crypto
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Result of checking credential validity against current date.
@@ -15,43 +16,64 @@ sealed class ValidityCheckResult {
 }
 
 /**
- * Robust date formatting, parsing, and validity verification for student ID credentials.
- * Uses standard SimpleDateFormat to ensure 100% compatibility across Android minSdk 24+.
+ * Robust, deterministic date formatting, parsing, and validity verification for student ID credentials.
+ *
+ * Explicit Timezone Policy:
+ * All credential date calculations use the institutional timezone "Africa/Kampala" (UTC+3, Lira, Uganda).
+ * This guarantees consistent date semantics across all issuer terminals and gate verifier devices
+ * regardless of local system or emulator timezones.
+ *
+ * Stated date representation: "YYYY-MM-DD".
+ * The validity period begins at 00:00:00.000 Kampala time on [validFrom]
+ * and includes the entire stated day through 23:59:59.999 Kampala time on [validUntil].
  */
 object CardDateUtils {
-
     const val DATE_FORMAT = "yyyy-MM-dd"
+    const val TIMEZONE_ID = "Africa/Kampala"
+    val INSTITUTIONAL_TIMEZONE: TimeZone = TimeZone.getTimeZone(TIMEZONE_ID)
+
     private val DATE_REGEX = Regex("""^\d{4}-\d{2}-\d{2}$""")
+
+    private fun getSdf(): SimpleDateFormat {
+        return SimpleDateFormat(DATE_FORMAT, Locale.US).apply {
+            isLenient = false
+            timeZone = INSTITUTIONAL_TIMEZONE
+        }
+    }
 
     fun isValidDateFormat(dateStr: String): Boolean {
         val trimmed = dateStr.trim()
         if (!DATE_REGEX.matches(trimmed)) return false
         return try {
-            val sdf = SimpleDateFormat(DATE_FORMAT, Locale.US).apply { isLenient = false }
-            sdf.parse(trimmed) != null
+            getSdf().parse(trimmed) != null
         } catch (_: Exception) {
             false
         }
     }
 
+    /**
+     * Parses the given "YYYY-MM-DD" string into epoch milliseconds corresponding to
+     * 00:00:00.000 in the explicit "Africa/Kampala" timezone.
+     */
     fun parseDateMillis(dateStr: String): Long? {
         val trimmed = dateStr.trim()
         if (!DATE_REGEX.matches(trimmed)) return null
         return try {
-            val sdf = SimpleDateFormat(DATE_FORMAT, Locale.US).apply { isLenient = false }
-            sdf.parse(trimmed)?.time
+            getSdf().parse(trimmed)?.time
         } catch (_: Exception) {
             null
         }
     }
 
     /**
-     * Computes the default (validFrom, validUntil) range.
-     * If an academic year like "2026" or "2025/2026" is passed, derives the range accordingly.
-     * Defaults to the current calendar year (e.g. "2026-01-01" to "2026-12-31").
+     * Computes the default (validFrom, validUntil) range in "YYYY-MM-DD" canonical format.
+     * Uses the current year in the explicit "Africa/Kampala" timezone.
      */
     fun getDefaultValidityRange(academicYear: String? = null): Pair<String, String> {
-        val currentYearStr = SimpleDateFormat("yyyy", Locale.US).format(Date())
+        val currentYearStr = SimpleDateFormat("yyyy", Locale.US).apply {
+            timeZone = INSTITUTIONAL_TIMEZONE
+        }.format(Date())
+
         val (startYear, endYear) = if (!academicYear.isNullOrBlank()) {
             val cleaned = academicYear.trim()
             if (cleaned.contains("/")) {
@@ -67,13 +89,16 @@ object CardDateUtils {
         } else {
             Pair(currentYearStr, currentYearStr)
         }
-
         return Pair("$startYear-01-01", "$endYear-12-31")
     }
 
     /**
      * Checks if [referenceMillis] falls within [[validFrom], [validUntil]].
-     * The validity period extends through the very end of the [validUntil] day (23:59:59.999).
+     *
+     * Boundary Semantics:
+     * - The period starts exactly at 00:00:00.000 on [validFrom] (Kampala time).
+     * - The validity period extends through the very end of the [validUntil] day:
+     *   exactly 23:59:59.999 (Kampala time), i.e. (start-of-day + 24 hours - 1 ms).
      */
     fun checkValidity(
         validFrom: String,
@@ -89,7 +114,7 @@ object CardDateUtils {
             return ValidityCheckResult.MalformedDates("validFrom ($validFrom) cannot be after validUntil ($validUntil).")
         }
 
-        // Include the entire final day until 23:59:59.999
+        // Include the entire final day until 23:59:59.999 in Africa/Kampala
         val endOfDayMillis = untilMillis + (24 * 60 * 60 * 1000L) - 1
 
         return when {

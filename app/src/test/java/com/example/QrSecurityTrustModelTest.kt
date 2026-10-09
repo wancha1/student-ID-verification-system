@@ -6,6 +6,7 @@ import com.example.crypto.CardCryptoUtils
 import com.example.crypto.CardDateUtils
 import com.example.crypto.SoftwareCardSigner
 import com.example.crypto.TrustedIssuerRegistry
+import com.example.crypto.KeystoreIssuerManager
 import com.example.data.MockStudentRepository
 import com.example.data.RoomStudentRepository
 import com.example.data.local.AppDatabase
@@ -17,6 +18,7 @@ import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.StudentScanResult
 import com.example.util.CardCryptoManager
+import com.example.testutil.TestCardCryptoHelper
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import kotlinx.coroutines.runBlocking
@@ -67,7 +69,7 @@ class QrSecurityTrustModelTest {
         mockRepository = MockStudentRepository.getInstance()
 
         // Generate isolated test-only P-256 key pair and configure test signer
-        testKeyPair = CardCryptoManager.generateKeyPair()
+        testKeyPair = TestCardCryptoHelper.generateKeyPair()
         testSigner = SoftwareCardSigner(testKeyPair)
         CardCryptoManager.setActiveSigner(testSigner)
         TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Primary Test Issuer Authority")
@@ -641,7 +643,7 @@ class QrSecurityTrustModelTest {
     @Test
     fun test18_UntrustedIssuerKeyIsRejected() = runBlocking {
         // Generate an untrusted / rogue issuer key pair that is NOT in TrustedIssuerRegistry
-        val rogueKeyPair = CardCryptoManager.generateKeyPair()
+        val rogueKeyPair = TestCardCryptoHelper.generateKeyPair()
         val rogueSigner = SoftwareCardSigner(rogueKeyPair)
 
         val rogueCardId = CardCryptoManager.generateSecureRandomCardId()
@@ -694,7 +696,7 @@ class QrSecurityTrustModelTest {
         assertTrue("Card 1 must verify with Issuer 1 key", scan1 is StudentScanResult.Success)
 
         // Introduce Issuer 2 (Key Rotation)
-        val issuer2KeyPair = CardCryptoManager.generateKeyPair()
+        val issuer2KeyPair = TestCardCryptoHelper.generateKeyPair()
         val issuer2Signer = SoftwareCardSigner(issuer2KeyPair)
         TrustedIssuerRegistry.registerTrustedKey(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
 
@@ -755,5 +757,116 @@ class QrSecurityTrustModelTest {
         // Gate terminal can STILL fully verify authentic cards using public keys in registry!
         val scanResult = roomRepository.verifyStudentByQr(validPayload1)
         assertTrue("Gate device without private key must verify valid cards offline", scanResult is StudentScanResult.Success)
+    }
+
+    // =========================================================================
+    // 22. Protected Issuer Keys: Attempting to overwrite existing alias fails.
+    // =========================================================================
+    @Test
+    fun test22_ExistingIssuerKeyCannotBeOverwritten() {
+        // Test Keystore duplicate alias protection policy
+        val alias = "test_issuer_protect_alias"
+        val ks = try {
+            java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        } catch (_: Exception) {
+            null
+        }
+
+        if (ks != null) {
+            try {
+                if (!ks.containsAlias(alias)) {
+                    try {
+                        KeystoreIssuerManager.generateIssuerKey(alias = alias, preferStrongBox = false)
+                    } catch (_: Exception) {
+                        // If AndroidKeyStore hardware engine is not shadowed in this JVM environment, skip hardware mock
+                        return
+                    }
+                }
+                // If key exists, repeated call must throw IllegalStateException
+                try {
+                    KeystoreIssuerManager.generateIssuerKey(alias = alias, preferStrongBox = false)
+                    fail("Regenerating or overwriting an existing key alias must throw IllegalStateException")
+                } catch (e: IllegalStateException) {
+                    assertTrue(
+                        "Error must explain key rotation requirement",
+                        e.message!!.contains("already exists", ignoreCase = true) &&
+                        e.message!!.contains("key rotation", ignoreCase = true)
+                    )
+                }
+            } finally {
+                try { ks.deleteEntry(alias) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    // =========================================================================
+    // 23. Reading model properties (uniqueQrCode, qrPayload) NEVER invokes signing.
+    // =========================================================================
+    @Test
+    fun test23_ReadingModelQrPropertiesDoesNotInvokeSigning() {
+        // Clear active signer
+        CardCryptoManager.clearIssuerPrivateKey()
+        assertFalse("Must have no active signer", CardCryptoManager.hasIssuerPrivateKey())
+
+        val student = com.example.model.Student(
+            id = "stu-passive-001",
+            studentNumber = "LTC-2026-9999",
+            firstName = "Passive",
+            lastName = "Student",
+            gradeClass = "Senior 1-A"
+        )
+
+        // Reading uniqueQrCode and qrPayload must NEVER throw IllegalStateException
+        val qrCode = student.uniqueQrCode
+        val payload = student.qrPayload
+
+        assertNotNull(qrCode)
+        assertNotNull(payload)
+        assertEquals(qrCode, payload)
+        assertTrue("Must be static identifier prefix", qrCode.startsWith("LTC:STU:LTC-2026-9999:"))
+        assertFalse("Must NOT be an authenticated V2 payload", qrCode.startsWith("LTC:V2:"))
+
+        // Also test Card model
+        val card = com.example.model.Card(
+            id = "card-passive-001",
+            cardIdentifier = "CRD-TEST-PASSIVE",
+            studentId = student.id,
+            studentNumber = student.studentNumber
+        )
+        // Default card qrPayload must be blank string and not invoke signer
+        assertEquals("", card.qrPayload)
+    }
+
+    // =========================================================================
+    // 24. Deterministic Date Semantics & Exact Boundary Testing (Africa/Kampala).
+    // =========================================================================
+    @Test
+    fun test24_DateSemanticsBoundaryTestingAfricaKampala() {
+        val validFrom = "2026-06-01"
+        val validUntil = "2026-06-30"
+
+        val startMillis = CardDateUtils.parseDateMillis(validFrom)!!
+        val endDayStartMillis = CardDateUtils.parseDateMillis(validUntil)!!
+        val endOfDayMillis = endDayStartMillis + (24 * 60 * 60 * 1000L) - 1
+
+        // 1 ms before validFrom starts -> NotYetValid
+        val justBeforeStart = CardDateUtils.checkValidity(validFrom, validUntil, startMillis - 1)
+        assertTrue("1ms before validFrom must be NotYetValid", justBeforeStart is com.example.crypto.ValidityCheckResult.NotYetValid)
+
+        // Exactly at start of validFrom (00:00:00.000 Kampala) -> Valid
+        val atExactStart = CardDateUtils.checkValidity(validFrom, validUntil, startMillis)
+        assertTrue("At exact start of validFrom must be Valid", atExactStart is com.example.crypto.ValidityCheckResult.Valid)
+
+        // Midday during period -> Valid
+        val midday = CardDateUtils.checkValidity(validFrom, validUntil, startMillis + (12 * 60 * 60 * 1000L))
+        assertTrue("Midday during period must be Valid", midday is com.example.crypto.ValidityCheckResult.Valid)
+
+        // Exactly at the last millisecond of validUntil (23:59:59.999 Kampala) -> Valid
+        val atExactEnd = CardDateUtils.checkValidity(validFrom, validUntil, endOfDayMillis)
+        assertTrue("At exact end of validUntil day (23:59:59.999) must be Valid", atExactEnd is com.example.crypto.ValidityCheckResult.Valid)
+
+        // 1 ms past end of validUntil day -> Expired
+        val justAfterEnd = CardDateUtils.checkValidity(validFrom, validUntil, endOfDayMillis + 1)
+        assertTrue("1ms after validUntil day must be Expired", justAfterEnd is com.example.crypto.ValidityCheckResult.Expired)
     }
 }

@@ -80,9 +80,10 @@ object QrCodeUtils {
     }
 
     /**
-     * Builds standardized QR payload.
-     * In V2, creates an ECDSA P-256 signed canonical payload for the given [cardIdentifier].
-     * If no card identifier is provided, generates a secure random 128-bit card ID and signs it.
+     * Explicitly signs and builds an authoritative V2 QR payload for [cardIdentifier].
+     * Requires the active issuer signer to be configured in [CardCryptoManager].
+     *
+     * @throws IllegalStateException if the device does not possess authoritative issuer signing capability.
      */
     fun createPayload(
         studentNumber: String,
@@ -95,13 +96,7 @@ object QrCodeUtils {
         } else {
             CardCryptoManager.generateSecureRandomCardId()
         }
-        return try {
-            CardCryptoManager.signCardPayload(effectiveCardId, validFrom, validUntil)
-        } catch (_: IllegalStateException) {
-            val (defaultFrom, defaultUntil) = CardDateUtils.getDefaultValidityRange()
-            val kid = "0000000000000000"
-            "$PREFIX_LTC_V2$kid:$effectiveCardId:$defaultFrom:$defaultUntil:UNSIGNED_PREVIEW_PAYLOAD"
-        }
+        return CardCryptoManager.signCardPayload(effectiveCardId, validFrom, validUntil)
     }
 
     /**

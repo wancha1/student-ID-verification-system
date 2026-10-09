@@ -639,10 +639,6 @@ class MockStudentRepository : StudentRepository {
     }
 
     override suspend fun resetToSampleData() {
-        if (!CardCryptoManager.hasIssuerPrivateKey()) {
-            val keyPair = CardCryptoManager.generateKeyPair()
-            CardCryptoManager.configureTestKeyPair(keyPair)
-        }
         val s1 = Student(
             id = "stu-001",
             studentNumber = "OAK-2026-0001",

@@ -37,14 +37,17 @@ data class Student(
     val name: String get() = fullName
 
     /**
-     * Unique QR code assigned to this specific student.
-     * Encodes student registration number + unique cryptographic token using LTC specification.
+     * Stable non-sensitive QR identifier token assigned to this specific student.
+     * Formatted as "LTC:STU:<studentNumber>:<qrToken>".
+     *
+     * SECURITY NOTICE: This is a static identifier reference. It does NOT sign any credential
+     * and MUST NOT be used as a valid gate entry QR code.
      */
-    val uniqueQrCode: String get() = com.example.util.QrCodeUtils.createPayload(studentNumber, qrToken)
+    val uniqueQrCode: String get() = "LTC:STU:${studentNumber.trim().uppercase()}:$qrToken"
 
     /**
-     * Standardized non-sensitive QR payload.
-     * Encodes the unique student QR identifier (never financial or personal info).
+     * Backward-compatible alias for the student identifier token.
+     * Reading this property NEVER invokes cryptographic signing.
      */
     val qrPayload: String get() = uniqueQrCode
 

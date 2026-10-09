@@ -91,7 +91,7 @@ fun PrintableStudentIdCard(
     val cardStatus = card?.status ?: CardStatus.ACTIVE
     val effectiveQrPayload = remember(card?.qrPayload, student.studentNumber, cardIdStr) {
         if (card != null && card.qrPayload.isNotBlank()) card.qrPayload
-        else QrCodeUtils.createPayload(student.studentNumber, cardIdStr)
+        else student.uniqueQrCode
     }
 
     Card(

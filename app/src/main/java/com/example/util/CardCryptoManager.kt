@@ -4,9 +4,7 @@ import com.example.crypto.CardCryptoUtils
 import com.example.crypto.CardDateUtils
 import com.example.crypto.CardSigner
 import com.example.crypto.KeystoreIssuerManager
-import com.example.crypto.SoftwareCardSigner
 import com.example.crypto.TrustedIssuerRegistry
-import java.security.KeyPair
 import java.security.PublicKey
 
 /**
@@ -136,19 +134,7 @@ object CardCryptoManager {
         )
     }
 
-    /**
-     * Compatibility overload for legacy test callers or callers without validity arguments.
-     */
-    fun signCardPayload(cardId: String, privateKeyOrSigner: Any?): String {
-        return when (privateKeyOrSigner) {
-            is CardSigner -> signCardPayload(cardId = cardId, signer = privateKeyOrSigner)
-            is KeyPair -> {
-                val signer = SoftwareCardSigner(privateKeyOrSigner)
-                signCardPayload(cardId = cardId, signer = signer)
-            }
-            else -> signCardPayload(cardId = cardId)
-        }
-    }
+
 
     /**
      * Cryptographically verifies that a V2 card payload was signed by an authoritative issuer.
@@ -254,22 +240,7 @@ object CardCryptoManager {
     // Test & Bootstrap Helpers
     // =========================================================================
 
-    /**
-     * Configures a software test signer and enrolls its public key into the trusted registry.
-     */
-    fun configureTestKeyPair(keyPair: KeyPair): CardSigner {
-        val signer = SoftwareCardSigner(keyPair)
-        activeSigner = signer
-        TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Test Issuer Authority")
-        return signer
-    }
 
-    /**
-     * Generates a standard EC P-256 key pair for test execution.
-     */
-    fun generateKeyPair(): KeyPair {
-        return SoftwareCardSigner.generateP256KeyPair()
-    }
 
     /**
      * Resets state for unit/Robolectric test isolation.

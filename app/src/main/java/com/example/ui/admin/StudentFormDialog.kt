@@ -318,9 +318,8 @@ fun StudentFormDialog(
                 // ==========================================
                 // 2. UNIQUE QR CODE GENERATION & PREVIEW
                 // ==========================================
-                val effectiveStudentNumber = studentNumber.trim().uppercase()
-                val cardIdPreview = "CRD-${effectiveStudentNumber.removePrefix("LTC-").removePrefix("OAK-")}-01"
-                val uniqueQrCodePayload = QrCodeUtils.createPayload(effectiveStudentNumber, cardIdPreview)
+val effectiveStudentNumber = studentNumber.trim().uppercase()
+                val uniqueQrCodePayload = "LTC:STU:$effectiveStudentNumber:PREVIEW"
 
                 Card(
                     shape = RoundedCornerShape(12.dp),

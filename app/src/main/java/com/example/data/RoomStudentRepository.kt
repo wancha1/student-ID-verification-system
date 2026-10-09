@@ -443,12 +443,21 @@ class RoomStudentRepository(
         // Automatically issue first active card for the new student
         val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
         val cardId = "CRD-$cleanStudentNum-01"
+        val signedPayload = if (CardCryptoManager.hasIssuerPrivateKey()) {
+            try {
+                CardCryptoManager.signCardPayload(cardId)
+            } catch (_: Exception) {
+                ""
+            }
+        } else {
+            ""
+        }
         val firstCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = cardId,
             studentId = student.id,
             studentNumber = student.studentNumber,
-            qrPayload = QrCodeUtils.createPayload(student.studentNumber, cardId),
+            qrPayload = signedPayload,
             status = CardStatus.ACTIVE,
             issueDate = now,
             activationDate = now,
@@ -1043,12 +1052,21 @@ class RoomStudentRepository(
                 val entity = StudentEntity.fromDomain(stu)
                 val profile = StudentProfileEntity.fromStudent(stu)
                 val cardIdentifier = "CRD-${stu.studentNumber.removePrefix("LTC-")}-01"
+                val signedPayload = if (CardCryptoManager.hasIssuerPrivateKey()) {
+                    try {
+                        CardCryptoManager.signCardPayload(cardIdentifier)
+                    } catch (_: Exception) {
+                        ""
+                    }
+                } else {
+                    ""
+                }
                 val card = Card(
                     id = UUID.randomUUID().toString(),
                     cardIdentifier = cardIdentifier,
                     studentId = stu.id,
                     studentNumber = stu.studentNumber,
-                    qrPayload = QrCodeUtils.createPayload(stu.studentNumber, cardIdentifier),
+                    qrPayload = signedPayload,
                     status = CardStatus.ACTIVE,
                     issueDate = now,
                     activationDate = now,

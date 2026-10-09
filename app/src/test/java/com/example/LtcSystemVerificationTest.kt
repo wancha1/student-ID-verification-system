@@ -23,6 +23,7 @@ import com.example.model.StudentScanResult
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
 import com.example.util.CardCryptoManager
+import com.example.testutil.TestCardCryptoHelper
 import com.example.util.QrCodeGenerator
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
@@ -57,8 +58,8 @@ class LtcSystemVerificationTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
         if (!CardCryptoManager.hasIssuerPrivateKey()) {
-            val keyPair = CardCryptoManager.generateKeyPair()
-            CardCryptoManager.configureTestKeyPair(keyPair)
+            val keyPair = TestCardCryptoHelper.generateKeyPair()
+            TestCardCryptoHelper.configureTestKeyPair(keyPair)
         }
     }
 

@@ -59,9 +59,13 @@ object KeystoreIssuerManager {
     ): IssuerKeyInfo {
         val keyStore = getKeyStore()
 
-        // If an old key with this alias exists, remove it before generating a fresh one
+        // Protect existing issuer key from accidental overwrite or invalidation of previously issued credentials
         if (keyStore.containsAlias(alias)) {
-            keyStore.deleteEntry(alias)
+            throw IllegalStateException(
+                "Issuer key alias '$alias' already exists in $KEYSTORE_PROVIDER. " +
+                "Overwriting or regenerating an existing issuer key is strictly prohibited to prevent invalidating previously issued credentials. " +
+                "A separate, deliberate key rotation procedure is required."
+            )
         }
 
         // Attempt StrongBox first if requested on supported platform
