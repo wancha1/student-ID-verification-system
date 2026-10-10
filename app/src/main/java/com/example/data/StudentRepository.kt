@@ -69,3 +69,10 @@ interface StudentRepository {
     fun getLastSyncTimestamp(): Long
     suspend fun allocateNextStudentNumber(year: Int = 2026): String
 }
+
+// Multi-Department Extensions
+val StudentRepository.database: com.example.data.local.AppDatabase?
+    get() = (this as? com.example.data.RoomStudentRepository)?.getAppDatabase()
+
+val StudentRepository.syncManagerInstance: com.example.data.sync.SyncManager?
+    get() = (this as? com.example.data.RoomStudentRepository)?.getSyncManager()

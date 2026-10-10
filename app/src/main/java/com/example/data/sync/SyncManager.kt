@@ -20,6 +20,7 @@ class SyncManager(
     private val remoteCloudDataSource: RemoteCloudDataSource = InMemoryCloudBackend(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
+
     private val syncMutex = Mutex()
     private val _syncInfo = MutableStateFlow(
         SyncInfo(
@@ -36,14 +37,20 @@ class SyncManager(
     suspend fun initialize() = withContext(ioDispatcher) {
         val savedTimeStr = database.syncMetadataDao().getValue("last_sync_timestamp")
         lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: System.currentTimeMillis()
-
-        val pendingLogs = database.scanLogDao().getUnsyncedLogsCount()
-        val pendingChanges = database.pendingChangeDao().getPendingCount()
+        val pendingCount = calculatePendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
-            pendingLogsCount = pendingLogs + pendingChanges,
+            pendingLogsCount = pendingCount,
             status = if (_syncInfo.value.isOnline) SyncStatus.SYNCED else SyncStatus.OFFLINE
         )
+    }
+
+    private suspend fun calculatePendingCount(): Int {
+        return database.scanLogDao().getUnsyncedLogsCount() +
+                database.mealRecordDao().getUnsynced().size +
+                database.attendanceRecordDao().getUnsynced().size +
+                database.examExceptionDao().getUnsynced().size +
+                database.pendingChangeDao().getPendingCount()
     }
 
     fun setNetworkConnectivity(isOnline: Boolean) {
@@ -59,7 +66,7 @@ class SyncManager(
     }
 
     suspend fun notifyLocalLogAdded() = withContext(ioDispatcher) {
-        val pending = database.scanLogDao().getUnsyncedLogsCount() + database.pendingChangeDao().getPendingCount()
+        val pending = calculatePendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             pendingLogsCount = pending,
             status = if (!_syncInfo.value.isOnline) SyncStatus.OFFLINE else SyncStatus.NEEDS_SYNC
@@ -81,7 +88,6 @@ class SyncManager(
 
         syncMutex.withLock {
             _syncInfo.value = _syncInfo.value.copy(status = SyncStatus.SYNCING, errorMessage = null)
-
             try {
                 // 1. Upload unsynced local gate verification logs to cloud
                 val unsyncedLogs = database.scanLogDao().getUnsyncedLogs()
@@ -90,19 +96,46 @@ class SyncManager(
                     val uploadResult = remoteCloudDataSource.pushGateLogs(unsyncedLogs)
                     if (uploadResult.isSuccess) {
                         database.scanLogDao().markLogsAsSynced(unsyncedLogs.map { it.id })
-                        logsUploadedCount = unsyncedLogs.size
+                        logsUploadedCount += unsyncedLogs.size
                     }
                 }
 
-                // 2. Fetch modified student records from cloud (since last sync time)
+                // 2. Upload unsynced meal records
+                val unsyncedMeals = database.mealRecordDao().getUnsynced()
+                if (unsyncedMeals.isNotEmpty()) {
+                    val mealResult = remoteCloudDataSource.pushMealRecords(unsyncedMeals)
+                    if (mealResult.isSuccess) {
+                        database.mealRecordDao().markSynced(unsyncedMeals.map { it.id })
+                        logsUploadedCount += unsyncedMeals.size
+                    }
+                }
+
+                // 3. Upload unsynced classroom attendance records
+                val unsyncedAttendance = database.attendanceRecordDao().getUnsynced()
+                if (unsyncedAttendance.isNotEmpty()) {
+                    val attResult = remoteCloudDataSource.pushAttendanceRecords(unsyncedAttendance)
+                    if (attResult.isSuccess) {
+                        database.attendanceRecordDao().markSynced(unsyncedAttendance.map { it.id })
+                        logsUploadedCount += unsyncedAttendance.size
+                    }
+                }
+
+                // 4. Upload unsynced examination exceptions
+                val unsyncedExceptions = database.examExceptionDao().getUnsynced()
+                if (unsyncedExceptions.isNotEmpty()) {
+                    val exResult = remoteCloudDataSource.pushExamExceptions(unsyncedExceptions)
+                    if (exResult.isSuccess) {
+                        database.examExceptionDao().markSynced(unsyncedExceptions.map { it.id })
+                    }
+                }
+
+                // 5. Fetch modified student records from cloud (since last sync time)
                 val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince(lastSuccessfulSyncTime - 5000)
                 var studentsDownloadedCount = 0
                 var studentsUpdatedCount = 0
-
                 if (fetchStudentsResult.isSuccess) {
                     val remoteStudents = fetchStudentsResult.getOrThrow()
                     studentsDownloadedCount = remoteStudents.size
-
                     for (remoteStudent in remoteStudents) {
                         val local = database.studentDao().getStudentById(remoteStudent.id)
                         // Conflict resolution: Last-Write-Wins based on updatedAt
@@ -114,7 +147,7 @@ class SyncManager(
                     }
                 }
 
-                // 3. Fetch modified card records from cloud
+                // 6. Fetch modified card records from cloud
                 val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince(lastSuccessfulSyncTime - 5000)
                 if (fetchCardsResult.isSuccess) {
                     val remoteCards = fetchCardsResult.getOrThrow()
@@ -128,7 +161,7 @@ class SyncManager(
 
                 val now = System.currentTimeMillis()
 
-                // 4. Drain pending offline change queue
+                // 7. Drain pending offline change queue
                 val pendingChanges = database.pendingChangeDao().getPendingChanges()
                 for (change in pendingChanges) {
                     try {
@@ -138,17 +171,17 @@ class SyncManager(
                     }
                 }
 
-                // 5. Update sync metadata
+                // 8. Update sync metadata
                 lastSuccessfulSyncTime = now
                 database.syncMetadataDao().setValue(
                     SyncMetadataEntity("last_sync_timestamp", now.toString(), now)
                 )
 
-                val pendingLogsAfter = database.scanLogDao().getUnsyncedLogsCount() + database.pendingChangeDao().getPendingCount()
+                val pendingAfter = calculatePendingCount()
                 _syncInfo.value = _syncInfo.value.copy(
                     status = SyncStatus.SYNCED,
                     lastSyncTimestamp = now,
-                    pendingLogsCount = pendingLogsAfter,
+                    pendingLogsCount = pendingAfter,
                     errorMessage = null
                 )
 

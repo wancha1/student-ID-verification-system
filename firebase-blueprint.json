@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile document recording staff member identity and verified role.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Auth UID matching document ID" },
+        "email": { "type": "string", "description": "Email address of staff user" },
+        "displayName": { "type": "string", "description": "Staff member full name" },
+        "role": { "type": "string", "enum": ["ADMIN", "BURSAR", "DIRECTOR_OF_STUDIES", "SECURITY_HEAD", "GATE_OFFICER", "MATRON_PATRON"], "description": "Staff duty role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of profile creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last profile update" }
+      },
+      "required": ["userId", "email", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student record with enrolment and clearance status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of staff owner/creator" },
+        "studentNumber": { "type": "string", "description": "Registration number e.g. LTC-2026-0001" },
+        "firstName": { "type": "string", "description": "Student first name" },
+        "lastName": { "type": "string", "description": "Student last name" },
+        "gradeClass": { "type": "string", "description": "Class stream e.g. Senior 4-A" },
+        "isDayScholar": { "type": "boolean", "description": "Day scholar status flag" },
+        "feesStatus": { "type": "string", "enum": ["CLEARED", "OUTSTANDING", "GRACE_PERIOD"], "description": "Financial clearance" },
+        "outstandingAmount": { "type": "number", "description": "Outstanding fees in UGX" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["userId", "studentNumber", "firstName", "lastName", "gradeClass", "isDayScholar", "feesStatus", "outstandingAmount", "createdAt", "updatedAt"]
+    },
+    "Card": {
+      "title": "Card Credential",
+      "description": "Student ID card record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of issuing staff" },
+        "cardIdentifier": { "type": "string", "description": "Card identifier e.g. CRD-0001" },
+        "studentId": { "type": "string", "description": "Linked student ID" },
+        "studentNumber": { "type": "string", "description": "Student registration number" },
+        "qrPayload": { "type": "string", "description": "Authenticated cryptographic QR payload" },
+        "status": { "type": "string", "enum": ["ACTIVE", "LOST", "REPLACED", "DEACTIVATED"], "description": "Card lifecycle state" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Issue timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["userId", "cardIdentifier", "studentId", "studentNumber", "qrPayload", "status", "createdAt", "updatedAt"]
+    },
+    "ScanLog": {
+      "title": "Gate Scan Log",
+      "description": "Audit log for student gate access scans.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Gate officer UID who performed the scan" },
+        "studentNumber": { "type": "string", "description": "Student registration number scanned" },
+        "studentName": { "type": "string", "description": "Student name" },
+        "decision": { "type": "string", "description": "Verification decision e.g. APPROVED, DENIED_FEES" },
+        "gatePoint": { "type": "string", "description": "Gate identifier e.g. Main Gate" },
+        "scannedAt": { "type": "string", "format": "date-time", "description": "Scan event server timestamp" }
+      },
+      "required": ["userId", "studentNumber", "studentName", "decision", "gatePoint", "scannedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile for staff member"
+    },
+    "/users/{userId}/students/{studentId}": {
+      "schema": "Student",
+      "description": "Institutional student records managed by staff member"
+    },
+    "/users/{userId}/cards/{cardId}": {
+      "schema": "Card",
+      "description": "Institutional cards issued by staff member"
+    },
+    "/users/{userId}/scan_logs/{logId}": {
+      "schema": "ScanLog",
+      "description": "Gate entry audit logs recorded by staff member"
+    }
+  }
+}

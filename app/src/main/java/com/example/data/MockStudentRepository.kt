@@ -718,3 +718,6 @@ class MockStudentRepository : StudentRepository {
         }
     }
 }
+
+    fun getAppDatabase(): com.example.data.local.AppDatabase? = null
+    fun getSyncManager(): com.example.data.sync.SyncManager? = null

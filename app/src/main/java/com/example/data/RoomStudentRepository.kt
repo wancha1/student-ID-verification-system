@@ -1099,3 +1099,6 @@ class RoomStudentRepository(
         }
     }
 }
+
+    fun getAppDatabase(): AppDatabase = database
+    fun getSyncManager(): SyncManager = syncManager

@@ -12,6 +12,15 @@ import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
 import com.example.model.GuardianNotification
 import com.example.model.NotificationType
+import com.example.model.ScanDepartment
+import com.example.model.GateDirection
+import com.example.model.DepartmentVerificationResult
+import com.example.model.AttendanceRecord
+import com.example.model.ExamException
+import com.example.model.ExamClearanceStatus
+import com.example.data.database
+import com.example.data.syncManagerInstance
+import com.example.util.QrUnifiedVerifier
 import com.example.model.MealRecord
 import com.example.model.MealServingStatus
 import com.example.model.MealType
@@ -161,6 +170,29 @@ class MainViewModel(
     // ==========================================
     // MEALS MASTER STATE & ACCESS CONTROL
     // ==========================================
+
+    // Multi-Department Unified Scanner State
+    private val _selectedDepartment = MutableStateFlow(ScanDepartment.GATE)
+    val selectedDepartment: StateFlow<ScanDepartment> = _selectedDepartment.asStateFlow()
+
+    private val _departmentScanResult = MutableStateFlow<DepartmentVerificationResult?>(null)
+    val departmentScanResult: StateFlow<DepartmentVerificationResult?> = _departmentScanResult.asStateFlow()
+
+    private val _gateDirection = MutableStateFlow(GateDirection.ENTRY)
+    val gateDirection: StateFlow<GateDirection> = _gateDirection.asStateFlow()
+
+    private val _selectedAttendanceSubject = MutableStateFlow("Mathematics")
+    val selectedAttendanceSubject: StateFlow<String> = _selectedAttendanceSubject.asStateFlow()
+
+    private val _selectedAttendanceSession = MutableStateFlow("Morning Lesson 1")
+    val selectedAttendanceSession: StateFlow<String> = _selectedAttendanceSession.asStateFlow()
+
+    private val _attendanceRecords = MutableStateFlow<List<AttendanceRecord>>(emptyList())
+    val attendanceRecords: StateFlow<List<AttendanceRecord>> = _attendanceRecords.asStateFlow()
+
+    private val _examExceptions = MutableStateFlow<List<ExamException>>(emptyList())
+    val examExceptions: StateFlow<List<ExamException>> = _examExceptions.asStateFlow()
+
     private val _activeMealType = MutableStateFlow(MealType.LUNCH)
     val activeMealType: StateFlow<MealType> = _activeMealType.asStateFlow()
 
@@ -1106,3 +1138,160 @@ class MainViewModel(
         }
     }
 }
+
+
+    fun selectDepartment(dept: ScanDepartment) {
+        _selectedDepartment.value = dept
+    }
+
+    fun setGateDirection(direction: GateDirection) {
+        _gateDirection.value = direction
+    }
+
+    fun setAttendanceSubject(subject: String) {
+        _selectedAttendanceSubject.value = subject
+    }
+
+    fun setAttendanceSession(session: String) {
+        _selectedAttendanceSession.value = session
+    }
+
+    fun dismissDepartmentScanResult() {
+        _departmentScanResult.value = null
+    }
+
+    fun scanUnifiedQr(rawCode: String, context: Context? = null) {
+        val user = _currentUser.value ?: run {
+            _userFeedbackMessage.value = "Access Denied: Unauthenticated staff session."
+            return
+        }
+
+        viewModelScope.launch {
+            _isScannerOpen.value = false
+            _isMealScannerOpen.value = false
+            _isRequirementScannerOpen.value = false
+
+            val db = repository.database
+            val syncMgr = repository.syncManagerInstance
+
+            if (db != null && syncMgr != null) {
+                val result = QrUnifiedVerifier.verifyAndProcessScan(
+                    rawQrCode = rawCode,
+                    department = _selectedDepartment.value,
+                    currentUser = user,
+                    database = db,
+                    syncManager = syncMgr,
+                    gateDirection = _gateDirection.value,
+                    mealType = _activeMealType.value,
+                    examCode = "UNEB-UCE-2026",
+                    attendanceSubject = _selectedAttendanceSubject.value,
+                    attendanceSessionName = _selectedAttendanceSession.value
+                )
+                _departmentScanResult.value = result
+
+                // Also update legacy state flows for backward compatibility with existing screens
+                when (result) {
+                    is DepartmentVerificationResult.Success -> {
+                        _currentScannedStudent.value = result.student
+                        _currentScannedCard.value = result.card
+                        _scanError.value = null
+                        if (result.department == ScanDepartment.MEALS) {
+                            val newMeal = MealRecord(
+                                studentId = result.student.id,
+                                studentNumber = result.student.studentNumber,
+                                studentName = result.student.fullName,
+                                gradeClass = result.student.gradeClass,
+                                mealType = result.mealType ?: MealType.LUNCH,
+                                timestamp = System.currentTimeMillis(),
+                                serverName = user.name,
+                                status = result.mealStatus ?: MealServingStatus.SERVED
+                            )
+                            _mealRecords.value = listOf(newMeal) + _mealRecords.value
+                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                        } else if (result.department == ScanDepartment.ATTENDANCE) {
+                            val newAtt = AttendanceRecord(
+                                studentId = result.student.id,
+                                studentNumber = result.student.studentNumber,
+                                studentName = result.student.fullName,
+                                gradeClass = result.student.gradeClass,
+                                subject = result.attendanceSubject ?: "Mathematics",
+                                sessionName = result.attendanceSession ?: "Session",
+                                lessonDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()),
+                                teacherName = user.name
+                            )
+                            _attendanceRecords.value = listOf(newAtt) + _attendanceRecords.value
+                        }
+                        context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
+                    }
+                    is DepartmentVerificationResult.DuplicateAction -> {
+                        _scanError.value = result.message
+                        context?.let { FeedbackHelper.playWarningSoundAndHaptic(it) }
+                    }
+                    is DepartmentVerificationResult.PermissionDenied -> {
+                        _scanError.value = result.message
+                        context?.let { FeedbackHelper.playDeniedSoundAndHaptic(it) }
+                    }
+                    is DepartmentVerificationResult.CardInactive -> {
+                        _scanError.value = result.reason
+                        context?.let { FeedbackHelper.playFeedback(it, false) }
+                    }
+                    is DepartmentVerificationResult.InvalidCredential -> {
+                        _scanError.value = result.errorReason
+                        context?.let { FeedbackHelper.playFeedback(it, false) }
+                    }
+                    is DepartmentVerificationResult.StudentNotFound -> {
+                        _scanError.value = result.reason
+                        context?.let { FeedbackHelper.playFeedback(it, false) }
+                    }
+                }
+            } else {
+                // Fallback for mock repository
+                handleBarcodeScan(rawCode, context)
+            }
+        }
+    }
+
+    fun recommendExamException(studentId: String, studentNumber: String, studentName: String, reason: String = "Financial clearance pending bursar review") {
+        if (!requirePermission(StaffPermission.MANAGE_FEES, "Recommending exam exception")) return
+        viewModelScope.launch {
+            val db = repository.database
+            if (db != null) {
+                val ex = ExamException(
+                    studentId = studentId,
+                    studentNumber = studentNumber,
+                    studentName = studentName,
+                    examCode = "UNEB-UCE-2026",
+                    requestedByBursar = _currentUser.value?.name ?: "Bursar",
+                    recommendationReason = reason,
+                    isApproved = false
+                )
+                db.examExceptionDao().insertOrUpdate(com.example.data.local.ExamExceptionEntity.fromDomain(ex, isSynced = false))
+                repository.syncManagerInstance?.notifyLocalLogAdded()
+                _examExceptions.value = listOf(ex) + _examExceptions.value
+                _userFeedbackMessage.value = "Bursar exception recommended for $studentName. Awaiting Head Teacher approval."
+            }
+        }
+    }
+
+    fun approveExamException(studentId: String, examCode: String = "UNEB-UCE-2026") {
+        if (!requirePermission(StaffPermission.EMERGENCY_OVERRIDE, "Approving exam exception")) {
+            _userFeedbackMessage.value = "Access Denied: Only Head Teacher / Executive Management can approve examination exceptions."
+            return
+        }
+        viewModelScope.launch {
+            val db = repository.database
+            if (db != null) {
+                val existing = db.examExceptionDao().findException(studentId, examCode)
+                if (existing != null) {
+                    val approved = existing.copy(
+                        isApproved = true,
+                        approvedByHeadTeacher = _currentUser.value?.name ?: "Head Teacher",
+                        approvedAt = System.currentTimeMillis()
+                    )
+                    db.examExceptionDao().insertOrUpdate(approved)
+                    repository.syncManagerInstance?.notifyLocalLogAdded()
+                    _userFeedbackMessage.value = "Exam exception APPROVED by Head Teacher for ${existing.studentName}!"
+                }
+            }
+        }
+    }

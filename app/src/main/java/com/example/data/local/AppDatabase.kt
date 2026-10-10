@@ -14,9 +14,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CardEntity::class,
         ScanLogEntity::class,
         SyncMetadataEntity::class,
-        PendingChangeEntity::class
+        PendingChangeEntity::class,
+        MealRecordEntity::class,
+        AttendanceRecordEntity::class,
+        ExamExceptionEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +30,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun scanLogDao(): ScanLogDao
     abstract fun syncMetadataDao(): SyncMetadataDao
     abstract fun pendingChangeDao(): PendingChangeDao
+    abstract fun mealRecordDao(): MealRecordDao
+    abstract fun attendanceRecordDao(): AttendanceRecordDao
+    abstract fun examExceptionDao(): ExamExceptionDao
 
     companion object {
         @Volatile
@@ -71,6 +77,92 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Non-destructive migration from Version 6 to Version 7:
+         * Adds multi-department operational tables:
+         * 1. `meal_records` with unique constraint on (studentId, mealType, mealDate)
+         * 2. `attendance_records` with unique constraint on (studentId, lessonDate, sessionName)
+         * 3. `exam_exceptions` with unique constraint on (studentId, examCode)
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Meal records table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `meal_records` (
+                        `id` TEXT NOT NULL,
+                        `studentId` TEXT NOT NULL,
+                        `studentNumber` TEXT NOT NULL,
+                        `studentName` TEXT NOT NULL,
+                        `gradeClass` TEXT NOT NULL,
+                        `mealType` TEXT NOT NULL,
+                        `mealDate` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `serverName` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `notes` TEXT NOT NULL DEFAULT '',
+                        `isSyncedToCloud` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_meal_records_studentId_mealType_mealDate` ON `meal_records` (`studentId`, `mealType`, `mealDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_meal_records_mealDate` ON `meal_records` (`mealDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_meal_records_isSyncedToCloud` ON `meal_records` (`isSyncedToCloud`)")
+
+                // 2. Attendance records table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `attendance_records` (
+                        `id` TEXT NOT NULL,
+                        `studentId` TEXT NOT NULL,
+                        `studentNumber` TEXT NOT NULL,
+                        `studentName` TEXT NOT NULL,
+                        `gradeClass` TEXT NOT NULL,
+                        `subject` TEXT NOT NULL,
+                        `sessionName` TEXT NOT NULL,
+                        `lessonDate` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `teacherName` TEXT NOT NULL,
+                        `isPresent` INTEGER NOT NULL,
+                        `notes` TEXT NOT NULL DEFAULT '',
+                        `isCorrection` INTEGER NOT NULL DEFAULT 0,
+                        `correctedBy` TEXT,
+                        `isSyncedToCloud` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_attendance_records_studentId_lessonDate_sessionName` ON `attendance_records` (`studentId`, `lessonDate`, `sessionName`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attendance_records_gradeClass_lessonDate` ON `attendance_records` (`gradeClass`, `lessonDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attendance_records_isSyncedToCloud` ON `attendance_records` (`isSyncedToCloud`)")
+
+                // 3. Examination exceptions table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `exam_exceptions` (
+                        `id` TEXT NOT NULL,
+                        `studentId` TEXT NOT NULL,
+                        `studentNumber` TEXT NOT NULL,
+                        `studentName` TEXT NOT NULL,
+                        `examCode` TEXT NOT NULL,
+                        `requestedByBursar` TEXT NOT NULL,
+                        `recommendationReason` TEXT NOT NULL,
+                        `isApproved` INTEGER NOT NULL,
+                        `approvedByHeadTeacher` TEXT,
+                        `requestedAt` INTEGER NOT NULL,
+                        `approvedAt` INTEGER,
+                        `isSyncedToCloud` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_exam_exceptions_studentId_examCode` ON `exam_exceptions` (`studentId`, `examCode`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_exam_exceptions_isApproved` ON `exam_exceptions` (`isApproved`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_exam_exceptions_isSyncedToCloud` ON `exam_exceptions` (`isSyncedToCloud`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -78,7 +170,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "oakridge_student_access.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                 INSTANCE = instance
                 instance
@@ -90,7 +182,7 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java
             )
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
         }
