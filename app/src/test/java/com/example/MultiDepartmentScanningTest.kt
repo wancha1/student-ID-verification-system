@@ -291,6 +291,19 @@ class MultiDepartmentScanningTest {
         )
         assertTrue(boarderDinner is DepartmentVerificationResult.Success)
         assertTrue((boarderDinner as DepartmentVerificationResult.Success).isAllowed)
+
+        // Boarder: Breakfast is ineligible under strict LTC Lunch & Supper policy
+        val boarderBreakfast = QrUnifiedVerifier.verifyAndProcessScan(
+            rawQrCode = boarderQrPayload,
+            department = ScanDepartment.MEALS,
+            currentUser = mealStaff,
+            database = database,
+            syncManager = syncManager,
+            mealType = MealType.BREAKFAST
+        )
+        assertTrue(boarderBreakfast is DepartmentVerificationResult.Success)
+        assertFalse((boarderBreakfast as DepartmentVerificationResult.Success).isAllowed)
+        assertEquals(MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE, boarderBreakfast.mealStatus)
     }
 
     @Test

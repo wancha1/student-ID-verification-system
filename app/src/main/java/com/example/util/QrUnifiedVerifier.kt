@@ -220,11 +220,11 @@ object QrUnifiedVerifier {
             }
 
             ScanDepartment.MEALS -> {
-                // Rule 1: Day scholars are eligible for LUNCH only; boarders for LUNCH and DINNER
+                // Rule 1: Day scholars receive Lunch only; boarders receive Lunch and Supper (Dinner)
                 val isEligible = if (student.isDayScholar) {
                     mealType == MealType.LUNCH
                 } else {
-                    mealType == MealType.LUNCH || mealType == MealType.DINNER || mealType == MealType.BREAKFAST || mealType == MealType.SPECIAL_SNACK
+                    mealType == MealType.LUNCH || mealType == MealType.DINNER
                 }
 
                 if (!isEligible) {
