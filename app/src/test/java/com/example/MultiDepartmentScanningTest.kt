@@ -2,16 +2,18 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.crypto.CardDateUtils
-import com.example.crypto.KeystoreIssuerManager
+import com.example.crypto.SoftwareCardSigner
+import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.RoomStudentRepository
 import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
 import com.example.data.local.StudentEntity
 import com.example.data.sync.InMemoryCloudBackend
 import com.example.data.sync.SyncManager
+import com.example.model.AccessStatus
 import com.example.model.AuthUser
 import com.example.model.CardStatus
+import com.example.model.DayScholarStatus
 import com.example.model.DepartmentVerificationResult
 import com.example.model.ExamClearanceStatus
 import com.example.model.FeeStatus
@@ -22,7 +24,9 @@ import com.example.model.ScanDepartment
 import com.example.model.StaffPermission
 import com.example.model.UserRole
 import com.example.testutil.TestCardCryptoHelper
+import com.example.util.CardCryptoManager
 import com.example.util.QrUnifiedVerifier
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,19 +38,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.security.KeyPair
-import java.security.KeyPairGenerator
-import java.security.spec.ECGenParameterSpec
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE)
+@Config(sdk = [34])
 class MultiDepartmentScanningTest {
 
-    private lateinit var context: Context
     private lateinit var database: AppDatabase
     private lateinit var syncManager: SyncManager
     private lateinit var testKeyPair: KeyPair
-    private val kid = KeystoreIssuerManager.ISSUER_KEY_ALIAS
+    private lateinit var testSigner: SoftwareCardSigner
 
     private val dayScholarStudentId = "STU-DAY-001"
     private val boarderStudentId = "STU-BRD-002"
@@ -56,115 +57,140 @@ class MultiDepartmentScanningTest {
     private lateinit var dayScholarQrPayload: String
     private lateinit var boarderQrPayload: String
 
+    private val validFrom = "2026-01-01"
+    private val validUntil = "2026-12-31"
+
     @Before
     fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        TrustedIssuerRegistry.initialize(context)
+        TrustedIssuerRegistry.clearAll()
+        CardCryptoManager.resetForTesting()
+
         database = AppDatabase.createInMemory(context)
         syncManager = SyncManager(database, InMemoryCloudBackend())
 
-        // Setup test cryptographic keys using TestCardCryptoHelper
-        val kpg = KeyPairGenerator.getInstance("EC")
-        kpg.initialize(ECGenParameterSpec("secp256r1"))
-        testKeyPair = kpg.generateKeyPair()
-        TestCardCryptoHelper.configureSoftwareTestSigner(testKeyPair, kid)
+        testKeyPair = TestCardCryptoHelper.generateKeyPair()
+        testSigner = SoftwareCardSigner(testKeyPair)
+        CardCryptoManager.setActiveSigner(testSigner)
+        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Primary Test Issuer Authority")
 
-        // Seed test students: 1 Day Scholar, 1 Boarder
-        val (validFrom, validUntil) = CardDateUtils.deriveDefaultValidityRange()
         val now = System.currentTimeMillis()
 
         runBlocking {
-            database.studentDao().insertOrUpdateStudent(
-                StudentEntity(
-                    id = dayScholarStudentId,
-                    studentNumber = "LTC-2026-0001",
-                    firstName = "Daniel",
-                    lastName = "Okello",
-                    gender = "MALE",
-                    gradeClass = "Senior 4-A",
-                    isDayScholar = true,
-                    feesStatus = "CLEARED",
-                    outstandingAmount = 0.0,
-                    parentName = "John Okello",
-                    parentPhone = "+256772111222",
-                    photoUrl = "",
-                    notes = "",
-                    qrToken = "TOK-DAY-1",
-                    createdAt = now,
-                    updatedAt = now,
-                    isDeleted = false
-                )
+            val dayStudent = StudentEntity(
+                id = dayScholarStudentId,
+                studentNumber = "LTC-2026-0001",
+                name = "Daniel Okello",
+                firstName = "Daniel",
+                lastName = "Okello",
+                photoUrl = null,
+                accessStatus = AccessStatus.APPROVED.name,
+                gradeClass = "Senior 4-A",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK.name,
+                transportRoute = "Main Gate Line",
+                feesStatus = FeeStatus.CLEARED.name,
+                outstandingAmount = 0.0,
+                gender = "Male",
+                avatarColorSeed = 100L,
+                guardianName = "John Okello",
+                guardianPhone = "+256 772 111222",
+                emergencyContact = "+256 772 111222",
+                homeroomTeacher = "Mr. Obua",
+                academicYear = "2026",
+                notes = "Day scholar student",
+                qrToken = "TOK-DAY-1",
+                updatedAt = now,
+                isDeleted = false
             )
+            database.studentDao().insertOrUpdateStudent(dayStudent)
 
-            database.studentDao().insertOrUpdateStudent(
-                StudentEntity(
-                    id = boarderStudentId,
-                    studentNumber = "LTC-2026-0002",
-                    firstName = "Sarah",
-                    lastName = "Achieng",
-                    gender = "FEMALE",
-                    gradeClass = "Senior 5-Science",
-                    isDayScholar = false,
-                    feesStatus = "OUTSTANDING",
-                    outstandingAmount = 250000.0,
-                    parentName = "Grace Achieng",
-                    parentPhone = "+256772333444",
-                    photoUrl = "",
-                    notes = "",
-                    qrToken = "TOK-BRD-2",
-                    createdAt = now,
-                    updatedAt = now,
-                    isDeleted = false
-                )
+            val boarderStudent = StudentEntity(
+                id = boarderStudentId,
+                studentNumber = "LTC-2026-0002",
+                name = "Sarah Achieng",
+                firstName = "Sarah",
+                lastName = "Achieng",
+                photoUrl = null,
+                accessStatus = AccessStatus.APPROVED.name,
+                gradeClass = "Senior 5-Science",
+                isDayScholar = false,
+                dayScholarType = DayScholarStatus.BOARDER.name,
+                transportRoute = "Boarding Wing",
+                feesStatus = FeeStatus.OUTSTANDING.name,
+                outstandingAmount = 250000.0,
+                gender = "Female",
+                avatarColorSeed = 200L,
+                guardianName = "Grace Achieng",
+                guardianPhone = "+256 772 333444",
+                emergencyContact = "+256 772 333444",
+                homeroomTeacher = "Ms. Akello",
+                academicYear = "2026",
+                notes = "Boarding student",
+                qrToken = "TOK-BRD-2",
+                updatedAt = now,
+                isDeleted = false
             )
+            database.studentDao().insertOrUpdateStudent(boarderStudent)
 
-            // Generate cryptographically signed QR payloads
-            dayScholarQrPayload = TestCardCryptoHelper.signCardPayload(
-                kid = kid,
+            dayScholarQrPayload = CardCryptoManager.signCardPayload(
                 cardId = dayScholarCardId,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                privateKey = testKeyPair.private
+                signer = testSigner
             )
 
-            boarderQrPayload = TestCardCryptoHelper.signCardPayload(
-                kid = kid,
+            boarderQrPayload = CardCryptoManager.signCardPayload(
                 cardId = boarderCardId,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                privateKey = testKeyPair.private
+                signer = testSigner
             )
 
-            database.cardDao().insertOrUpdateCard(
-                CardEntity(
-                    id = dayScholarCardId,
-                    cardIdentifier = dayScholarCardId,
-                    studentId = dayScholarStudentId,
-                    studentNumber = "LTC-2026-0001",
-                    qrPayload = dayScholarQrPayload,
-                    status = "ACTIVE",
-                    issueDate = now,
-                    updatedAt = now
-                )
+            val c1 = CardEntity(
+                id = "crd-db-001",
+                cardIdentifier = dayScholarCardId,
+                studentId = dayScholarStudentId,
+                studentNumber = "LTC-2026-0001",
+                qrPayload = dayScholarQrPayload,
+                status = CardStatus.ACTIVE.name,
+                issueDate = now,
+                activationDate = now,
+                deactivationDate = null,
+                replacedByCardId = null,
+                reason = "Primary card",
+                notes = "Day scholar card",
+                updatedAt = now,
+                isDeleted = false
             )
+            database.cardDao().insertOrUpdateCard(c1)
 
-            database.cardDao().insertOrUpdateCard(
-                CardEntity(
-                    id = boarderCardId,
-                    cardIdentifier = boarderCardId,
-                    studentId = boarderStudentId,
-                    studentNumber = "LTC-2026-0002",
-                    qrPayload = boarderQrPayload,
-                    status = "ACTIVE",
-                    issueDate = now,
-                    updatedAt = now
-                )
+            val c2 = CardEntity(
+                id = "crd-db-002",
+                cardIdentifier = boarderCardId,
+                studentId = boarderStudentId,
+                studentNumber = "LTC-2026-0002",
+                qrPayload = boarderQrPayload,
+                status = CardStatus.ACTIVE.name,
+                issueDate = now,
+                activationDate = now,
+                deactivationDate = null,
+                replacedByCardId = null,
+                reason = "Primary card",
+                notes = "Boarder card",
+                updatedAt = now,
+                isDeleted = false
             )
+            database.cardDao().insertOrUpdateCard(c2)
         }
     }
 
     @After
     fun tearDown() {
         database.close()
+        CardCryptoManager.resetForTesting()
+        TrustedIssuerRegistry.clearAll()
     }
 
     @Test
@@ -206,7 +232,7 @@ class MultiDepartmentScanningTest {
         assertEquals(GateDirection.EXIT, successExit.gateDirection)
 
         // 3. Verify logs in database
-        val logs = database.scanLogDao().getAllLogs()
+        val logs = database.scanLogDao().getAllLogsFlow().first()
         assertEquals(2, logs.size)
     }
 

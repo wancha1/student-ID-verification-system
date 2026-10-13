@@ -1126,19 +1126,6 @@ class MainViewModel(
         }
     }
 
-    companion object {
-        fun provideFactory(
-            context: Context
-        ): androidx.lifecycle.ViewModelProvider.Factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                val repo = com.example.data.RoomStudentRepository.getInstance(context.applicationContext)
-                return MainViewModel(repo) as T
-            }
-        }
-    }
-}
-
 
     fun selectDepartment(dept: ScanDepartment) {
         _selectedDepartment.value = dept
@@ -1295,3 +1282,18 @@ class MainViewModel(
             }
         }
     }
+
+    companion object {
+        fun provideFactory(
+            context: Context
+        ): androidx.lifecycle.ViewModelProvider.Factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                val repo = com.example.data.RoomStudentRepository.getInstance(context.applicationContext)
+                return MainViewModel(repo) as T
+            }
+        }
+    }
+}
+
+

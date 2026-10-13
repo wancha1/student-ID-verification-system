@@ -96,6 +96,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.TableChart
 import com.example.ui.components.MultiFormatExportDialog
+import com.example.ui.attendance.AttendanceMasterScreen
 import com.example.ui.meals.MealsMasterScreen
 import com.example.ui.requirements.RequirementsMasterScreen
 import com.example.util.ExportFormat
@@ -121,6 +122,11 @@ fun StudentAccessApp(
     val filteredStudents by viewModel.filteredStudents.collectAsStateWithLifecycle()
     val scanLogs by viewModel.scanLogs.collectAsStateWithLifecycle()
     val syncInfo by viewModel.syncInfo.collectAsStateWithLifecycle()
+    val attendanceRecords by viewModel.attendanceRecords.collectAsStateWithLifecycle()
+    val selectedAttendanceSubject by viewModel.selectedAttendanceSubject.collectAsStateWithLifecycle()
+    val selectedAttendanceSession by viewModel.selectedAttendanceSession.collectAsStateWithLifecycle()
+    val departmentScanResult by viewModel.departmentScanResult.collectAsStateWithLifecycle()
+
     val activeScanResult by viewModel.activeScanResult.collectAsStateWithLifecycle()
     val activeScannedStudent by viewModel.currentScannedStudent.collectAsStateWithLifecycle()
     val scanError by viewModel.scanError.collectAsStateWithLifecycle()
@@ -618,7 +624,36 @@ fun StudentAccessApp(
                         modifier = Modifier.testTag("main_navigation_bar")
                     ) {
                         when (user.role) {
-                            UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.TEACHERS -> {
+                            UserRole.TEACHERS -> {
+                            if (isScannerOpen) {
+                                GuardScannerScreen(
+                                    onBarcodeDetected = { rawCode ->
+                                        viewModel.scanUnifiedQr(rawCode, context)
+                                    },
+                                    onCloseScanner = { viewModel.closeScanner() }
+                                )
+                            } else {
+                                AttendanceMasterScreen(
+                                    user = user,
+                                    attendanceRecords = attendanceRecords,
+                                    selectedSubject = selectedAttendanceSubject,
+                                    selectedSession = selectedAttendanceSession,
+                                    onSubjectChange = { viewModel.setAttendanceSubject(it) },
+                                    onSessionChange = { viewModel.setAttendanceSession(it) },
+                                    onOpenScanner = {
+                                        viewModel.selectDepartment(com.example.model.ScanDepartment.ATTENDANCE)
+                                        viewModel.openScanner()
+                                    },
+                                    onManualLookup = { studentNo ->
+                                        viewModel.scanUnifiedQr(studentNo, context)
+                                    },
+                                    onCorrectAttendance = { recordId, note ->
+                                        // attendance audit note
+                                    }
+                                )
+                            }
+                        }
+                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT -> {
                                 val isDashboard = !showLogsScreen && !showGuardianAlertsScreen && !showExeatScreen
                                 NavigationBarItem(
                                     selected = isDashboard,
@@ -893,7 +928,36 @@ fun StudentAccessApp(
                             }
                         }
 
-                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.TEACHERS -> {
+                        UserRole.TEACHERS -> {
+                            if (isScannerOpen) {
+                                GuardScannerScreen(
+                                    onBarcodeDetected = { rawCode ->
+                                        viewModel.scanUnifiedQr(rawCode, context)
+                                    },
+                                    onCloseScanner = { viewModel.closeScanner() }
+                                )
+                            } else {
+                                AttendanceMasterScreen(
+                                    user = user,
+                                    attendanceRecords = attendanceRecords,
+                                    selectedSubject = selectedAttendanceSubject,
+                                    selectedSession = selectedAttendanceSession,
+                                    onSubjectChange = { viewModel.setAttendanceSubject(it) },
+                                    onSessionChange = { viewModel.setAttendanceSession(it) },
+                                    onOpenScanner = {
+                                        viewModel.selectDepartment(com.example.model.ScanDepartment.ATTENDANCE)
+                                        viewModel.openScanner()
+                                    },
+                                    onManualLookup = { studentNo ->
+                                        viewModel.scanUnifiedQr(studentNo, context)
+                                    },
+                                    onCorrectAttendance = { recordId, note ->
+                                        // attendance audit note
+                                    }
+                                )
+                            }
+                        }
+                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT -> {
                             if (selectedStudentDetail != null) {
                                 StudentDetailScreen(
                                     student = selectedStudentDetail!!,

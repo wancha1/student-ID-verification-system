@@ -52,9 +52,9 @@ import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedLight
 import com.example.ui.theme.RejectedRedText
 import com.example.ui.theme.SchoolPrimary
-import com.example.ui.theme.WarningYellow
-import com.example.ui.theme.WarningYellowLight
-import com.example.ui.theme.WarningYellowText
+import com.example.ui.theme.PendingAmber
+import com.example.ui.theme.PendingAmberLight
+import com.example.ui.theme.PendingAmber
 
 @Composable
 fun DepartmentScanResultBanner(
@@ -189,19 +189,19 @@ fun DepartmentScanResultBanner(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = WarningYellowLight),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(WarningYellow))
+                    colors = CardDefaults.cardColors(containerColor = PendingAmberLight),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PendingAmber))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = WarningYellowText, modifier = Modifier.size(28.dp))
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = PendingAmber, modifier = Modifier.size(28.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(text = "Duplicate Scan Blocked", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = WarningYellowText)
+                                Text(text = "Duplicate Scan Blocked", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PendingAmber)
                                 Text(text = "${result.department.title} • ${result.student.fullName}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             IconButton(onClick = onDismiss) {
-                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = WarningYellowText)
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = PendingAmber)
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))

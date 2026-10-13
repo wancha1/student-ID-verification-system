@@ -48,6 +48,10 @@ class RoomStudentRepository(
 
     private val syncManager = SyncManager(database, remoteCloudDataSource, ioDispatcher)
 
+    fun getAppDatabase(): AppDatabase = database
+    fun getSyncManager(): SyncManager = syncManager
+
+
     override val studentsFlow: Flow<List<Student>> = database.studentDao().getAllActiveStudents()
         .map { entities -> entities.map { it.toDomain() } }
 
@@ -938,7 +942,6 @@ class RoomStudentRepository(
 
     override fun getLastSyncTimestamp(): Long = syncManager.getLastSyncTimestamp()
 
-    fun getSyncManager(): SyncManager = syncManager
 
     override suspend fun allocateNextStudentNumber(year: Int): String = withContext(ioDispatcher) {
         val prefix = "LTC-$year-"
@@ -1100,5 +1103,3 @@ class RoomStudentRepository(
     }
 }
 
-    fun getAppDatabase(): AppDatabase = database
-    fun getSyncManager(): SyncManager = syncManager

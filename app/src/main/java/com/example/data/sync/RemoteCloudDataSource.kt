@@ -35,6 +35,15 @@ interface RemoteCloudDataSource {
  * In-memory cloud backend for offline simulation & isolated integration tests.
  */
 class InMemoryCloudBackend : RemoteCloudDataSource {
+    fun resetRemoteState() {
+        remoteStudentsMap.clear()
+        remoteCardsMap.clear()
+        remoteLogsList.clear()
+        remoteMealsList.clear()
+        remoteAttendanceList.clear()
+        remoteExceptionsList.clear()
+    }
+
     private val mutex = Mutex()
     private val remoteStudentsMap = mutableMapOf<String, StudentEntity>()
     private val remoteCardsMap = mutableMapOf<String, CardEntity>()
