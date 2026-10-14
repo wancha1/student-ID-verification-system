@@ -280,8 +280,10 @@ class SyncManager(
                 )
                 Result.success(summary)
             } catch (e: Exception) {
+                val pendingAfterFailure = calculatePendingCount()
                 _syncInfo.value = _syncInfo.value.copy(
                     status = SyncStatus.SYNC_FAILED,
+                    pendingLogsCount = pendingAfterFailure,
                     errorMessage = e.localizedMessage ?: "Synchronization failed"
                 )
                 Result.failure(e)
