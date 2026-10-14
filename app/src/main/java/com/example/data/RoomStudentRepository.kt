@@ -73,7 +73,7 @@ class RoomStudentRepository(
 
     suspend fun initialize() = withContext(ioDispatcher) {
         syncManager.initialize()
-        seedInitialDataIfEmpty()
+        // Production startup must not insert synthetic student identities or guardian data.
     }
 
     override suspend fun getStudentById(id: String): Student? = withContext(ioDispatcher) {
