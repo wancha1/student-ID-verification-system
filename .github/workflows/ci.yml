@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
@@ -36,10 +36,10 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install rules-test dependencies
         run: npm install --no-save firebase @firebase/rules-unit-testing firebase-tools
       - name: Run Firestore emulator tests
