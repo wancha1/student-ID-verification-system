@@ -389,9 +389,15 @@ class RoomStudentRepository(
      * visibly unsynced rather than being treated as a successful cloud connection.
      */
     private suspend fun requestSyncIfConfigured() {
-        if (!syncManager.syncInfo.value.isOnline) return
         val backend = syncManager.getRemoteCloudBackend()
-        if (backend is UnconfiguredCloudBackend || backend is InMemoryCloudBackend) return
+        // The in-memory backend is test-only; don't auto-drain its test fixtures.
+        if (backend is InMemoryCloudBackend) return
+
+        // Refresh the visible outbox count even when cloud configuration is missing/offline.
+        syncManager.refreshPendingState()
+        if (!syncManager.syncInfo.value.isOnline || backend is UnconfiguredCloudBackend) return
+
+        // A configured backend is responsible for reporting each remote failure in SyncInfo.
         syncManager.syncNow()
     }
 
