@@ -24,10 +24,13 @@ class SyncManager(
     private val syncMutex = Mutex()
     private val _syncInfo = MutableStateFlow(
         SyncInfo(
-            status = SyncStatus.SYNCED,
-            lastSyncTimestamp = System.currentTimeMillis(),
+            status = if (remoteCloudDataSource is UnconfiguredCloudBackend) SyncStatus.SYNC_FAILED else SyncStatus.SYNCED,
+            lastSyncTimestamp = 0L,
             isOnline = true,
-            pendingLogsCount = 0
+            pendingLogsCount = 0,
+            errorMessage = if (remoteCloudDataSource is UnconfiguredCloudBackend) {
+                "Cloud sync is not configured. Data remains local on this device."
+            } else null
         )
     )
     val syncInfo: StateFlow<SyncInfo> = _syncInfo.asStateFlow()
@@ -41,7 +44,15 @@ class SyncManager(
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
             pendingLogsCount = pendingCount,
-            status = when { !_syncInfo.value.isOnline -> SyncStatus.OFFLINE; pendingCount > 0 -> SyncStatus.NEEDS_SYNC; else -> SyncStatus.SYNCED }
+            status = when {
+                !_syncInfo.value.isOnline -> SyncStatus.OFFLINE
+                remoteCloudDataSource is UnconfiguredCloudBackend -> SyncStatus.SYNC_FAILED
+                pendingCount > 0 -> SyncStatus.NEEDS_SYNC
+                else -> SyncStatus.SYNCED
+            },
+            errorMessage = if (remoteCloudDataSource is UnconfiguredCloudBackend) {
+                "Cloud sync is not configured. Data remains local on this device."
+            } else null
         )
     }
 
