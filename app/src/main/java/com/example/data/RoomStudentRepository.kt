@@ -466,7 +466,7 @@ class RoomStudentRepository(
             )
         }
         // The public card identifier must be unpredictable and independent of the admission number.
-        val cardId = "CRD-${UUID.randomUUID().toString().replace("-", "").uppercase()}"
+        val cardId = CardCryptoManager.generateSecureRandomCardId()
         val signedPayload = try {
             CardCryptoManager.signCardPayload(cardId)
         } catch (e: Exception) {
