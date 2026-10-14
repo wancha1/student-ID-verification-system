@@ -621,6 +621,18 @@ class LtcSystemVerificationTest {
             assertEquals("Exactly one initial active card must be issued", 1, cards.size)
             val initialCard = cards.first()
             assertEquals(CardStatus.ACTIVE.name, initialCard.status)
+            assertTrue(
+                "Issued card identifiers must be random 128-bit identifiers, not derived from admission numbers",
+                initialCard.cardIdentifier.matches(Regex("^CRD-[0-9A-F]{32}$"))
+            )
+            assertTrue("Issued card QR payload must not be empty", initialCard.qrPayload.isNotBlank())
+            val parsedInitialQr = QrCodeUtils.parseQrCode(initialCard.qrPayload)
+            assertTrue("Issued card QR must use the signed V2 format", parsedInitialQr is QrParseResult.ValidV2Card)
+            assertEquals(
+                "Signed QR card ID must match the persisted card identifier",
+                initialCard.cardIdentifier,
+                (parsedInitialQr as QrParseResult.ValidV2Card).cardId
+            )
 
             val pendingChanges1 = database.pendingChangeDao().getPendingChanges()
             assertEquals("Exactly 2 pending changes must be enqueued (STUDENT & CARD)", 2, pendingChanges1.size)
