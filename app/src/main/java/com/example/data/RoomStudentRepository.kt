@@ -383,6 +383,18 @@ class RoomStudentRepository(
         }
     }
 
+    /**
+     * Request synchronization after a local transaction when a real remote backend is configured.
+     * The in-memory backend is reserved for tests, and the unconfigured backend must remain
+     * visibly unsynced rather than being treated as a successful cloud connection.
+     */
+    private suspend fun requestSyncIfConfigured() {
+        if (!syncManager.syncInfo.value.isOnline) return
+        val backend = syncManager.getRemoteCloudBackend()
+        if (backend is UnconfiguredCloudBackend || backend is InMemoryCloudBackend) return
+        syncManager.syncNow()
+    }
+
     override suspend fun updateFeeStatus(
         studentId: String,
         newStatus: FeeStatus,
@@ -430,9 +442,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteFeeStatus(studentId, newStatus, outstandingAmount, now)
-            }
+            requestSyncIfConfigured()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -508,11 +518,8 @@ class RoomStudentRepository(
             }
 
             // Local registration and the durable pending queue are committed atomically.
-            // Do not bypass the queue with direct writes: those calls could fail silently and
-            // would leave the queue unable to truthfully represent synchronization state.
-            if (syncManager.syncInfo.value.isOnline) {
-                syncManager.syncNow() // SyncManager owns visible success/failure status.
-            }
+            // The queue is the only source of truth for remote mutations.
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -543,9 +550,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushStudentChanges(listOf(entity))
-            }
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -573,9 +578,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.deleteRemoteStudent(studentId, now)
-            }
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -651,9 +654,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            requestSyncIfConfigured()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -695,9 +696,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteCard(updated)
-            }
+            requestSyncIfConfigured()
             Result.success(updated.toDomain())
         } catch (e: Exception) {
             Result.failure(e)
@@ -772,9 +771,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            requestSyncIfConfigured()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -831,9 +828,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            requestSyncIfConfigured()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -875,9 +870,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteCard(updated)
-            }
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
