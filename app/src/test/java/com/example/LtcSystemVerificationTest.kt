@@ -8,6 +8,7 @@ import com.example.data.MockStudentRepository
 import com.example.data.RoomStudentRepository
 import com.example.data.sync.InMemoryCloudBackend
 import com.example.data.sync.SyncManager
+import com.example.data.sync.UnconfiguredCloudBackend
 import com.example.data.local.AppDatabase
 import com.example.data.local.PendingChangeEntity
 import com.example.data.local.CardEntity
@@ -23,6 +24,7 @@ import com.example.model.GateVerificationDecision
 import com.example.model.StaffPermission
 import com.example.model.Student
 import com.example.model.StudentScanResult
+import com.example.model.SyncStatus
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
 import com.example.util.CardCryptoManager
@@ -681,6 +683,29 @@ class LtcSystemVerificationTest {
 
             val pendingChanges4 = database.pendingChangeDao().getPendingChanges()
             assertEquals(6, pendingChanges4.size)
+
+            database.close()
+        }
+    }
+
+    @Test
+    fun testReconnectDoesNotReportUnconfiguredCloudAsSynced() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val syncManager = SyncManager(database, UnconfiguredCloudBackend())
+            syncManager.initialize()
+
+            assertEquals(SyncStatus.SYNC_FAILED, syncManager.syncInfo.value.status)
+            syncManager.setNetworkConnectivity(false)
+            assertEquals(SyncStatus.OFFLINE, syncManager.syncInfo.value.status)
+            syncManager.setNetworkConnectivity(true)
+            assertEquals(
+                "Reconnecting to the internet cannot make an unconfigured backend appear synced",
+                SyncStatus.SYNC_FAILED,
+                syncManager.syncInfo.value.status
+            )
+            assertTrue(syncManager.syncInfo.value.errorMessage?.contains("not configured") == true)
 
             database.close()
         }
