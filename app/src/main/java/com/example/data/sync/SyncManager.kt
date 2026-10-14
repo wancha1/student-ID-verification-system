@@ -68,12 +68,20 @@ class SyncManager(
 
     fun setNetworkConnectivity(isOnline: Boolean) {
         val pending = _syncInfo.value.pendingLogsCount
+        val backendUnconfigured = remoteCloudDataSource is UnconfiguredCloudBackend
         _syncInfo.value = _syncInfo.value.copy(
             isOnline = isOnline,
-            status = if (isOnline) {
-                if (pending > 0) SyncStatus.NEEDS_SYNC else SyncStatus.SYNCED
-            } else {
-                SyncStatus.OFFLINE
+            status = when {
+                !isOnline -> SyncStatus.OFFLINE
+                backendUnconfigured -> SyncStatus.SYNC_FAILED
+                pending > 0 -> SyncStatus.NEEDS_SYNC
+                else -> SyncStatus.SYNCED
+            },
+            errorMessage = when {
+                !isOnline -> "Device is offline. Local changes remain queued."
+                backendUnconfigured -> "Cloud sync is not configured. Data remains local on this device."
+                pending > 0 -> "Local changes are waiting to sync."
+                else -> null
             }
         )
     }
