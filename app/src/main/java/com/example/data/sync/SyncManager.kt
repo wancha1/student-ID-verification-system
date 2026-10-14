@@ -35,11 +35,11 @@ class SyncManager(
     )
     val syncInfo: StateFlow<SyncInfo> = _syncInfo.asStateFlow()
 
-    private var lastSuccessfulSyncTime: Long = System.currentTimeMillis()
+    private var lastSuccessfulSyncTime: Long = 0L
 
     suspend fun initialize() = withContext(ioDispatcher) {
         val savedTimeStr = database.syncMetadataDao().getValue("last_sync_timestamp")
-        lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: System.currentTimeMillis()
+        lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: 0L
         val pendingCount = calculatePendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
