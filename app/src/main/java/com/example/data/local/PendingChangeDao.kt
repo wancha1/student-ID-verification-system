@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PendingChangeDao {
 
-    @Query("SELECT * FROM pending_changes WHERE status = 'PENDING' ORDER BY createdAt ASC")
+    @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') ORDER BY createdAt ASC")
     fun getPendingChangesFlow(): Flow<List<PendingChangeEntity>>
 
     @Query("SELECT * FROM pending_changes WHERE status = 'PENDING' ORDER BY createdAt ASC")
@@ -45,7 +45,7 @@ interface PendingChangeDao {
     @Query("DELETE FROM pending_changes WHERE changeId = :changeId")
     suspend fun deleteChange(changeId: String)
 
-    @Query("SELECT COUNT(*) FROM pending_changes WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED')")
     fun getPendingCountFlow(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM pending_changes WHERE status = 'PENDING'")
