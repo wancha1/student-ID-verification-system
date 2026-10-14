@@ -795,10 +795,10 @@ class LtcSystemVerificationTest {
     // =========================================================================
 
     @Test
-    fun testMigrationFromVersion4To6PreservesAllDataAndAppliesSchemaChanges() {
+    fun testMigrationFromVersion4To7PreservesAllDataAndAppliesSchemaChanges() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
-            val dbFile = File(context.filesDir, "test_migration_v4_to_v6.db")
+            val dbFile = File(context.filesDir, "test_migration_v4_to_v7.db")
             if (dbFile.exists()) dbFile.delete()
 
             // 1. Create native SQLite database strictly matching Version 4 schema
@@ -1003,9 +1003,9 @@ class LtcSystemVerificationTest {
 
             rawDb.close()
 
-            // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
+            // 2. Open through Room with explicit grounded migrations MIGRATION_4_5, MIGRATION_5_6, and MIGRATION_6_7
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1035,7 +1035,7 @@ class LtcSystemVerificationTest {
 
             // 4. Verify newly created pending_changes table is fully functional
             val newChange = com.example.data.local.PendingChangeEntity(
-                changeId = "change-v6-post-migration-01",
+                changeId = "change-v7-post-migration-01",
                 entityType = SyncEntityType.STUDENT,
                 recordId = "stu-v4-01",
                 operationType = SyncOperationType.UPDATE,
@@ -1044,13 +1044,13 @@ class LtcSystemVerificationTest {
             roomDb.pendingChangeDao().enqueueChange(newChange)
             val pendingChanges = roomDb.pendingChangeDao().getPendingChanges()
             assertEquals("pending_changes queue must be queryable and contain enqueued change", 1, pendingChanges.size)
-            assertEquals("change-v6-post-migration-01", pendingChanges[0].changeId)
+            assertEquals("change-v7-post-migration-01", pendingChanges[0].changeId)
 
             // 5. Close and reopen to verify stability across sessions
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1065,10 +1065,10 @@ class LtcSystemVerificationTest {
     }
 
     @Test
-    fun testMigrationFromVersion5To6PreservesQrTokenAndCreatesPendingChangesTable() {
+    fun testMigrationFromVersion5To7PreservesQrTokenAndCreatesPendingChangesTable() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
-            val dbFile = File(context.filesDir, "test_migration_v5_to_v6.db")
+            val dbFile = File(context.filesDir, "test_migration_v5_to_v7.db")
             if (dbFile.exists()) dbFile.delete()
 
             // 1. Create native SQLite database strictly matching Version 5 schema (has qrToken, no pending_changes)
@@ -1228,7 +1228,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open with Room specifying MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1271,7 +1271,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1440,9 +1440,9 @@ class LtcSystemVerificationTest {
         )
         rawDb.close()
 
-        // 2. Perform Room migration to Version 6
+        // 2. Perform Room migration to Version 7
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
 
@@ -1499,7 +1499,7 @@ class LtcSystemVerificationTest {
         assertTrue("Index on createdAt must exist", indexList.contains("index_pending_changes_createdAt"))
         assertTrue("Index on (entityType, recordId) must exist", indexList.contains("index_pending_changes_entityType_recordId"))
 
-        // 6. Test idempotent execution of MIGRATION_5_6 DDL
+        // 6. Test idempotent execution of MIGRATION_5_6 and MIGRATION_6_7 DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
         roomDb.openHelper.writableDatabase.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_changes_status` ON `pending_changes` (`status`)")
 
