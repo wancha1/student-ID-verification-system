@@ -20,13 +20,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+      - name: Install Firebase emulator tooling
+        run: npm install --no-save firebase-tools
       - name: Compile debug APK
         run: gradle --no-daemon assembleDebug
-      - name: Run unit tests
-        run: gradle --no-daemon testDebugUnitTest
+      - name: Run unit tests with Firebase Auth and Firestore emulators
+        run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest"
 
   firestore-rules:
     name: Firestore security rules tests
