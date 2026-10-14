@@ -6,7 +6,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.room.Room
 import com.example.data.MockStudentRepository
 import com.example.data.RoomStudentRepository
+import com.example.data.sync.InMemoryCloudBackend
+import com.example.data.sync.SyncManager
 import com.example.data.local.AppDatabase
+import com.example.data.local.PendingChangeEntity
 import com.example.data.local.CardEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
@@ -678,6 +681,50 @@ class LtcSystemVerificationTest {
 
             val pendingChanges4 = database.pendingChangeDao().getPendingChanges()
             assertEquals(6, pendingChanges4.size)
+
+            database.close()
+        }
+    }
+
+    @Test
+    fun testSyncManagerDrainsQueuedStudentChangeAfterRemoteSuccess() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val backend = InMemoryCloudBackend()
+            val syncManager = SyncManager(database, backend)
+            val now = System.currentTimeMillis()
+            val student = Student(
+                id = "sync-student-01",
+                studentNumber = "LTC-2026-9901",
+                firstName = "Test",
+                lastName = "Student",
+                gradeClass = "Senior 4-A",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+                feesStatus = FeeStatus.CLEARED,
+                outstandingAmount = 0.0,
+                updatedAt = now
+            )
+            database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = "sync-change-student-01",
+                    entityType = SyncEntityType.STUDENT,
+                    recordId = student.id,
+                    operationType = SyncOperationType.CREATE,
+                    createdAt = now
+                )
+            )
+
+            syncManager.initialize()
+            val syncResult = syncManager.syncNow()
+
+            assertTrue("Sync should succeed when the remote backend accepts the student", syncResult.isSuccess)
+            assertEquals("Successfully uploaded changes must leave the retry queue", 0, database.pendingChangeDao().getPendingCount())
+            val remoteStudents = backend.fetchAllRemoteStudents().getOrThrow()
+            assertEquals(1, remoteStudents.size)
+            assertEquals(student.id, remoteStudents.single().id)
 
             database.close()
         }
