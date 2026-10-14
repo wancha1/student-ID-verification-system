@@ -178,20 +178,26 @@ class SyncManager(
                                         .deleteRemoteStudent(change.recordId, change.createdAt)
                                         .getOrThrow()
                                 } else {
-                                    val student = database.studentDao().getStudentById(change.recordId)
+                                    val student = database.studentDao().getStudentByIdIncludingDeleted(change.recordId)
                                         ?: throw NoSuchElementException(
                                             "Queued student " + change.recordId + " no longer exists locally."
                                         )
-                                    remoteCloudDataSource.pushStudentChanges(listOf(student)).getOrThrow()
+                                    // A later soft-delete supersedes any older create/update in the queue.
+                                    if (!student.isDeleted) {
+                                        remoteCloudDataSource.pushStudentChanges(listOf(student)).getOrThrow()
+                                    }
                                 }
                             }
 
                             SyncEntityType.FEE_STATUS -> {
-                                val student = database.studentDao().getStudentById(change.recordId)
+                                val student = database.studentDao().getStudentByIdIncludingDeleted(change.recordId)
                                     ?: throw NoSuchElementException(
                                         "Queued fee-status student " + change.recordId + " no longer exists locally."
                                     )
-                                remoteCloudDataSource.pushStudentChanges(listOf(student)).getOrThrow()
+                                // Do not publish a stale fee update after a queued student deletion.
+                                if (!student.isDeleted) {
+                                    remoteCloudDataSource.pushStudentChanges(listOf(student)).getOrThrow()
+                                }
                             }
 
                             SyncEntityType.CARD -> {
