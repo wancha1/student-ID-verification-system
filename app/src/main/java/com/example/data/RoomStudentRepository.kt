@@ -10,6 +10,7 @@ import com.example.data.local.StudentProfileEntity
 import com.example.data.local.SyncEntityType
 import com.example.data.local.SyncOperationType
 import com.example.data.sync.InMemoryCloudBackend
+import com.example.data.sync.UnconfiguredCloudBackend
 import com.example.data.sync.RemoteCloudDataSource
 import com.example.data.sync.SyncManager
 import com.example.model.AccessStatus
@@ -1091,7 +1092,7 @@ class RoomStudentRepository(
             return instance ?: synchronized(this) {
                 instance ?: run {
                     val db = AppDatabase.getInstance(context.applicationContext)
-                    RoomStudentRepository(db).also { repo ->
+                    RoomStudentRepository(db, UnconfiguredCloudBackend()).also { repo ->
                         instance = repo
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             repo.initialize()
