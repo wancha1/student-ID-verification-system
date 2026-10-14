@@ -445,18 +445,26 @@ class RoomStudentRepository(
         val studentWithTimestamp = student.copy(updatedAt = now)
         val entity = StudentEntity.fromDomain(studentWithTimestamp)
 
-        // Automatically issue first active card for the new student
-        val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
-        val cardId = "CRD-$cleanStudentNum-01"
-        val signedPayload = if (CardCryptoManager.hasIssuerPrivateKey()) {
-            try {
-                CardCryptoManager.signCardPayload(cardId)
-            } catch (_: Exception) {
-                ""
+        // Never issue a card with an empty/unsigned QR payload. Registering a student
+        // without the issuer key must fail before any local records are written.
+        val signedPayload = try {
+            if (!CardCryptoManager.hasIssuerPrivateKey()) {
+                return@withContext Result.failure(
+                    IllegalStateException(
+                        "Card issuance is unavailable: this device has no authorized issuer private key. " +
+                            "Provision the issuer before registering students."
+                    )
+                )
             }
-        } else {
-            ""
+            // The public card identifier must be unpredictable and independent of the admission number.
+            val cardId = "CRD-${UUID.randomUUID().toString().replace("-", "").uppercase()}"
+            CardCryptoManager.signCardPayload(cardId)
+        } catch (e: Exception) {
+            return@withContext Result.failure(
+                IllegalStateException("Could not sign the student card QR payload.", e)
+            )
         }
+        val cardId = signedPayload.substringAfter("LTC:V2:").substringBefore(":")
         val firstCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = cardId,
@@ -500,9 +508,11 @@ class RoomStudentRepository(
                 )
             }
 
+            // Local registration and the durable pending queue are committed atomically.
+            // Do not bypass the queue with direct writes: those calls could fail silently and
+            // would leave the queue unable to truthfully represent synchronization state.
             if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushStudentChanges(listOf(entity))
-                remoteCloudDataSource.pushCardChanges(listOf(cardEntity))
+                syncManager.syncNow() // SyncManager owns visible success/failure status.
             }
             Result.success(Unit)
         } catch (e: Exception) {
