@@ -1226,7 +1226,7 @@ class LtcSystemVerificationTest {
             )
             rawDb.close()
 
-            // 2. Open with Room specifying MIGRATION_5_6
+            // 2. Open with Room using the complete migration path through Version 7
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
                 .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
@@ -1499,7 +1499,16 @@ class LtcSystemVerificationTest {
         assertTrue("Index on createdAt must exist", indexList.contains("index_pending_changes_createdAt"))
         assertTrue("Index on (entityType, recordId) must exist", indexList.contains("index_pending_changes_entityType_recordId"))
 
-        // 6. Test idempotent execution of MIGRATION_5_6 and MIGRATION_6_7 DDL
+        // Version 7 must include all operational tables introduced by MIGRATION_6_7.
+        for (table in listOf("meal_records", "attendance_records", "exam_exceptions")) {
+            val tableCursor = db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '$table'"
+            )
+            assertTrue("Version 7 migration must create $table", tableCursor.moveToFirst())
+            tableCursor.close()
+        }
+
+        // 6. Test idempotent execution of pending_changes DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
         roomDb.openHelper.writableDatabase.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_changes_status` ON `pending_changes` (`status`)")
 
