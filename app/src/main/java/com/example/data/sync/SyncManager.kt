@@ -41,7 +41,7 @@ class SyncManager(
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
             pendingLogsCount = pendingCount,
-            status = if (_syncInfo.value.isOnline) SyncStatus.SYNCED else SyncStatus.OFFLINE
+            status = when { !_syncInfo.value.isOnline -> SyncStatus.OFFLINE; pendingCount > 0 -> SyncStatus.NEEDS_SYNC; else -> SyncStatus.SYNCED }
         )
     }
 
@@ -94,81 +94,70 @@ class SyncManager(
                 var logsUploadedCount = 0
                 if (unsyncedLogs.isNotEmpty()) {
                     val uploadResult = remoteCloudDataSource.pushGateLogs(unsyncedLogs)
-                    if (uploadResult.isSuccess) {
-                        database.scanLogDao().markLogsAsSynced(unsyncedLogs.map { it.id })
-                        logsUploadedCount += unsyncedLogs.size
-                    }
+                    uploadResult.getOrThrow()
+                    database.scanLogDao().markLogsAsSynced(unsyncedLogs.map { it.id })
+                    logsUploadedCount += unsyncedLogs.size
                 }
 
                 // 2. Upload unsynced meal records
                 val unsyncedMeals = database.mealRecordDao().getUnsynced()
                 if (unsyncedMeals.isNotEmpty()) {
                     val mealResult = remoteCloudDataSource.pushMealRecords(unsyncedMeals)
-                    if (mealResult.isSuccess) {
-                        database.mealRecordDao().markSynced(unsyncedMeals.map { it.id })
-                        logsUploadedCount += unsyncedMeals.size
-                    }
+                    mealResult.getOrThrow()
+                    database.mealRecordDao().markSynced(unsyncedMeals.map { it.id })
+                    logsUploadedCount += unsyncedMeals.size
                 }
 
                 // 3. Upload unsynced classroom attendance records
                 val unsyncedAttendance = database.attendanceRecordDao().getUnsynced()
                 if (unsyncedAttendance.isNotEmpty()) {
                     val attResult = remoteCloudDataSource.pushAttendanceRecords(unsyncedAttendance)
-                    if (attResult.isSuccess) {
-                        database.attendanceRecordDao().markSynced(unsyncedAttendance.map { it.id })
-                        logsUploadedCount += unsyncedAttendance.size
-                    }
+                    attResult.getOrThrow()
+                    database.attendanceRecordDao().markSynced(unsyncedAttendance.map { it.id })
+                    logsUploadedCount += unsyncedAttendance.size
                 }
 
                 // 4. Upload unsynced examination exceptions
                 val unsyncedExceptions = database.examExceptionDao().getUnsynced()
                 if (unsyncedExceptions.isNotEmpty()) {
                     val exResult = remoteCloudDataSource.pushExamExceptions(unsyncedExceptions)
-                    if (exResult.isSuccess) {
-                        database.examExceptionDao().markSynced(unsyncedExceptions.map { it.id })
-                    }
+                    exResult.getOrThrow()
+                    database.examExceptionDao().markSynced(unsyncedExceptions.map { it.id })
                 }
 
                 // 5. Fetch modified student records from cloud (since last sync time)
                 val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince(lastSuccessfulSyncTime - 5000)
-                var studentsDownloadedCount = 0
+                val remoteStudents = fetchStudentsResult.getOrThrow()
+                val studentsDownloadedCount = remoteStudents.size
                 var studentsUpdatedCount = 0
-                if (fetchStudentsResult.isSuccess) {
-                    val remoteStudents = fetchStudentsResult.getOrThrow()
-                    studentsDownloadedCount = remoteStudents.size
-                    for (remoteStudent in remoteStudents) {
-                        val local = database.studentDao().getStudentById(remoteStudent.id)
-                        // Conflict resolution: Last-Write-Wins based on updatedAt
-                        if (local == null || remoteStudent.updatedAt >= local.updatedAt) {
-                            database.studentDao().insertOrUpdateStudent(remoteStudent)
-                            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(remoteStudent.toDomain()))
-                            studentsUpdatedCount++
-                        }
+                for (remoteStudent in remoteStudents) {
+                    val local = database.studentDao().getStudentById(remoteStudent.id)
+                    // Conflict resolution: Last-Write-Wins based on updatedAt
+                    if (local == null || remoteStudent.updatedAt >= local.updatedAt) {
+                        database.studentDao().insertOrUpdateStudent(remoteStudent)
+                        database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(remoteStudent.toDomain()))
+                        studentsUpdatedCount++
                     }
                 }
 
                 // 6. Fetch modified card records from cloud
                 val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince(lastSuccessfulSyncTime - 5000)
-                if (fetchCardsResult.isSuccess) {
-                    val remoteCards = fetchCardsResult.getOrThrow()
-                    for (remoteCard in remoteCards) {
-                        val local = database.cardDao().getCardById(remoteCard.id)
-                        if (local == null || remoteCard.updatedAt >= local.updatedAt) {
-                            database.cardDao().insertOrUpdateCard(remoteCard)
-                        }
+                val remoteCards = fetchCardsResult.getOrThrow()
+                for (remoteCard in remoteCards) {
+                    val local = database.cardDao().getCardById(remoteCard.id)
+                    if (local == null || remoteCard.updatedAt >= local.updatedAt) {
+                        database.cardDao().insertOrUpdateCard(remoteCard)
                     }
                 }
 
                 val now = System.currentTimeMillis()
 
-                // 7. Drain pending offline change queue
+                // Keep queued changes until each operation has a real remote handler.
                 val pendingChanges = database.pendingChangeDao().getPendingChanges()
-                for (change in pendingChanges) {
-                    try {
-                        database.pendingChangeDao().markSynced(change.changeId, now)
-                    } catch (e: Exception) {
-                        database.pendingChangeDao().recordFailure(change.changeId, e.localizedMessage ?: "Sync failed", now)
-                    }
+                if (pendingChanges.isNotEmpty()) {
+                    throw UnsupportedOperationException(
+                        "Cloud sync cannot safely drain " + pendingChanges.size + " queued changes yet; they have been retained."
+                    )
                 }
 
                 // 8. Update sync metadata
