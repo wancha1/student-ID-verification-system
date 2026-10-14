@@ -15,6 +15,10 @@ interface StudentDao {
     @Query("SELECT * FROM students WHERE id = :id AND isDeleted = 0 LIMIT 1")
     suspend fun getStudentById(id: String): StudentEntity?
 
+    /** Includes soft-deleted rows so queued changes can be reconciled with a later deletion. */
+    @Query("SELECT * FROM students WHERE id = :id LIMIT 1")
+    suspend fun getStudentByIdIncludingDeleted(id: String): StudentEntity?
+
     @Query("SELECT * FROM students WHERE studentNumber = :studentNumber AND isDeleted = 0 LIMIT 1")
     suspend fun getStudentByStudentNumber(studentNumber: String): StudentEntity?
 

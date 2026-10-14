@@ -43,10 +43,28 @@ test("Unauthenticated user: cannot read staff profile", async () => {
   await assertFails(unauthDb.collection("users").doc(ALICE_UID).get());
 });
 
-test("Authenticated user: can create and read their own staff profile", async () => {
+test("Authenticated user: can create and read a least-privilege staff profile", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
   await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).set({
+      userId: ALICE_UID,
+      email: "alice@oakridge.ac.ug",
+      displayName: "Alice Staff",
+      role: "GATE_OFFICER",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  const doc = await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).get());
+});
+
+
+test("Authenticated user cannot assign themselves an elevated role", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const now = new Date();
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
       email: "alice@oakridge.ac.ug",
@@ -56,8 +74,27 @@ test("Authenticated user: can create and read their own staff profile", async ()
       updatedAt: now,
     })
   );
+});
 
-  const doc = await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).get());
+test("Authenticated user cannot change their role after enrollment", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const now = new Date();
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).set({
+      userId: ALICE_UID,
+      email: "alice@oakridge.ac.ug",
+      displayName: "Alice Staff",
+      role: "GATE_OFFICER",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      role: "ADMIN",
+      updatedAt: new Date(),
+    })
+  );
 });
 
 test("Cross-user isolation: Bob cannot read Alice's student records", async () => {

@@ -6,7 +6,11 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.room.Room
 import com.example.data.MockStudentRepository
 import com.example.data.RoomStudentRepository
+import com.example.data.sync.InMemoryCloudBackend
+import com.example.data.sync.SyncManager
+import com.example.data.sync.UnconfiguredCloudBackend
 import com.example.data.local.AppDatabase
+import com.example.data.local.PendingChangeEntity
 import com.example.data.local.CardEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
@@ -20,6 +24,7 @@ import com.example.model.GateVerificationDecision
 import com.example.model.StaffPermission
 import com.example.model.Student
 import com.example.model.StudentScanResult
+import com.example.model.SyncStatus
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
 import com.example.util.CardCryptoManager
@@ -621,6 +626,18 @@ class LtcSystemVerificationTest {
             assertEquals("Exactly one initial active card must be issued", 1, cards.size)
             val initialCard = cards.first()
             assertEquals(CardStatus.ACTIVE.name, initialCard.status)
+            assertTrue(
+                "Issued card identifiers must be random 128-bit identifiers, not derived from admission numbers",
+                initialCard.cardIdentifier.matches(Regex("^CRD-[0-9A-F]{32}$"))
+            )
+            assertTrue("Issued card QR payload must not be empty", initialCard.qrPayload.isNotBlank())
+            val parsedInitialQr = QrCodeUtils.parseQrCode(initialCard.qrPayload)
+            assertTrue("Issued card QR must use the signed V2 format", parsedInitialQr is QrParseResult.ValidV2Card)
+            assertEquals(
+                "Signed QR card ID must match the persisted card identifier",
+                initialCard.cardIdentifier,
+                (parsedInitialQr as QrParseResult.ValidV2Card).cardId
+            )
 
             val pendingChanges1 = database.pendingChangeDao().getPendingChanges()
             assertEquals("Exactly 2 pending changes must be enqueued (STUDENT & CARD)", 2, pendingChanges1.size)
@@ -666,6 +683,73 @@ class LtcSystemVerificationTest {
 
             val pendingChanges4 = database.pendingChangeDao().getPendingChanges()
             assertEquals(6, pendingChanges4.size)
+
+            database.close()
+        }
+    }
+
+    @Test
+    fun testReconnectDoesNotReportUnconfiguredCloudAsSynced() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val syncManager = SyncManager(database, UnconfiguredCloudBackend())
+            syncManager.initialize()
+
+            assertEquals(SyncStatus.SYNC_FAILED, syncManager.syncInfo.value.status)
+            syncManager.setNetworkConnectivity(false)
+            assertEquals(SyncStatus.OFFLINE, syncManager.syncInfo.value.status)
+            syncManager.setNetworkConnectivity(true)
+            assertEquals(
+                "Reconnecting to the internet cannot make an unconfigured backend appear synced",
+                SyncStatus.SYNC_FAILED,
+                syncManager.syncInfo.value.status
+            )
+            assertTrue(syncManager.syncInfo.value.errorMessage?.contains("not configured") == true)
+
+            database.close()
+        }
+    }
+
+    @Test
+    fun testSyncManagerDrainsQueuedStudentChangeAfterRemoteSuccess() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val backend = InMemoryCloudBackend()
+            val syncManager = SyncManager(database, backend)
+            val now = System.currentTimeMillis()
+            val student = Student(
+                id = "sync-student-01",
+                studentNumber = "LTC-2026-9901",
+                firstName = "Test",
+                lastName = "Student",
+                gradeClass = "Senior 4-A",
+                isDayScholar = true,
+                dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+                feesStatus = FeeStatus.CLEARED,
+                outstandingAmount = 0.0,
+                updatedAt = now
+            )
+            database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+            database.pendingChangeDao().enqueueChange(
+                PendingChangeEntity(
+                    changeId = "sync-change-student-01",
+                    entityType = SyncEntityType.STUDENT,
+                    recordId = student.id,
+                    operationType = SyncOperationType.CREATE,
+                    createdAt = now
+                )
+            )
+
+            syncManager.initialize()
+            val syncResult = syncManager.syncNow()
+
+            assertTrue("Sync should succeed when the remote backend accepts the student", syncResult.isSuccess)
+            assertEquals("Successfully uploaded changes must leave the retry queue", 0, database.pendingChangeDao().getPendingCount())
+            val remoteStudents = backend.fetchAllRemoteStudents().getOrThrow()
+            assertEquals(1, remoteStudents.size)
+            assertEquals(student.id, remoteStudents.single().id)
 
             database.close()
         }
@@ -795,10 +879,10 @@ class LtcSystemVerificationTest {
     // =========================================================================
 
     @Test
-    fun testMigrationFromVersion4To6PreservesAllDataAndAppliesSchemaChanges() {
+    fun testMigrationFromVersion4To7PreservesAllDataAndAppliesSchemaChanges() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
-            val dbFile = File(context.filesDir, "test_migration_v4_to_v6.db")
+            val dbFile = File(context.filesDir, "test_migration_v4_to_v7.db")
             if (dbFile.exists()) dbFile.delete()
 
             // 1. Create native SQLite database strictly matching Version 4 schema
@@ -1003,9 +1087,9 @@ class LtcSystemVerificationTest {
 
             rawDb.close()
 
-            // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
+            // 2. Open through Room with explicit grounded migrations MIGRATION_4_5, MIGRATION_5_6, and MIGRATION_6_7
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1035,7 +1119,7 @@ class LtcSystemVerificationTest {
 
             // 4. Verify newly created pending_changes table is fully functional
             val newChange = com.example.data.local.PendingChangeEntity(
-                changeId = "change-v6-post-migration-01",
+                changeId = "change-v7-post-migration-01",
                 entityType = SyncEntityType.STUDENT,
                 recordId = "stu-v4-01",
                 operationType = SyncOperationType.UPDATE,
@@ -1044,13 +1128,13 @@ class LtcSystemVerificationTest {
             roomDb.pendingChangeDao().enqueueChange(newChange)
             val pendingChanges = roomDb.pendingChangeDao().getPendingChanges()
             assertEquals("pending_changes queue must be queryable and contain enqueued change", 1, pendingChanges.size)
-            assertEquals("change-v6-post-migration-01", pendingChanges[0].changeId)
+            assertEquals("change-v7-post-migration-01", pendingChanges[0].changeId)
 
             // 5. Close and reopen to verify stability across sessions
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1065,10 +1149,10 @@ class LtcSystemVerificationTest {
     }
 
     @Test
-    fun testMigrationFromVersion5To6PreservesQrTokenAndCreatesPendingChangesTable() {
+    fun testMigrationFromVersion5To7PreservesQrTokenAndCreatesPendingChangesTable() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
-            val dbFile = File(context.filesDir, "test_migration_v5_to_v6.db")
+            val dbFile = File(context.filesDir, "test_migration_v5_to_v7.db")
             if (dbFile.exists()) dbFile.delete()
 
             // 1. Create native SQLite database strictly matching Version 5 schema (has qrToken, no pending_changes)
@@ -1226,9 +1310,9 @@ class LtcSystemVerificationTest {
             )
             rawDb.close()
 
-            // 2. Open with Room specifying MIGRATION_5_6
+            // 2. Open with Room using the complete migration path through Version 7
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1271,7 +1355,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1440,9 +1524,9 @@ class LtcSystemVerificationTest {
         )
         rawDb.close()
 
-        // 2. Perform Room migration to Version 6
+        // 2. Perform Room migration to Version 7
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
 
@@ -1499,7 +1583,16 @@ class LtcSystemVerificationTest {
         assertTrue("Index on createdAt must exist", indexList.contains("index_pending_changes_createdAt"))
         assertTrue("Index on (entityType, recordId) must exist", indexList.contains("index_pending_changes_entityType_recordId"))
 
-        // 6. Test idempotent execution of MIGRATION_5_6 DDL
+        // Version 7 must include all operational tables introduced by MIGRATION_6_7.
+        for (table in listOf("meal_records", "attendance_records", "exam_exceptions")) {
+            val tableCursor = db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '$table'"
+            )
+            assertTrue("Version 7 migration must create $table", tableCursor.moveToFirst())
+            tableCursor.close()
+        }
+
+        // 6. Test idempotent execution of pending_changes DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
         roomDb.openHelper.writableDatabase.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_changes_status` ON `pending_changes` (`status`)")
 

@@ -18,76 +18,23 @@ class FirestoreCloudBackend(
     private val firestoreRepo: FirestoreStudentRepository
 ) : RemoteCloudDataSource {
 
-    override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> {
-        return Result.success(emptyList())
-    }
+    private fun unsupported(operation: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Firestore operation '" + operation + "' is not implemented. No data was synced."))
 
-    override suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>> {
-        return Result.success(emptyList())
-    }
+    private fun <T> unsupportedData(operation: String): Result<T> =
+        Result.failure(UnsupportedOperationException("Firestore operation '" + operation + "' is not implemented. No data was synced."))
 
-    override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> {
-        return try {
-            for (log in logs) {
-                firestoreRepo.recordScanLog(
-                    FirestoreScanLog(
-                        id = log.id,
-                        studentNumber = log.studentNumber ?: "UNKNOWN",
-                        studentName = log.studentName,
-                        decision = log.decision,
-                        gatePoint = log.gateLocation,
-                        scannedAt = Timestamp(log.timestamp / 1000, ((log.timestamp % 1000) * 1000000).toInt())
-                    )
-                )
-            }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> {
-        return Result.success(emptyList())
-    }
-
-    override suspend fun fetchAllRemoteCards(): Result<List<CardEntity>> {
-        return Result.success(emptyList())
-    }
-
-    override suspend fun updateRemoteFeeStatus(
-        studentId: String,
-        newStatus: FeeStatus,
-        outstandingAmount: Double,
-        updatedAt: Long
-    ): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> {
-        return Result.success(Unit)
-    }
-
-    override suspend fun updateRemoteCard(card: CardEntity): Result<Unit> {
-        return Result.success(Unit)
-    }
+    override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = unsupportedData("fetchStudentsUpdatedSince")
+    override suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>> = unsupportedData("fetchCardsUpdatedSince")
+    override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = unsupported("pushStudentChanges")
+    override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = unsupported("pushCardChanges")
+    override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> = unsupported("pushGateLogs")
+    override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> = unsupported("pushMealRecords")
+    override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> = unsupported("pushAttendanceRecords")
+    override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> = unsupported("pushExamExceptions")
+    override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> = unsupportedData("fetchAllRemoteStudents")
+    override suspend fun fetchAllRemoteCards(): Result<List<CardEntity>> = unsupportedData("fetchAllRemoteCards")
+    override suspend fun updateRemoteFeeStatus(studentId: String, newStatus: FeeStatus, outstandingAmount: Double, updatedAt: Long): Result<Unit> = unsupported("updateRemoteFeeStatus")
+    override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = unsupported("deleteRemoteStudent")
+    override suspend fun updateRemoteCard(card: CardEntity): Result<Unit> = unsupported("updateRemoteCard")
 }

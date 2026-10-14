@@ -10,6 +10,7 @@ import com.example.data.local.StudentProfileEntity
 import com.example.data.local.SyncEntityType
 import com.example.data.local.SyncOperationType
 import com.example.data.sync.InMemoryCloudBackend
+import com.example.data.sync.UnconfiguredCloudBackend
 import com.example.data.sync.RemoteCloudDataSource
 import com.example.data.sync.SyncManager
 import com.example.model.AccessStatus
@@ -73,7 +74,7 @@ class RoomStudentRepository(
 
     suspend fun initialize() = withContext(ioDispatcher) {
         syncManager.initialize()
-        seedInitialDataIfEmpty()
+        // Production startup must not insert synthetic student identities or guardian data.
     }
 
     override suspend fun getStudentById(id: String): Student? = withContext(ioDispatcher) {
@@ -382,6 +383,24 @@ class RoomStudentRepository(
         }
     }
 
+    /**
+     * Request synchronization after a local transaction when a real remote backend is configured.
+     * The in-memory backend is reserved for tests, and the unconfigured backend must remain
+     * visibly unsynced rather than being treated as a successful cloud connection.
+     */
+    private suspend fun requestSyncIfConfigured() {
+        val backend = syncManager.getRemoteCloudBackend()
+        // The in-memory backend is test-only; don't auto-drain its test fixtures.
+        if (backend is InMemoryCloudBackend) return
+
+        // Refresh the visible outbox count even when cloud configuration is missing/offline.
+        syncManager.refreshPendingState()
+        if (!syncManager.syncInfo.value.isOnline || backend is UnconfiguredCloudBackend) return
+
+        // A configured backend is responsible for reporting each remote failure in SyncInfo.
+        syncManager.syncNow()
+    }
+
     override suspend fun updateFeeStatus(
         studentId: String,
         newStatus: FeeStatus,
@@ -429,9 +448,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteFeeStatus(studentId, newStatus, outstandingAmount, now)
-            }
+            requestSyncIfConfigured()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -444,17 +461,24 @@ class RoomStudentRepository(
         val studentWithTimestamp = student.copy(updatedAt = now)
         val entity = StudentEntity.fromDomain(studentWithTimestamp)
 
-        // Automatically issue first active card for the new student
-        val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
-        val cardId = "CRD-$cleanStudentNum-01"
-        val signedPayload = if (CardCryptoManager.hasIssuerPrivateKey()) {
-            try {
-                CardCryptoManager.signCardPayload(cardId)
-            } catch (_: Exception) {
-                ""
-            }
-        } else {
-            ""
+        // Never issue a card with an empty/unsigned QR payload. Registering a student
+        // without the issuer key must fail before any local records are written.
+        if (!CardCryptoManager.hasIssuerPrivateKey()) {
+            return@withContext Result.failure(
+                IllegalStateException(
+                    "Card issuance is unavailable: this device has no authorized issuer private key. " +
+                        "Provision the issuer before registering students."
+                )
+            )
+        }
+        // The public card identifier must be unpredictable and independent of the admission number.
+        val cardId = CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = try {
+            CardCryptoManager.signCardPayload(cardId)
+        } catch (e: Exception) {
+            return@withContext Result.failure(
+                IllegalStateException("Could not sign the student card QR payload.", e)
+            )
         }
         val firstCard = Card(
             id = UUID.randomUUID().toString(),
@@ -499,10 +523,9 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushStudentChanges(listOf(entity))
-                remoteCloudDataSource.pushCardChanges(listOf(cardEntity))
-            }
+            // Local registration and the durable pending queue are committed atomically.
+            // The queue is the only source of truth for remote mutations.
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -533,9 +556,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushStudentChanges(listOf(entity))
-            }
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -563,9 +584,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.deleteRemoteStudent(studentId, now)
-            }
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -641,9 +660,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            requestSyncIfConfigured()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -685,9 +702,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteCard(updated)
-            }
+            requestSyncIfConfigured()
             Result.success(updated.toDomain())
         } catch (e: Exception) {
             Result.failure(e)
@@ -762,9 +777,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            requestSyncIfConfigured()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -821,9 +834,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            requestSyncIfConfigured()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -865,9 +876,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteCard(updated)
-            }
+            requestSyncIfConfigured()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1091,7 +1100,7 @@ class RoomStudentRepository(
             return instance ?: synchronized(this) {
                 instance ?: run {
                     val db = AppDatabase.getInstance(context.applicationContext)
-                    RoomStudentRepository(db).also { repo ->
+                    RoomStudentRepository(db, UnconfiguredCloudBackend()).also { repo ->
                         instance = repo
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             repo.initialize()
