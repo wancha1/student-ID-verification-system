@@ -86,13 +86,30 @@ class SyncManager(
         )
     }
 
-    suspend fun notifyLocalLogAdded() = withContext(ioDispatcher) {
+    suspend fun refreshPendingState() = withContext(ioDispatcher) {
         val pending = calculatePendingCount()
+        val online = _syncInfo.value.isOnline
+        val backendUnconfigured = remoteCloudDataSource is UnconfiguredCloudBackend
         _syncInfo.value = _syncInfo.value.copy(
             pendingLogsCount = pending,
-            status = if (!_syncInfo.value.isOnline) SyncStatus.OFFLINE else SyncStatus.NEEDS_SYNC
+            status = when {
+                !online -> SyncStatus.OFFLINE
+                backendUnconfigured -> SyncStatus.SYNC_FAILED
+                pending > 0 -> SyncStatus.NEEDS_SYNC
+                else -> SyncStatus.SYNCED
+            },
+            errorMessage = when {
+                !online -> "Device is offline. Local changes remain queued."
+                backendUnconfigured -> "Cloud sync is not configured. Data remains local on this device."
+                pending > 0 -> "Local changes are waiting to sync."
+                else -> null
+            }
         )
-        // If online, auto-sync in background
+    }
+
+    suspend fun notifyLocalLogAdded() = withContext(ioDispatcher) {
+        refreshPendingState()
+        // If online, auto-sync in background.
         if (_syncInfo.value.isOnline) {
             syncNow()
         }
