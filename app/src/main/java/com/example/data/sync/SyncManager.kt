@@ -169,11 +169,18 @@ class SyncManager(
                 val studentsDownloadedCount = remoteStudents.size
                 var studentsUpdatedCount = 0
                 for (remoteStudent in remoteStudents) {
-                    val local = database.studentDao().getStudentById(remoteStudent.id)
-                    // Conflict resolution: Last-Write-Wins based on updatedAt
+                    // Include local tombstones in conflict resolution so an older remote record
+                    // cannot resurrect a student deleted while this device was offline.
+                    val local = database.studentDao().getStudentByIdIncludingDeleted(remoteStudent.id)
                     if (local == null || remoteStudent.updatedAt >= local.updatedAt) {
                         database.studentDao().insertOrUpdateStudent(remoteStudent)
-                        database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(remoteStudent.toDomain()))
+                        if (remoteStudent.isDeleted) {
+                            database.studentProfileDao().deleteProfileById(remoteStudent.id)
+                        } else {
+                            database.studentProfileDao().insertOrUpdateProfile(
+                                StudentProfileEntity.fromStudent(remoteStudent.toDomain())
+                            )
+                        }
                         studentsUpdatedCount++
                     }
                 }
