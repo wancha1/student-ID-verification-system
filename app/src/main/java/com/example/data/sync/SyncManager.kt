@@ -2,6 +2,8 @@ package com.example.data.sync
 
 import com.example.data.local.AppDatabase
 import com.example.data.local.StudentProfileEntity
+import com.example.data.local.SyncEntityType
+import com.example.data.local.SyncOperationType
 import com.example.data.local.SyncMetadataEntity
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
@@ -163,11 +165,58 @@ class SyncManager(
 
                 val now = System.currentTimeMillis()
 
-                // Keep queued changes until each operation has a real remote handler.
+                // Drain the durable mutation queue only after each remote operation succeeds.
+                // Failed items stay in Room and are included in the next retry.
                 val pendingChanges = database.pendingChangeDao().getPendingChanges()
-                if (pendingChanges.isNotEmpty()) {
-                    throw UnsupportedOperationException(
-                        "Cloud sync cannot safely drain " + pendingChanges.size + " queued changes yet; they have been retained."
+                val queueFailures = mutableListOf<String>()
+                for (change in pendingChanges) {
+                    try {
+                        when (change.entityType) {
+                            SyncEntityType.STUDENT -> {
+                                if (change.operationType == SyncOperationType.DELETE) {
+                                    remoteCloudDataSource
+                                        .deleteRemoteStudent(change.recordId, change.createdAt)
+                                        .getOrThrow()
+                                } else {
+                                    val student = database.studentDao().getStudentById(change.recordId)
+                                        ?: throw NoSuchElementException(
+                                            "Queued student " + change.recordId + " no longer exists locally."
+                                        )
+                                    remoteCloudDataSource.pushStudentChanges(listOf(student)).getOrThrow()
+                                }
+                            }
+
+                            SyncEntityType.FEE_STATUS -> {
+                                val student = database.studentDao().getStudentById(change.recordId)
+                                    ?: throw NoSuchElementException(
+                                        "Queued fee-status student " + change.recordId + " no longer exists locally."
+                                    )
+                                remoteCloudDataSource.pushStudentChanges(listOf(student)).getOrThrow()
+                            }
+
+                            SyncEntityType.CARD -> {
+                                val card = database.cardDao().getCardById(change.recordId)
+                                    ?: throw NoSuchElementException(
+                                        "Queued card " + change.recordId + " no longer exists locally."
+                                    )
+                                remoteCloudDataSource.pushCardChanges(listOf(card)).getOrThrow()
+                            }
+
+                            else -> throw UnsupportedOperationException(
+                                "No sync handler exists for queued entity type '" + change.entityType + "'."
+                            )
+                        }
+                        database.pendingChangeDao().markSynced(change.changeId)
+                    } catch (e: Exception) {
+                        val message = e.localizedMessage ?: e.javaClass.simpleName
+                        database.pendingChangeDao().recordFailure(change.changeId, message)
+                        queueFailures += change.entityType + "/" + change.recordId + ": " + message
+                    }
+                }
+                if (queueFailures.isNotEmpty()) {
+                    throw IllegalStateException(
+                        "Could not sync " + queueFailures.size + " queued change(s): " +
+                            queueFailures.joinToString("; ")
                     )
                 }
 
