@@ -447,24 +447,23 @@ class RoomStudentRepository(
 
         // Never issue a card with an empty/unsigned QR payload. Registering a student
         // without the issuer key must fail before any local records are written.
-        val signedPayload = try {
-            if (!CardCryptoManager.hasIssuerPrivateKey()) {
-                return@withContext Result.failure(
-                    IllegalStateException(
-                        "Card issuance is unavailable: this device has no authorized issuer private key. " +
-                            "Provision the issuer before registering students."
-                    )
+        if (!CardCryptoManager.hasIssuerPrivateKey()) {
+            return@withContext Result.failure(
+                IllegalStateException(
+                    "Card issuance is unavailable: this device has no authorized issuer private key. " +
+                        "Provision the issuer before registering students."
                 )
-            }
-            // The public card identifier must be unpredictable and independent of the admission number.
-            val cardId = "CRD-${UUID.randomUUID().toString().replace("-", "").uppercase()}"
+            )
+        }
+        // The public card identifier must be unpredictable and independent of the admission number.
+        val cardId = "CRD-${UUID.randomUUID().toString().replace("-", "").uppercase()}"
+        val signedPayload = try {
             CardCryptoManager.signCardPayload(cardId)
         } catch (e: Exception) {
             return@withContext Result.failure(
                 IllegalStateException("Could not sign the student card QR payload.", e)
             )
         }
-        val cardId = signedPayload.substringAfter("LTC:V2:").substringBefore(":")
         val firstCard = Card(
             id = UUID.randomUUID().toString(),
             cardIdentifier = cardId,
