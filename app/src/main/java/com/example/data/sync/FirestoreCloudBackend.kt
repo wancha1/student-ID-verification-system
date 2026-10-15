@@ -29,6 +29,15 @@ class FirestoreCloudBackend(
     private val schoolId: String = "ltc_school_01"
 ) : RemoteCloudDataSource {
 
+    constructor(context: Context) : this(
+        FirebaseFirestore.getInstance(
+            FirebaseApp.getInstance(),
+            context.getString(R.string.firestore_database_id)
+        ),
+        FirebaseAuth.getInstance(FirebaseApp.getInstance()),
+        "ltc_school_01"
+    )
+
     constructor(firestoreRepo: FirestoreStudentRepository) : this(
         FirebaseFirestore.getInstance(FirebaseApp.getInstance(), FIRESTORE_DATABASE_ID),
         FirebaseAuth.getInstance(FirebaseApp.getInstance()),
