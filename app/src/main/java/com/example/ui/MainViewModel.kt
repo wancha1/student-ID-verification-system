@@ -44,6 +44,7 @@ import com.example.util.FeedbackHelper
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import com.example.util.SecurityManager
+import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -297,6 +298,8 @@ class MainViewModel(
 
     fun logout() {
         lockSession()
+        // Explicit logout revokes the client session; background locking only clears the UI session.
+        runCatching { FirebaseAuth.getInstance().signOut() }
     }
 
     fun openScanner() {
