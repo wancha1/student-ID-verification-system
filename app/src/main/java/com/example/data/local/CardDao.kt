@@ -24,6 +24,10 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE id = :cardId AND isDeleted = 0 LIMIT 1")
     suspend fun getCardById(cardId: String): CardEntity?
 
+    /** Includes soft-deleted cards so sync reconciliation cannot resurrect them. */
+    @Query("SELECT * FROM cards WHERE id = :cardId LIMIT 1")
+    suspend fun getCardByIdIncludingDeleted(cardId: String): CardEntity?
+
     @Query("SELECT * FROM cards WHERE cardIdentifier = :cardIdentifier AND isDeleted = 0 LIMIT 1")
     suspend fun getCardByIdentifier(cardIdentifier: String): CardEntity?
 
