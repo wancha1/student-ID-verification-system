@@ -210,4 +210,27 @@ class RoomStudentProfileDatabaseTest {
         assertTrue(pending.any { it.entityType == com.example.data.local.SyncEntityType.STUDENT && it.operationType == com.example.data.local.SyncOperationType.CREATE })
         assertTrue(pending.any { it.entityType == com.example.data.local.SyncEntityType.FEE_STATUS && it.operationType == com.example.data.local.SyncOperationType.STATUS_CHANGE })
     }
+    
+    @Test
+    fun testFailedPendingChangesRemainRetryableAndCounted() = runBlocking {
+        val changeId = UUID.randomUUID().toString()
+        database.pendingChangeDao().enqueueChange(
+            com.example.data.local.PendingChangeEntity(
+                changeId = changeId,
+                entityType = com.example.data.local.SyncEntityType.FEE_STATUS,
+                recordId = "stu-retry-001",
+                operationType = com.example.data.local.SyncOperationType.STATUS_CHANGE,
+                status = com.example.data.local.SyncItemStatus.FAILED,
+                retryCount = 1,
+                lastError = "Temporary network failure"
+            )
+        )
+
+        val retryable = database.pendingChangeDao().getPendingChanges()
+        assertEquals(1, retryable.size)
+        assertEquals(changeId, retryable.single().changeId)
+        assertEquals(com.example.data.local.SyncItemStatus.FAILED, retryable.single().status)
+        assertEquals(1, database.pendingChangeDao().getPendingCount())
+    }
+
 }
