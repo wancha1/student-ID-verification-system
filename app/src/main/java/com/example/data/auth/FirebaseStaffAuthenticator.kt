@@ -43,6 +43,9 @@ class FirebaseStaffAuthenticator {
             if (!staffSnapshot.exists()) {
                 throw SecurityException("This Firebase account is not provisioned as LTC staff.")
             }
+            if (staffSnapshot.getBoolean("active") != true) {
+                throw SecurityException("This LTC staff account is inactive.")
+            }
 
             val rawRole = staffSnapshot.getString("role")
                 ?.trim()
