@@ -1,5 +1,7 @@
 package com.example.data.sync
 
+import android.content.Context
+import com.example.R
 import com.example.data.FirestoreStudentRepository
 import com.example.data.local.AttendanceRecordEntity
 import com.example.data.local.CardEntity
@@ -9,9 +11,7 @@ import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
 import com.example.model.FeeStatus
 import com.google.firebase.FirebaseApp
-import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
@@ -25,7 +25,7 @@ class FirestoreCloudBackend(
         FirebaseApp.getInstance(),
         FIRESTORE_DATABASE_ID
     ),
-    private val auth: FirebaseAuth = Firebase.auth,
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance(FirebaseApp.getInstance()),
     private val schoolId: String = "ltc_school_01"
 ) : RemoteCloudDataSource {
 
