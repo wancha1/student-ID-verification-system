@@ -45,7 +45,11 @@ class SyncManager(
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
             pendingLogsCount = pendingCount,
-            status = when {\n                !_syncInfo.value.isOnline -> SyncStatus.OFFLINE\n                pendingCount > 0 -> SyncStatus.NEEDS_SYNC\n                else -> SyncStatus.SYNCED\n            }
+            status = when {
+                !_syncInfo.value.isOnline -> SyncStatus.OFFLINE
+                pendingCount > 0 -> SyncStatus.NEEDS_SYNC
+                else -> SyncStatus.SYNCED
+            }
         )
     }
 
