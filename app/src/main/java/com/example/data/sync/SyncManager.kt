@@ -1,11 +1,15 @@
 package com.example.data.sync
 
 import com.example.data.local.AppDatabase
+import com.example.data.local.PendingChangeEntity
+import com.example.data.local.SyncEntityType
+import com.example.data.local.SyncOperationType
 import com.example.data.local.StudentProfileEntity
 import com.example.data.local.SyncMetadataEntity
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.SyncSummary
+import com.example.model.FeeStatus
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,29 +173,45 @@ class SyncManager(
 
                 val now = System.currentTimeMillis()
 
-                // 7. Drain pending offline change queue
+                // 7. Dispatch durable outbox changes. A change is marked SYNCED only
+                // after its corresponding remote operation has positively succeeded.
                 val pendingChanges = database.pendingChangeDao().getPendingChanges()
                 for (change in pendingChanges) {
-                    try {
+                    val dispatchResult = dispatchPendingChange(change)
+                    if (dispatchResult.isSuccess) {
                         database.pendingChangeDao().markSynced(change.changeId, now)
-                    } catch (e: Exception) {
-                        database.pendingChangeDao().recordFailure(change.changeId, e.localizedMessage ?: "Sync failed", now)
+                    } else {
+                        database.pendingChangeDao().recordFailure(
+                            change.changeId,
+                            dispatchResult.exceptionOrNull()?.localizedMessage ?: "Remote dispatch failed",
+                            now
+                        )
                     }
                 }
 
-                // 8. Update sync metadata
-                lastSuccessfulSyncTime = now
-                database.syncMetadataDao().setValue(
-                    SyncMetadataEntity("last_sync_timestamp", now.toString(), now)
-                )
-
+                // 8. Only advance the sync watermark when all local outbox/log records
+                // are confirmed uploaded. Failed items remain visible and retryable.
                 val pendingAfter = calculatePendingCount()
-                _syncInfo.value = _syncInfo.value.copy(
-                    status = SyncStatus.SYNCED,
-                    lastSyncTimestamp = now,
-                    pendingLogsCount = pendingAfter,
-                    errorMessage = null
-                )
+                if (pendingAfter == 0) {
+                    lastSuccessfulSyncTime = now
+                    database.syncMetadataDao().setValue(
+                        SyncMetadataEntity("last_sync_timestamp", now.toString(), now)
+                    )
+                    _syncInfo.value = _syncInfo.value.copy(
+                        status = SyncStatus.SYNCED,
+                        lastSyncTimestamp = now,
+                        pendingLogsCount = 0,
+                        errorMessage = null
+                    )
+                } else {
+                    val message = "$pendingAfter local change(s) remain unsynchronized; they will be retried."
+                    _syncInfo.value = _syncInfo.value.copy(
+                        status = SyncStatus.SYNC_FAILED,
+                        pendingLogsCount = pendingAfter,
+                        errorMessage = message
+                    )
+                    return@withLock Result.failure(IllegalStateException(message))
+                }
 
                 val summary = SyncSummary(
                     studentsDownloaded = studentsDownloadedCount,
@@ -207,6 +227,58 @@ class SyncManager(
                 )
                 Result.failure(e)
             }
+        }
+    }
+
+    private suspend fun dispatchPendingChange(change: PendingChangeEntity): Result<Unit> {
+        return when (change.entityType) {
+            SyncEntityType.STUDENT -> {
+                if (change.operationType == SyncOperationType.DELETE) {
+                    remoteCloudDataSource.deleteRemoteStudent(change.recordId, change.createdAt)
+                } else {
+                    val student = database.studentDao().getStudentById(change.recordId)
+                        ?: return Result.failure(IllegalStateException("Queued student ${change.recordId} is missing locally"))
+                    remoteCloudDataSource.pushStudentChanges(listOf(student))
+                }
+            }
+
+            SyncEntityType.CARD -> {
+                if (change.operationType == SyncOperationType.DELETE) {
+                    Result.failure(IllegalArgumentException("Card deletion is not a supported sync operation"))
+                } else {
+                    val card = database.cardDao().getCardById(change.recordId)
+                        ?: return Result.failure(IllegalStateException("Queued card ${change.recordId} is missing locally"))
+                    if (change.operationType == SyncOperationType.STATUS_CHANGE) {
+                        remoteCloudDataSource.updateRemoteCard(card)
+                    } else {
+                        remoteCloudDataSource.pushCardChanges(listOf(card))
+                    }
+                }
+            }
+
+            SyncEntityType.FEE_STATUS -> {
+                val student = database.studentDao().getStudentById(change.recordId)
+                    ?: return Result.failure(IllegalStateException("Queued fee update has no local student ${change.recordId}"))
+                val feeStatus = try {
+                    FeeStatus.valueOf(student.feesStatus)
+                } catch (e: Exception) {
+                    return Result.failure(IllegalStateException("Unknown fee status '${student.feesStatus}' for ${change.recordId}", e))
+                }
+                remoteCloudDataSource.updateRemoteFeeStatus(
+                    studentId = student.id,
+                    newStatus = feeStatus,
+                    outstandingAmount = student.outstandingAmount,
+                    updatedAt = student.updatedAt
+                )
+            }
+
+            SyncEntityType.SCAN_LOG -> {
+                val log = database.scanLogDao().getScanLogById(change.recordId)
+                    ?: return Result.failure(IllegalStateException("Queued scan log ${change.recordId} is missing locally"))
+                remoteCloudDataSource.pushGateLogs(listOf(log))
+            }
+
+            else -> Result.failure(IllegalArgumentException("Unsupported queued entity type '${change.entityType}'"))
         }
     }
 
