@@ -70,7 +70,7 @@ service cloud.firestore {
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.keys().hasAll(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
                        request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.role == 'STAFF';
+                       !(request.resource.data.role in ['ADMIN', 'HEAD_TEACHER', 'BURSAR']);
       allow update: if isOwner(userId) &&
                        isValidId(userId) &&
                        request.resource.data.userId == resource.data.userId &&
