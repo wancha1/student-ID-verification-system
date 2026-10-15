@@ -36,11 +36,11 @@ class SyncManager(
     )
     val syncInfo: StateFlow<SyncInfo> = _syncInfo.asStateFlow()
 
-    private var lastSuccessfulSyncTime: Long = System.currentTimeMillis()
+    private var lastSuccessfulSyncTime: Long = 0L
 
     suspend fun initialize() = withContext(ioDispatcher) {
         val savedTimeStr = database.syncMetadataDao().getValue("last_sync_timestamp")
-        lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: System.currentTimeMillis()
+        lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: 0L
         val pendingCount = calculatePendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
@@ -134,10 +134,13 @@ class SyncManager(
                 }
 
                 // 5. Fetch modified student records from cloud (since last sync time)
-                val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince(lastSuccessfulSyncTime - 5000)
+                val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
+                if (fetchStudentsResult.isFailure) {
+                    throw fetchStudentsResult.exceptionOrNull() ?: IllegalStateException("Failed to fetch remote students")
+                }
                 var studentsDownloadedCount = 0
                 var studentsUpdatedCount = 0
-                if (fetchStudentsResult.isSuccess) {
+                run {
                     val remoteStudents = fetchStudentsResult.getOrThrow()
                     studentsDownloadedCount = remoteStudents.size
                     for (remoteStudent in remoteStudents) {
@@ -152,16 +155,23 @@ class SyncManager(
                 }
 
                 // 6. Fetch modified card records from cloud
-                val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince(lastSuccessfulSyncTime - 5000)
-                if (fetchCardsResult.isSuccess) {
+                val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
+                if (fetchCardsResult.isFailure) {
+                    throw fetchCardsResult.exceptionOrNull() ?: IllegalStateException("Failed to fetch remote cards")
+                }
+                run {
                     val remoteCards = fetchCardsResult.getOrThrow()
                     for (remoteCard in remoteCards) {
                         val local = database.cardDao().getCardById(remoteCard.id)
-                        // Invariant: Once revoked/replaced/deleted, card cannot be silently resurrected as ACTIVE
+                        // Revocation is monotonic: an ACTIVE copy must never overwrite a revoked/deleted card.
                         val localIsRevoked = local != null && (local.status in listOf("LOST", "REPLACED", "DEACTIVATED") || local.isDeleted)
+                        val remoteIsRevoked = remoteCard.status in listOf("LOST", "REPLACED", "DEACTIVATED") || remoteCard.isDeleted
                         val remoteIsActive = remoteCard.status == "ACTIVE" && !remoteCard.isDeleted
-                        if (localIsRevoked && remoteIsActive && remoteCard.updatedAt < local.updatedAt) {
-                            // Reject resurrection of obsolete active state
+                        if (localIsRevoked && remoteIsActive) continue
+
+                        // A remote revocation wins over a stale local ACTIVE copy, regardless of device clock skew.
+                        if (remoteIsRevoked && local != null && local.status == "ACTIVE" && !local.isDeleted) {
+                            database.cardDao().insertOrUpdateCard(remoteCard)
                             continue
                         }
 
