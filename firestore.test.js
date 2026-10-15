@@ -455,3 +455,35 @@ test("Card lifecycle: administrator cannot set an unsupported status", async () 
       .update({ status: "MYSTERY_STATUS", updatedAt: Date.now() })
   );
 });
+
+
+test("Inactive staff membership cannot access school records", async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("staff").doc("inactive_staff_01")
+      .set({ role: "GATE_OFFICER", name: "Former staff", active: false });
+  });
+  const inactiveDb = testEnv.authenticatedContext("inactive_staff_01").firestore();
+  await assertFails(
+    inactiveDb.collection("schools").doc(SCHOOL_LTC).collection("students").get()
+  );
+});
+
+test("Card lifecycle: administrator cannot create a card with unsupported status", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-INVALID-CREATE")
+      .set({
+        id: "CRD-INVALID-CREATE",
+        cardIdentifier: "CRD-INVALID-CREATE",
+        studentId: "STU-01",
+        studentNumber: "LTC-2026-0001",
+        qrPayload: "LTC:V2:test",
+        status: "MYSTERY_STATUS",
+        isDeleted: false,
+        updatedAt: Date.now()
+      })
+  );
+});
