@@ -138,9 +138,12 @@ service cloud.firestore {
         // Only Admin/Registrar can create or delete students
         allow create: if isSchoolAdmin(schoolId);
         // Admin or Finance can update; Gate/Teachers cannot update fees
-        allow update: if (isSchoolAdmin(schoolId) ||
-                         (isFinanceStaff(schoolId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feesStatus', 'outstandingAmount', 'accessStatus', 'updatedAt']))) &&
-                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id']);
+        allow update: if
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id']) &&
+                         ((isSchoolAdmin(schoolId) &&
+                           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['feesStatus', 'outstandingAmount'])) ||
+                          (isFinanceStaff(schoolId) &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feesStatus', 'outstandingAmount', 'accessStatus', 'updatedAt'])));
         allow delete: if isSchoolAdmin(schoolId);
       }
 
@@ -165,7 +168,7 @@ service cloud.firestore {
                          isValidId(logId) &&
                          request.resource.data.keys().hasAll(['id', 'studentNumber', 'decision', 'gateLocation', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/gate_logs/$(logId));
-        allow update: if request.resource.data == resource.data; // Idempotent retry only; records remain immutable
+        allow update: if isGateStaff(schoolId) && request.resource.data == resource.data; // Idempotent retry only; records remain immutable
         allow delete: if false; // Strict audit trail
       }
 
@@ -176,7 +179,7 @@ service cloud.firestore {
                          isValidId(mealId) &&
                          request.resource.data.keys().hasAll(['id', 'studentId', 'mealType', 'servingStation', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/meals/$(mealId));
-        allow update: if request.resource.data == resource.data; // Allow exact idempotent retry only
+        allow update: if isMealStaff(schoolId) && request.resource.data == resource.data; // Allow exact idempotent retry only
         allow delete: if false; // Immutable meal serving record
       }
 
