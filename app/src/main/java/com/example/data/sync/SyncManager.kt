@@ -133,6 +133,23 @@ class SyncManager(
                     }
                 }
 
+                // Dispatch local outbox mutations before pulling remote state, so a remote
+                // snapshot cannot overwrite a local change that has not yet been uploaded.
+                val queueAttemptTime = System.currentTimeMillis()
+                val pendingChanges = database.pendingChangeDao().getPendingChanges()
+                for (change in pendingChanges) {
+                    val dispatchResult = dispatchPendingChange(change)
+                    if (dispatchResult.isSuccess) {
+                        database.pendingChangeDao().markSynced(change.changeId, queueAttemptTime)
+                    } else {
+                        database.pendingChangeDao().recordFailure(
+                            change.changeId,
+                            dispatchResult.exceptionOrNull()?.localizedMessage ?: "Remote dispatch failed",
+                            queueAttemptTime
+                        )
+                    }
+                }
+
                 // 5. Fetch modified student records from cloud (since last sync time)
                 val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
                 if (fetchStudentsResult.isFailure) {
@@ -182,22 +199,6 @@ class SyncManager(
                 }
 
                 val now = System.currentTimeMillis()
-
-                // 7. Dispatch durable outbox changes. A change is marked SYNCED only
-                // after its corresponding remote operation has positively succeeded.
-                val pendingChanges = database.pendingChangeDao().getPendingChanges()
-                for (change in pendingChanges) {
-                    val dispatchResult = dispatchPendingChange(change)
-                    if (dispatchResult.isSuccess) {
-                        database.pendingChangeDao().markSynced(change.changeId, now)
-                    } else {
-                        database.pendingChangeDao().recordFailure(
-                            change.changeId,
-                            dispatchResult.exceptionOrNull()?.localizedMessage ?: "Remote dispatch failed",
-                            now
-                        )
-                    }
-                }
 
                 // 8. Only advance the sync watermark when all local outbox/log records
                 // are confirmed uploaded. Failed items remain visible and retryable.
