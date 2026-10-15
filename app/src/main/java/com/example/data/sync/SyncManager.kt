@@ -45,7 +45,7 @@ class SyncManager(
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
             pendingLogsCount = pendingCount,
-            status = if (_syncInfo.value.isOnline) SyncStatus.SYNCED else SyncStatus.OFFLINE
+            status = when {\n                !_syncInfo.value.isOnline -> SyncStatus.OFFLINE\n                pendingCount > 0 -> SyncStatus.NEEDS_SYNC\n                else -> SyncStatus.SYNCED\n            }
         )
     }
 
@@ -136,7 +136,7 @@ class SyncManager(
                 // Dispatch local outbox mutations before pulling remote state, so a remote
                 // snapshot cannot overwrite a local change that has not yet been uploaded.
                 val queueAttemptTime = System.currentTimeMillis()
-                val pendingChanges = database.pendingChangeDao().getPendingChanges()
+                val pendingChanges = database.pendingChangeDao().getPendingChanges() // Includes PENDING and FAILED for retry
                 for (change in pendingChanges) {
                     val dispatchResult = dispatchPendingChange(change)
                     if (dispatchResult.isSuccess) {
