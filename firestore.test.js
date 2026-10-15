@@ -487,3 +487,73 @@ test("Card lifecycle: administrator cannot create a card with unsupported status
       })
   );
 });
+
+
+test("Least privilege: administrator without explicit finance access cannot change fees", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("students").doc("STU-ADMIN-FEE-01")
+      .set({
+        id: "STU-ADMIN-FEE-01",
+        studentNumber: "LTC-2026-0001",
+        firstName: "Student",
+        lastName: "One",
+        name: "Student One",
+        gradeClass: "Senior 4",
+        isDayScholar: true,
+        feesStatus: "CLEARED",
+        outstandingAmount: 0,
+        updatedAt: Date.now()
+      });
+  });
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-ADMIN-FEE-01")
+      .update({ feesStatus: "OUTSTANDING", outstandingAmount: 100000, updatedAt: Date.now() })
+  );
+});
+
+test("Least privilege: explicitly finance-enabled administrator can change fees", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("schools").doc(SCHOOL_LTC).collection("staff").doc(ADMIN_UID)
+      .update({ hasExplicitFinanceAccess: true });
+    await db.collection("schools").doc(SCHOOL_LTC)
+      .collection("students").doc("STU-ADMIN-FEE-02")
+      .set({
+        id: "STU-ADMIN-FEE-02",
+        studentNumber: "LTC-2026-0002",
+        firstName: "Student",
+        lastName: "Two",
+        name: "Student Two",
+        gradeClass: "Senior 4",
+        isDayScholar: true,
+        feesStatus: "CLEARED",
+        outstandingAmount: 0,
+        updatedAt: Date.now()
+      });
+  });
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertSucceeds(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-ADMIN-FEE-02")
+      .update({ feesStatus: "OUTSTANDING", outstandingAmount: 100000, updatedAt: Date.now() })
+  );
+});
+
+test("Exam exception: identical retry by Bursar is idempotent", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("exam_exceptions").doc("EX-RETRY-01");
+  const payload = {
+    id: "EX-RETRY-01",
+    studentId: "STU-01",
+    examCode: "UACE-MATH",
+    recommendedBy: BURSAR_UID,
+    isApproved: false
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.set(payload));
+});
