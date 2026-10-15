@@ -205,7 +205,7 @@ class FirestoreCloudBackend(
                 "id" to meal.id,
                 "studentId" to meal.studentId,
                 "mealType" to meal.mealType,
-                "serverName" to meal.serverName,
+                "servingStation" to meal.serverName,
                 "timestamp" to meal.timestamp
             )
             batch.set(docRef, data)
@@ -225,7 +225,7 @@ class FirestoreCloudBackend(
                 "studentId" to att.studentId,
                 "subject" to att.subject,
                 "sessionName" to att.sessionName,
-                "isPresent" to att.isPresent,
+                "status" to if (att.isPresent) "PRESENT" else "ABSENT",
                 "timestamp" to att.timestamp
             )
             batch.set(docRef, data)
@@ -244,7 +244,7 @@ class FirestoreCloudBackend(
                 "id" to ex.id,
                 "studentId" to ex.studentId,
                 "examCode" to ex.examCode,
-                "requestedByBursar" to ex.requestedByBursar,
+                "recommendedBy" to ex.requestedByBursar,
                 "isApproved" to ex.isApproved
             )
             batch.set(docRef, data)
