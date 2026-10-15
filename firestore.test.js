@@ -148,12 +148,12 @@ async function setupSchoolStaff() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     const ltcRef = db.collection("schools").doc(SCHOOL_LTC).collection("staff");
-    await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin" });
-    await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello" });
-    await ltcRef.doc(BURSAR_UID).set({ role: "BURSAR", name: "Bursar Florence" });
-    await ltcRef.doc(TEACHER_UID).set({ role: "TEACHER", name: "Teacher Akello" });
-    await ltcRef.doc(MEAL_UID).set({ role: "MEAL_STAFF", name: "Dining Hall Staff" });
-    await ltcRef.doc(EXAM_UID).set({ role: "EXAM_STAFF", name: "Examiner Charles" });
+    await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin", active: true });
+    await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello", active: true });
+    await ltcRef.doc(BURSAR_UID).set({ role: "BURSAR", name: "Bursar Florence", active: true });
+    await ltcRef.doc(TEACHER_UID).set({ role: "TEACHER", name: "Teacher Akello", active: true });
+    await ltcRef.doc(MEAL_UID).set({ role: "MEAL_STAFF", name: "Dining Hall Staff", active: true });
+    await ltcRef.doc(EXAM_UID).set({ role: "EXAM_STAFF", name: "Examiner Charles", active: true });
 
     // Other school staff
     await db.collection("schools").doc(OTHER_SCHOOL).collection("staff").doc(UNRELATED_UID).set({
