@@ -258,11 +258,9 @@ class SyncManager(
                 } else {
                     val card = database.cardDao().getCardById(change.recordId)
                         ?: return Result.failure(IllegalStateException("Queued card ${change.recordId} is missing locally"))
-                    if (change.operationType == SyncOperationType.STATUS_CHANGE) {
-                        remoteCloudDataSource.updateRemoteCard(card)
-                    } else {
-                        remoteCloudDataSource.pushCardChanges(listOf(card))
-                    }
+                    // Upsert the full current local state; this is idempotent and also
+                    // handles a retry where the remote card has not been created yet.
+                    remoteCloudDataSource.pushCardChanges(listOf(card))
                 }
             }
 
