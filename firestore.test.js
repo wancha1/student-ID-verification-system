@@ -158,7 +158,8 @@ async function setupSchoolStaff() {
     // Other school staff
     await db.collection("schools").doc(OTHER_SCHOOL).collection("staff").doc(UNRELATED_UID).set({
       role: "ADMIN",
-      name: "Other School Admin"
+      name: "Other School Admin",
+      active: true
     });
   });
 }
