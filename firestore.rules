@@ -144,11 +144,14 @@ service cloud.firestore {
       // Shared card credentials
       match /cards/{cardId} {
         allow get, list: if isSchoolStaff(schoolId);
-        allow create: if isSchoolAdmin(schoolId);
+        allow create: if isSchoolAdmin(schoolId) &&
+                         request.resource.data.status == 'ACTIVE' &&
+                         request.resource.data.isDeleted == false;
         allow update: if isSchoolAdmin(schoolId) &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deactivationDate', 'replacedByCardId', 'reason', 'notes', 'updatedAt', 'isDeleted']) &&
                          !(resource.data.status in ['LOST', 'REPLACED', 'DEACTIVATED'] && request.resource.data.status == 'ACTIVE') &&
-                         !(resource.data.isDeleted == true && request.resource.data.isDeleted == false) &&\n                         request.resource.data.status in ['ACTIVE', 'LOST', 'REPLACED', 'DEACTIVATED'];
+                         !(resource.data.isDeleted == true && request.resource.data.isDeleted == false) &&
+                         request.resource.data.status in ['ACTIVE', 'LOST', 'REPLACED', 'DEACTIVATED'];
         allow delete: if false; // Cards are never deleted; status transitions to LOST/REPLACED/DEACTIVATED
       }
 
@@ -159,7 +162,8 @@ service cloud.firestore {
                          isValidId(logId) &&
                          request.resource.data.keys().hasAll(['id', 'studentNumber', 'decision', 'gateLocation', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/gate_logs/$(logId));
-        allow update: if request.resource.data == resource.data; // Idempotent retry only; records remain immutable\n        allow delete: if false; // Strict audit trail
+        allow update: if request.resource.data == resource.data; // Idempotent retry only; records remain immutable
+        allow delete: if false; // Strict audit trail
       }
 
       // Departmental records: Meals
@@ -169,7 +173,8 @@ service cloud.firestore {
                          isValidId(mealId) &&
                          request.resource.data.keys().hasAll(['id', 'studentId', 'mealType', 'servingStation', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/meals/$(mealId));
-        allow update: if request.resource.data == resource.data; // Allow exact idempotent retry only\n        allow delete: if false; // Immutable meal serving record
+        allow update: if request.resource.data == resource.data; // Allow exact idempotent retry only
+        allow delete: if false; // Immutable meal serving record
       }
 
       // Departmental records: Attendance
@@ -190,7 +195,8 @@ service cloud.firestore {
         // Finance recommends exception
         allow create: if isFinanceStaff(schoolId) &&
                          isValidId(exceptionId) &&
-                         request.resource.data.keys().hasAll(['id', 'studentId', 'examCode', 'recommendedBy', 'isApproved']) &&\n                         request.resource.data.isApproved == false;
+                         request.resource.data.keys().hasAll(['id', 'studentId', 'examCode', 'recommendedBy', 'isApproved']) &&
+                         request.resource.data.isApproved == false;
         // Head Teacher or Admin approves exception
         allow update: if isSchoolAdmin(schoolId) &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isApproved', 'approvedBy', 'approvalNote', 'updatedAt']);
