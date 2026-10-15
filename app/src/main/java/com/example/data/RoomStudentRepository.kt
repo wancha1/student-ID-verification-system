@@ -429,9 +429,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteFeeStatus(studentId, newStatus, outstandingAmount, now)
-            }
+            syncManager.notifyLocalLogAdded()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -499,10 +497,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushStudentChanges(listOf(entity))
-                remoteCloudDataSource.pushCardChanges(listOf(cardEntity))
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -533,9 +528,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushStudentChanges(listOf(entity))
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -563,9 +556,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.deleteRemoteStudent(studentId, now)
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -641,9 +632,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -685,9 +674,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteCard(updated)
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(updated.toDomain())
         } catch (e: Exception) {
             Result.failure(e)
@@ -762,9 +749,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -821,9 +806,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.pushCardChanges(listOf(CardEntity.fromDomain(newCard)))
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(newCard)
         } catch (e: Exception) {
             Result.failure(e)
@@ -865,9 +848,7 @@ class RoomStudentRepository(
                 )
             }
 
-            if (syncManager.syncInfo.value.isOnline) {
-                remoteCloudDataSource.updateRemoteCard(updated)
-            }
+            syncManager.notifyLocalLogAdded()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
