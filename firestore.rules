@@ -69,12 +69,13 @@ service cloud.firestore {
                        isValidId(userId) &&
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.keys().hasAll(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']);
+                       request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+                       request.resource.data.role == 'STAFF';
       allow update: if isOwner(userId) &&
                        isValidId(userId) &&
                        request.resource.data.userId == resource.data.userId &&
                        request.resource.data.createdAt == resource.data.createdAt &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'role', 'updatedAt']);
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
       allow delete: if false;
 
       match /students/{studentId} {
@@ -119,10 +120,9 @@ service cloud.firestore {
       match /staff/{staffUid} {
         allow get: if isSignedIn() && (request.auth.uid == staffUid || isSchoolStaff(schoolId));
         allow list: if isSchoolStaff(schoolId);
-        // Only school administrator can register or update staff roles
-        allow create, update: if isSchoolAdmin(schoolId) ||
-                                 // Allow self-registration during initial bootstrapping/tests
-                                 (isOwner(staffUid) && !exists(/databases/$(database)/documents/schools/$(schoolId)/staff/$(staffUid)));
+        // Staff roles are privileged. Provision the first administrator through a trusted
+        // Firebase Admin SDK/bootstrap process; never allow a client to self-enroll or self-promote.
+        allow create, update: if isSchoolAdmin(schoolId);
         allow delete: if isSchoolAdmin(schoolId);
       }
 
