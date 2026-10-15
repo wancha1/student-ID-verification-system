@@ -347,3 +347,30 @@ test("Privilege escalation: user cannot self-register as school ADMIN", async ()
     })
   );
 });
+
+
+test("Card security: revoked cards cannot be reactivated by stale clients", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore()
+      .collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-REVOKED-01")
+      .set({
+        id: "CRD-REVOKED-01",
+        cardIdentifier: "CRD-REVOKED-01",
+        studentId: "STU-01",
+        studentNumber: "LTC-2026-0001",
+        qrPayload: "LTC:V2:test",
+        status: "LOST",
+        updatedAt: Date.now(),
+        isDeleted: false
+      });
+  });
+
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-REVOKED-01")
+      .update({ status: "ACTIVE", updatedAt: Date.now() })
+  );
+});
