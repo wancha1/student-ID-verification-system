@@ -1,11 +1,15 @@
 package com.example.data.sync
 
 import com.example.data.local.AppDatabase
+import com.example.data.local.PendingChangeEntity
+import com.example.data.local.SyncEntityType
+import com.example.data.local.SyncOperationType
 import com.example.data.local.StudentProfileEntity
 import com.example.data.local.SyncMetadataEntity
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.SyncSummary
+import com.example.model.FeeStatus
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,11 +36,11 @@ class SyncManager(
     )
     val syncInfo: StateFlow<SyncInfo> = _syncInfo.asStateFlow()
 
-    private var lastSuccessfulSyncTime: Long = System.currentTimeMillis()
+    private var lastSuccessfulSyncTime: Long = 0L
 
     suspend fun initialize() = withContext(ioDispatcher) {
         val savedTimeStr = database.syncMetadataDao().getValue("last_sync_timestamp")
-        lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: System.currentTimeMillis()
+        lastSuccessfulSyncTime = savedTimeStr?.toLongOrNull() ?: 0L
         val pendingCount = calculatePendingCount()
         _syncInfo.value = _syncInfo.value.copy(
             lastSyncTimestamp = lastSuccessfulSyncTime,
@@ -129,11 +133,31 @@ class SyncManager(
                     }
                 }
 
+                // Dispatch local outbox mutations before pulling remote state, so a remote
+                // snapshot cannot overwrite a local change that has not yet been uploaded.
+                val queueAttemptTime = System.currentTimeMillis()
+                val pendingChanges = database.pendingChangeDao().getPendingChanges()
+                for (change in pendingChanges) {
+                    val dispatchResult = dispatchPendingChange(change)
+                    if (dispatchResult.isSuccess) {
+                        database.pendingChangeDao().markSynced(change.changeId, queueAttemptTime)
+                    } else {
+                        database.pendingChangeDao().recordFailure(
+                            change.changeId,
+                            dispatchResult.exceptionOrNull()?.localizedMessage ?: "Remote dispatch failed",
+                            queueAttemptTime
+                        )
+                    }
+                }
+
                 // 5. Fetch modified student records from cloud (since last sync time)
-                val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince(lastSuccessfulSyncTime - 5000)
+                val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
+                if (fetchStudentsResult.isFailure) {
+                    throw fetchStudentsResult.exceptionOrNull() ?: IllegalStateException("Failed to fetch remote students")
+                }
                 var studentsDownloadedCount = 0
                 var studentsUpdatedCount = 0
-                if (fetchStudentsResult.isSuccess) {
+                run {
                     val remoteStudents = fetchStudentsResult.getOrThrow()
                     studentsDownloadedCount = remoteStudents.size
                     for (remoteStudent in remoteStudents) {
@@ -148,16 +172,23 @@ class SyncManager(
                 }
 
                 // 6. Fetch modified card records from cloud
-                val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince(lastSuccessfulSyncTime - 5000)
-                if (fetchCardsResult.isSuccess) {
+                val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
+                if (fetchCardsResult.isFailure) {
+                    throw fetchCardsResult.exceptionOrNull() ?: IllegalStateException("Failed to fetch remote cards")
+                }
+                run {
                     val remoteCards = fetchCardsResult.getOrThrow()
                     for (remoteCard in remoteCards) {
-                        val local = database.cardDao().getCardById(remoteCard.id)
-                        // Invariant: Once revoked/replaced/deleted, card cannot be silently resurrected as ACTIVE
+                        val local = database.cardDao().getCardByIdIncludingDeleted(remoteCard.id)
+                        // Revocation is monotonic: an ACTIVE copy must never overwrite a revoked/deleted card.
                         val localIsRevoked = local != null && (local.status in listOf("LOST", "REPLACED", "DEACTIVATED") || local.isDeleted)
+                        val remoteIsRevoked = remoteCard.status in listOf("LOST", "REPLACED", "DEACTIVATED") || remoteCard.isDeleted
                         val remoteIsActive = remoteCard.status == "ACTIVE" && !remoteCard.isDeleted
-                        if (localIsRevoked && remoteIsActive && remoteCard.updatedAt < local.updatedAt) {
-                            // Reject resurrection of obsolete active state
+                        if (localIsRevoked && remoteIsActive) continue
+
+                        // A remote revocation wins over a stale local ACTIVE copy, regardless of device clock skew.
+                        if (remoteIsRevoked && local != null && local.status == "ACTIVE" && !local.isDeleted) {
+                            database.cardDao().insertOrUpdateCard(remoteCard)
                             continue
                         }
 
@@ -169,29 +200,29 @@ class SyncManager(
 
                 val now = System.currentTimeMillis()
 
-                // 7. Drain pending offline change queue
-                val pendingChanges = database.pendingChangeDao().getPendingChanges()
-                for (change in pendingChanges) {
-                    try {
-                        database.pendingChangeDao().markSynced(change.changeId, now)
-                    } catch (e: Exception) {
-                        database.pendingChangeDao().recordFailure(change.changeId, e.localizedMessage ?: "Sync failed", now)
-                    }
-                }
-
-                // 8. Update sync metadata
-                lastSuccessfulSyncTime = now
-                database.syncMetadataDao().setValue(
-                    SyncMetadataEntity("last_sync_timestamp", now.toString(), now)
-                )
-
+                // 8. Only advance the sync watermark when all local outbox/log records
+                // are confirmed uploaded. Failed items remain visible and retryable.
                 val pendingAfter = calculatePendingCount()
-                _syncInfo.value = _syncInfo.value.copy(
-                    status = SyncStatus.SYNCED,
-                    lastSyncTimestamp = now,
-                    pendingLogsCount = pendingAfter,
-                    errorMessage = null
-                )
+                if (pendingAfter == 0) {
+                    lastSuccessfulSyncTime = now
+                    database.syncMetadataDao().setValue(
+                        SyncMetadataEntity("last_sync_timestamp", now.toString(), now)
+                    )
+                    _syncInfo.value = _syncInfo.value.copy(
+                        status = SyncStatus.SYNCED,
+                        lastSyncTimestamp = now,
+                        pendingLogsCount = 0,
+                        errorMessage = null
+                    )
+                } else {
+                    val message = "$pendingAfter local change(s) remain unsynchronized; they will be retried."
+                    _syncInfo.value = _syncInfo.value.copy(
+                        status = SyncStatus.SYNC_FAILED,
+                        pendingLogsCount = pendingAfter,
+                        errorMessage = message
+                    )
+                    return@withLock Result.failure(IllegalStateException(message))
+                }
 
                 val summary = SyncSummary(
                     studentsDownloaded = studentsDownloadedCount,
@@ -207,6 +238,56 @@ class SyncManager(
                 )
                 Result.failure(e)
             }
+        }
+    }
+
+    private suspend fun dispatchPendingChange(change: PendingChangeEntity): Result<Unit> {
+        return when (change.entityType) {
+            SyncEntityType.STUDENT -> {
+                if (change.operationType == SyncOperationType.DELETE) {
+                    remoteCloudDataSource.deleteRemoteStudent(change.recordId, change.createdAt)
+                } else {
+                    val student = database.studentDao().getStudentById(change.recordId)
+                        ?: return Result.failure(IllegalStateException("Queued student ${change.recordId} is missing locally"))
+                    remoteCloudDataSource.pushStudentChanges(listOf(student))
+                }
+            }
+
+            SyncEntityType.CARD -> {
+                if (change.operationType == SyncOperationType.DELETE) {
+                    Result.failure(IllegalArgumentException("Card deletion is not a supported sync operation"))
+                } else {
+                    val card = database.cardDao().getCardById(change.recordId)
+                        ?: return Result.failure(IllegalStateException("Queued card ${change.recordId} is missing locally"))
+                    // Upsert the full current local state; this is idempotent and also
+                    // handles a retry where the remote card has not been created yet.
+                    remoteCloudDataSource.pushCardChanges(listOf(card))
+                }
+            }
+
+            SyncEntityType.FEE_STATUS -> {
+                val student = database.studentDao().getStudentById(change.recordId)
+                    ?: return Result.failure(IllegalStateException("Queued fee update has no local student ${change.recordId}"))
+                val feeStatus = try {
+                    FeeStatus.valueOf(student.feesStatus)
+                } catch (e: Exception) {
+                    return Result.failure(IllegalStateException("Unknown fee status '${student.feesStatus}' for ${change.recordId}", e))
+                }
+                remoteCloudDataSource.updateRemoteFeeStatus(
+                    studentId = student.id,
+                    newStatus = feeStatus,
+                    outstandingAmount = student.outstandingAmount,
+                    updatedAt = student.updatedAt
+                )
+            }
+
+            SyncEntityType.SCAN_LOG -> {
+                val log = database.scanLogDao().getScanLogById(change.recordId)
+                    ?: return Result.failure(IllegalStateException("Queued scan log ${change.recordId} is missing locally"))
+                remoteCloudDataSource.pushGateLogs(listOf(log))
+            }
+
+            else -> Result.failure(IllegalArgumentException("Unsupported queued entity type '${change.entityType}'"))
         }
     }
 

@@ -52,7 +52,7 @@ test("Authenticated user: can create and read their own staff profile", async ()
       userId: ALICE_UID,
       email: "alice@oakridge.ac.ug",
       displayName: "Alice Staff",
-      role: "ADMIN",
+      role: "STAFF",
       createdAt: now,
       updatedAt: now,
     })
@@ -303,3 +303,74 @@ test("Role permission: Gate staff can record gate logs, but cannot alter or dele
   );
 });
 
+
+
+test("Privilege escalation: user cannot self-assign ADMIN in legacy profile", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const now = new Date();
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).set({
+      userId: ALICE_UID,
+      email: "alice@oakridge.ac.ug",
+      displayName: "Alice Staff",
+      role: "ADMIN",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+});
+
+test("Privilege escalation: user cannot change legacy profile role after creation", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const now = new Date();
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).set({
+      userId: ALICE_UID,
+      email: "alice@oakridge.ac.ug",
+      displayName: "Alice Staff",
+      role: "STAFF",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).update({ role: "ADMIN", updatedAt: new Date() })
+  );
+});
+
+test("Privilege escalation: user cannot self-register as school ADMIN", async () => {
+  const selfDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  await assertFails(
+    selfDb.collection("schools").doc(SCHOOL_LTC).collection("staff").doc(ALICE_UID).set({
+      role: "ADMIN",
+      name: "Self-appointed administrator"
+    })
+  );
+});
+
+
+test("Card security: revoked cards cannot be reactivated by stale clients", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore()
+      .collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-REVOKED-01")
+      .set({
+        id: "CRD-REVOKED-01",
+        cardIdentifier: "CRD-REVOKED-01",
+        studentId: "STU-01",
+        studentNumber: "LTC-2026-0001",
+        qrPayload: "LTC:V2:test",
+        status: "LOST",
+        updatedAt: Date.now(),
+        isDeleted: false
+      });
+  });
+
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-REVOKED-01")
+      .update({ status: "ACTIVE", updatedAt: Date.now() })
+  );
+});

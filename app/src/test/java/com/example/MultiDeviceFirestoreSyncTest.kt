@@ -80,11 +80,9 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
     private suspend fun signInAs(email: String, role: String): String {
         val uid = signInTestUser(email)
 
-        // Register staff in school roster
-        firestore.collection("schools").document(schoolId)
-            .collection("staff").document(uid)
-            .set(mapOf("role" to role, "name" to email, "userId" to uid))
-            .await()
+        // Provision roster membership through the test-only emulator owner bypass.
+        // Production rules intentionally prohibit client-side self-enrollment.
+        provisionStaffForTest(uid, role, email)
 
         return uid
     }
