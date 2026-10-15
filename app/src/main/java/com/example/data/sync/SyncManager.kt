@@ -162,7 +162,7 @@ class SyncManager(
                 run {
                     val remoteCards = fetchCardsResult.getOrThrow()
                     for (remoteCard in remoteCards) {
-                        val local = database.cardDao().getCardById(remoteCard.id)
+                        val local = database.cardDao().getCardByIdIncludingDeleted(remoteCard.id)
                         // Revocation is monotonic: an ACTIVE copy must never overwrite a revoked/deleted card.
                         val localIsRevoked = local != null && (local.status in listOf("LOST", "REPLACED", "DEACTIVATED") || local.isDeleted)
                         val remoteIsRevoked = remoteCard.status in listOf("LOST", "REPLACED", "DEACTIVATED") || remoteCard.isDeleted
