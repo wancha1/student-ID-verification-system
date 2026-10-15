@@ -8,7 +8,7 @@ import com.example.data.local.MealRecordEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
 import com.example.model.FeeStatus
-import com.google.firebase.Firebase
+import android.content.Context\nimport com.google.firebase.FirebaseApp\nimport com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -20,7 +20,7 @@ import kotlinx.coroutines.tasks.await
  * Supports school-scoped multi-device synchronization for Lira Town College.
  */
 class FirestoreCloudBackend(
-    private val db: FirebaseFirestore = Firebase.firestore,
+    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(\n        FirebaseApp.getInstance(),\n        FIRESTORE_DATABASE_ID\n    ),
     private val auth: FirebaseAuth = Firebase.auth,
     private val schoolId: String = "ltc_school_01"
 ) : RemoteCloudDataSource {
@@ -31,7 +31,7 @@ class FirestoreCloudBackend(
         "ltc_school_01"
     )
 
-    private fun getSchoolRef() = db.collection("schools").document(schoolId)
+    private fun getSchoolRef() = db.collection("schools").document(schoolId)\n\n    companion object {\n        // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.\n        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"\n    }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = try {
         val snapshot = getSchoolRef()
