@@ -161,15 +161,10 @@ class SyncManager(
 
                 val now = System.currentTimeMillis()
 
-                // 7. Drain pending offline change queue
+                // 7. Preserve pending offline changes until a real dispatcher confirms each remote write.
+                // Marking these entries SYNCED here would silently discard unsent student/card mutations.
                 val pendingChanges = database.pendingChangeDao().getPendingChanges()
-                for (change in pendingChanges) {
-                    try {
-                        database.pendingChangeDao().markSynced(change.changeId, now)
-                    } catch (e: Exception) {
-                        database.pendingChangeDao().recordFailure(change.changeId, e.localizedMessage ?: "Sync failed", now)
-                    }
-                }
+                val undispatchedChangesRemain = pendingChanges.isNotEmpty()
 
                 // 8. Update sync metadata
                 lastSuccessfulSyncTime = now
@@ -179,11 +174,24 @@ class SyncManager(
 
                 val pendingAfter = calculatePendingCount()
                 _syncInfo.value = _syncInfo.value.copy(
-                    status = SyncStatus.SYNCED,
+                    status = if (pendingAfter > 0) SyncStatus.NEEDS_SYNC else SyncStatus.SYNCED,
                     lastSyncTimestamp = now,
                     pendingLogsCount = pendingAfter,
-                    errorMessage = null
+                    errorMessage = if (undispatchedChangesRemain) {
+                        "Cloud sync is incomplete: ${pendingChanges.size} queued change(s) remain pending because queue dispatch is not implemented."
+                    } else {
+                        null
+                    }
                 )
+
+                // Do not report a fully successful sync while durable queue items remain undispatched.
+                if (undispatchedChangesRemain) {
+                    return@withLock Result.failure(
+                        IllegalStateException(
+                            "Cloud sync is incomplete: ${pendingChanges.size} queued change(s) remain pending because queue dispatch is not implemented."
+                        )
+                    )
+                }
 
                 val summary = SyncSummary(
                     studentsDownloaded = studentsDownloadedCount,
