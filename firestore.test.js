@@ -374,3 +374,84 @@ test("Card security: revoked cards cannot be reactivated by stale clients", asyn
       .update({ status: "ACTIVE", updatedAt: Date.now() })
   );
 });
+
+
+test("Exam exception: finance staff cannot create a pre-approved exception", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  await assertFails(
+    bursarDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("exam_exceptions").doc("EX-PREAPPROVED-01")
+      .set({
+        id: "EX-PREAPPROVED-01",
+        studentId: "STU-01",
+        examCode: "UACE-MATH",
+        recommendedBy: BURSAR_UID,
+        isApproved: true
+      })
+  );
+});
+
+test("Exam exception: finance staff can create a pending recommendation", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  await assertSucceeds(
+    bursarDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("exam_exceptions").doc("EX-PENDING-01")
+      .set({
+        id: "EX-PENDING-01",
+        studentId: "STU-01",
+        examCode: "UACE-MATH",
+        recommendedBy: BURSAR_UID,
+        isApproved: false
+      })
+  );
+});
+
+test("Idempotent retry: identical gate-log upload is accepted without changing the record", async () => {
+  await setupSchoolStaff();
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const ref = gateDb.collection("schools").doc(SCHOOL_LTC).collection("gate_logs").doc("GATE-RETRY-01");
+  const payload = {
+    id: "GATE-RETRY-01",
+    studentNumber: "LTC-2026-0001",
+    decision: "APPROVED",
+    gateLocation: "Main Gate",
+    timestamp: 1760000000000
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.set(payload));
+  const snapshot = await assertSucceeds(ref.get());
+  assert.deepStrictEqual(snapshot.data(), payload);
+});
+
+test("Idempotent retry: identical meal upload is accepted without changing the record", async () => {
+  await setupSchoolStaff();
+  const mealDb = testEnv.authenticatedContext(MEAL_UID).firestore();
+  const ref = mealDb.collection("schools").doc(SCHOOL_LTC).collection("meals").doc("MEAL-RETRY-01");
+  const payload = {
+    id: "MEAL-RETRY-01",
+    studentId: "STU-01",
+    mealType: "LUNCH",
+    servingStation: "Main Hall",
+    timestamp: 1760000000000
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.set(payload));
+  const snapshot = await assertSucceeds(ref.get());
+  assert.deepStrictEqual(snapshot.data(), payload);
+});
+
+test("Card lifecycle: administrator cannot set an unsupported status", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-STATUS-01")
+      .set({ id: "CRD-STATUS-01", status: "ACTIVE", isDeleted: false, updatedAt: Date.now() });
+  });
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("cards").doc("CRD-STATUS-01")
+      .update({ status: "MYSTERY_STATUS", updatedAt: Date.now() })
+  );
+});
