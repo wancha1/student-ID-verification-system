@@ -28,7 +28,9 @@ service cloud.firestore {
     }
 
     function isSchoolStaff(schoolId) {
-      return isSignedIn() && exists(/databases/$(database)/documents/schools/$(schoolId)/staff/$(request.auth.uid));
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/schools/$(schoolId)/staff/$(request.auth.uid)) &&
+        getStaffDoc(schoolId).data.active == true;
     }
 
     function getStaffRole(schoolId) {
