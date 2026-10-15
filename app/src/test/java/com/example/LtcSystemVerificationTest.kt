@@ -795,7 +795,7 @@ class LtcSystemVerificationTest {
     // =========================================================================
 
     @Test
-    fun testMigrationFromVersion4To6PreservesAllDataAndAppliesSchemaChanges() {
+    fun testMigrationFromVersion4To7PreservesAllDataAndAppliesSchemaChanges() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val dbFile = File(context.filesDir, "test_migration_v4_to_v6.db")
@@ -1005,7 +1005,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1046,11 +1046,69 @@ class LtcSystemVerificationTest {
             assertEquals("pending_changes queue must be queryable and contain enqueued change", 1, pendingChanges.size)
             assertEquals("change-v6-post-migration-01", pendingChanges[0].changeId)
 
-            // 5. Close and reopen to verify stability across sessions
+                        // 5. Verify newly created Version 7 multi-department operational tables are fully functional
+            val mealRecord = com.example.data.local.MealRecordEntity(
+                id = "meal-migrated-01",
+                studentId = "stu-v4-01",
+                studentNumber = "LTC-2026-0042",
+                studentName = "Emmanuel Okello",
+                gradeClass = "Senior 3-A",
+                mealType = "LUNCH",
+                mealDate = "2026-10-13",
+                timestamp = now,
+                serverName = "Chef Omondi",
+                status = "SERVED",
+                notes = "Post migration serving",
+                isSyncedToCloud = false
+            )
+            roomDb.mealRecordDao().insertOrUpdate(mealRecord)
+            val servedMeal = roomDb.mealRecordDao().findServing("stu-v4-01", "LUNCH", "2026-10-13")
+            assertNotNull("meal_records table must be queryable and retain inserted meal", servedMeal)
+            assertEquals("meal-migrated-01", servedMeal?.id)
+
+            val attendanceRecord = com.example.data.local.AttendanceRecordEntity(
+                id = "att-migrated-01",
+                studentId = "stu-v4-01",
+                studentNumber = "LTC-2026-0042",
+                studentName = "Emmanuel Okello",
+                gradeClass = "Senior 3-A",
+                subject = "Mathematics",
+                sessionName = "Morning Lesson 1",
+                lessonDate = "2026-10-13",
+                timestamp = now,
+                teacherName = "Teacher Ronald",
+                isPresent = true,
+                notes = "Roll call",
+                isSyncedToCloud = false
+            )
+            roomDb.attendanceRecordDao().insertOrUpdate(attendanceRecord)
+            val recordedAtt = roomDb.attendanceRecordDao().findAttendance("stu-v4-01", "2026-10-13", "Morning Lesson 1")
+            assertNotNull("attendance_records table must be queryable and retain record", recordedAtt)
+
+            val examException = com.example.data.local.ExamExceptionEntity(
+                id = "ex-migrated-01",
+                studentId = "stu-v4-01",
+                studentNumber = "LTC-2026-0042",
+                studentName = "Emmanuel Okello",
+                examCode = "UNEB-UCE-2026",
+                requestedByBursar = "Bursar Florence",
+                recommendationReason = "Partial fees commitment letter on file",
+                isApproved = true,
+                approvedByHeadTeacher = "Head Teacher",
+                requestedAt = now,
+                approvedAt = now,
+                isSyncedToCloud = false
+            )
+            roomDb.examExceptionDao().insertOrUpdate(examException)
+            val recordedEx = roomDb.examExceptionDao().findException("stu-v4-01", "UNEB-UCE-2026")
+            assertNotNull("exam_exceptions table must be queryable and retain exception", recordedEx)
+            assertTrue("Exception must be approved", recordedEx?.isApproved == true)
+
+            // 6. Close and reopen to verify stability across sessions
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1065,7 +1123,7 @@ class LtcSystemVerificationTest {
     }
 
     @Test
-    fun testMigrationFromVersion5To6PreservesQrTokenAndCreatesPendingChangesTable() {
+    fun testMigrationFromVersion5To7PreservesAllData() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val dbFile = File(context.filesDir, "test_migration_v5_to_v6.db")
@@ -1228,7 +1286,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open with Room specifying MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1271,7 +1329,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1442,7 +1500,7 @@ class LtcSystemVerificationTest {
 
         // 2. Perform Room migration to Version 6
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
 
@@ -1499,7 +1557,42 @@ class LtcSystemVerificationTest {
         assertTrue("Index on createdAt must exist", indexList.contains("index_pending_changes_createdAt"))
         assertTrue("Index on (entityType, recordId) must exist", indexList.contains("index_pending_changes_entityType_recordId"))
 
-        // 6. Test idempotent execution of MIGRATION_5_6 DDL
+                // 6. Inspect PRAGMA table_info and index_list for Version 7 tables: meal_records, attendance_records, exam_exceptions
+        val mealColumns = mutableMapOf<String, String>()
+        val mealCursor = db.query("PRAGMA table_info(`meal_records`)")
+        while (mealCursor.moveToNext()) {
+            mealColumns[mealCursor.getString(1)] = mealCursor.getString(2)
+        }
+        mealCursor.close()
+        assertTrue("meal_records must contain studentId", mealColumns.containsKey("studentId"))
+        assertTrue("meal_records must contain mealType", mealColumns.containsKey("mealType"))
+        assertTrue("meal_records must contain mealDate", mealColumns.containsKey("mealDate"))
+
+        val mealIndexList = mutableListOf<String>()
+        val mealIndexCursor = db.query("PRAGMA index_list(`meal_records`)")
+        while (mealIndexCursor.moveToNext()) {
+            mealIndexList.add(mealIndexCursor.getString(1))
+        }
+        mealIndexCursor.close()
+        assertTrue("Composite unique index on (studentId, mealType, mealDate) must exist", mealIndexList.contains("index_meal_records_studentId_mealType_mealDate"))
+
+        val attIndexList = mutableListOf<String>()
+        val attIndexCursor = db.query("PRAGMA index_list(`attendance_records`)")
+        while (attIndexCursor.moveToNext()) {
+            attIndexList.add(attIndexCursor.getString(1))
+        }
+        attIndexCursor.close()
+        assertTrue("Composite unique index on (studentId, lessonDate, sessionName) must exist", attIndexList.contains("index_attendance_records_studentId_lessonDate_sessionName"))
+
+        val examIndexList = mutableListOf<String>()
+        val examIndexCursor = db.query("PRAGMA index_list(`exam_exceptions`)")
+        while (examIndexCursor.moveToNext()) {
+            examIndexList.add(examIndexCursor.getString(1))
+        }
+        examIndexCursor.close()
+        assertTrue("Composite unique index on (studentId, examCode) must exist", examIndexList.contains("index_exam_exceptions_studentId_examCode"))
+
+        // 7. Test idempotent execution of MIGRATION DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
         roomDb.openHelper.writableDatabase.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_changes_status` ON `pending_changes` (`status`)")
 

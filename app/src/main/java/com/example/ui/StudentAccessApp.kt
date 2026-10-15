@@ -625,34 +625,34 @@ fun StudentAccessApp(
                     ) {
                         when (user.role) {
                             UserRole.TEACHERS -> {
-                            if (isScannerOpen) {
-                                GuardScannerScreen(
-                                    onBarcodeDetected = { rawCode ->
-                                        viewModel.scanUnifiedQr(rawCode, context)
-                                    },
-                                    onCloseScanner = { viewModel.closeScanner() }
+                                NavigationBarItem(
+                                    selected = !showAllExportsDialog,
+                                    onClick = { showAllExportsDialog = false },
+                                    icon = { Icon(Icons.Default.MenuBook, contentDescription = "Attendance") },
+                                    label = { Text("Attendance", fontSize = 11.sp, fontWeight = if (!showAllExportsDialog) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_attendance")
                                 )
-                            } else {
-                                AttendanceMasterScreen(
-                                    user = user,
-                                    attendanceRecords = attendanceRecords,
-                                    selectedSubject = selectedAttendanceSubject,
-                                    selectedSession = selectedAttendanceSession,
-                                    onSubjectChange = { viewModel.setAttendanceSubject(it) },
-                                    onSessionChange = { viewModel.setAttendanceSession(it) },
-                                    onOpenScanner = {
-                                        viewModel.selectDepartment(com.example.model.ScanDepartment.ATTENDANCE)
-                                        viewModel.openScanner()
+                                NavigationBarItem(
+                                    selected = showAllExportsDialog,
+                                    onClick = {
+                                        exportDatasetTarget = "ATTENDANCE"
+                                        showAllExportsDialog = true
                                     },
-                                    onManualLookup = { studentNo ->
-                                        viewModel.scanUnifiedQr(studentNo, context)
-                                    },
-                                    onCorrectAttendance = { recordId, note ->
-                                        // attendance audit note
-                                    }
+                                    icon = { Icon(Icons.Default.TableChart, contentDescription = "Export") },
+                                    label = { Text("Export Roll", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_export")
                                 )
                             }
-                        }
                         UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT -> {
                                 val isDashboard = !showLogsScreen && !showGuardianAlertsScreen && !showExeatScreen
                                 NavigationBarItem(

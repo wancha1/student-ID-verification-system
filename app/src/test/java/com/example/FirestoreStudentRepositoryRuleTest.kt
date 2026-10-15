@@ -20,7 +20,7 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
 
   @Test
   fun saveUserProfile_authenticatedUser_success() = runBlocking {
-    val uid = signInTestUser("staff@oakridge.ac.ug")
+    val uid = signInTestUser("staff_" + UUID.randomUUID().toString().take(8) + "@oakridge.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
 
     val res = repo.saveUserProfile(displayName = "Staff Officer", email = "staff@oakridge.ac.ug", role = "GATE_OFFICER")

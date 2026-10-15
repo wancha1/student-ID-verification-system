@@ -247,6 +247,51 @@ object QrUnifiedVerifier {
                     )
                 }
 
+                // Rule 1b: Meal Station Partitioning / Assignment (Deterministic offline duplicate prevention)
+                // When multiple offline terminals operate at distinct dining hall points (e.g., Station 1 vs Station 2),
+                // partition students deterministically (e.g. by studentNumber hash, gradeClass, or explicit assignment).
+                // If a terminal has an assigned serving scope (station name formatted like "Station 1 [Senior 1 - Senior 3]" or "Point A"),
+                // it serves its designated cohort, preventing the same student from legitimately scanning at multiple offline stations.
+                val assignedStation = currentUser.station
+                if (assignedStation.isNotBlank() && assignedStation.contains("Station") && student.studentNumber.isNotBlank()) {
+                    // Check if station enforces a cohort partitioning rule
+                    val stationLower = assignedStation.lowercase()
+                    if (stationLower.contains("station 1") || stationLower.contains("point 1") || stationLower.contains("lane 1")) {
+                        // Designated for odd-numbered students or lower classes
+                        val lastDigit = student.studentNumber.filter { it.isDigit() }.lastOrNull()?.digitToInt() ?: 0
+                        if (stationLower.contains("odd") && lastDigit % 2 == 0) {
+                            return@withContext DepartmentVerificationResult.Success(
+                                student = student,
+                                card = card,
+                                department = ScanDepartment.MEALS,
+                                isAllowed = false,
+                                statusHeadline = "Assigned Serving Point Mismatch",
+                                statusDetail = "Student ${student.studentNumber} is assigned to Station 2 (Even). Please direct student to their designated meal point.",
+                                isOffline = isOffline,
+                                syncTimestamp = lastSync,
+                                mealType = mealType,
+                                mealStatus = MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE
+                            )
+                        }
+                    } else if (stationLower.contains("station 2") || stationLower.contains("point 2") || stationLower.contains("lane 2")) {
+                        val lastDigit = student.studentNumber.filter { it.isDigit() }.lastOrNull()?.digitToInt() ?: 0
+                        if (stationLower.contains("even") && lastDigit % 2 != 0) {
+                            return@withContext DepartmentVerificationResult.Success(
+                                student = student,
+                                card = card,
+                                department = ScanDepartment.MEALS,
+                                isAllowed = false,
+                                statusHeadline = "Assigned Serving Point Mismatch",
+                                statusDetail = "Student ${student.studentNumber} is assigned to Station 1 (Odd). Please direct student to their designated meal point.",
+                                isOffline = isOffline,
+                                syncTimestamp = lastSync,
+                                mealType = mealType,
+                                mealStatus = MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE
+                            )
+                        }
+                    }
+                }
+
                 // Rule 2: Prevent duplicate serving for same student, meal period, and service date
                 val existingServing = database.mealRecordDao().findServing(student.id, mealType.name, todayStr)
                 if (existingServing != null) {

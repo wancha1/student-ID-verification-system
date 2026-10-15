@@ -153,6 +153,14 @@ class SyncManager(
                     val remoteCards = fetchCardsResult.getOrThrow()
                     for (remoteCard in remoteCards) {
                         val local = database.cardDao().getCardById(remoteCard.id)
+                        // Invariant: Once revoked/replaced/deleted, card cannot be silently resurrected as ACTIVE
+                        val localIsRevoked = local != null && (local.status in listOf("LOST", "REPLACED", "DEACTIVATED") || local.isDeleted)
+                        val remoteIsActive = remoteCard.status == "ACTIVE" && !remoteCard.isDeleted
+                        if (localIsRevoked && remoteIsActive && remoteCard.updatedAt < local.updatedAt) {
+                            // Reject resurrection of obsolete active state
+                            continue
+                        }
+
                         if (local == null || remoteCard.updatedAt >= local.updatedAt) {
                             database.cardDao().insertOrUpdateCard(remoteCard)
                         }

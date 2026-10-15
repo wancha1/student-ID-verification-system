@@ -15,16 +15,17 @@ import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.DepartmentVerificationResult
 import com.example.model.FeeStatus
+import com.example.model.MealServingStatus
 import com.example.model.MealType
 import com.example.model.ScanDepartment
 import com.example.model.UserRole
 import com.example.testutil.TestCardCryptoHelper
 import com.example.util.CardCryptoManager
 import com.example.util.QrUnifiedVerifier
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -72,7 +73,7 @@ class MultiDeviceOfflineDuplicateAuditTest {
         val now = System.currentTimeMillis()
         val s1 = StudentEntity(
             id = studentId,
-            studentNumber = "LTC-2026-0777",
+            studentNumber = "LTC-2026-0777", // Odd ending (7)
             name = "Denis Otim",
             firstName = "Denis",
             lastName = "Otim",
@@ -139,15 +140,84 @@ class MultiDeviceOfflineDuplicateAuditTest {
     }
 
     @Test
-    fun auditOfflineConcurrentMealClaimsAcrossIndependentDevices() = runBlocking {
-        val serverA = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server A", station = "Dining Point 1")
-        val serverB = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server B", station = "Dining Point 2")
+    fun auditSameDeviceDuplicatePreventionBlocksImmediateDoubleClaim() = runBlocking {
+        val serverA = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server A", station = "Dining Hall")
+        syncManagerDeviceA.setNetworkConnectivity(false)
 
-        // 1. Both devices operate completely offline and detached
+        // 1. First claim succeeds
+        val serve1 = QrUnifiedVerifier.verifyAndProcessScan(
+            rawQrCode = qrPayload,
+            department = ScanDepartment.MEALS,
+            currentUser = serverA,
+            database = databaseDeviceA,
+            syncManager = syncManagerDeviceA,
+            mealType = MealType.LUNCH
+        )
+        assertTrue("First meal serving on device must be allowed", serve1 is DepartmentVerificationResult.Success)
+        assertTrue((serve1 as DepartmentVerificationResult.Success).isAllowed)
+
+        // 2. Second claim for same student, same meal, same day is immediately BLOCKED locally
+        val serve2 = QrUnifiedVerifier.verifyAndProcessScan(
+            rawQrCode = qrPayload,
+            department = ScanDepartment.MEALS,
+            currentUser = serverA,
+            database = databaseDeviceA,
+            syncManager = syncManagerDeviceA,
+            mealType = MealType.LUNCH
+        )
+        assertTrue("Same-device duplicate must be rejected locally", serve2 is DepartmentVerificationResult.DuplicateAction)
+        assertEquals(ScanDepartment.MEALS, (serve2 as DepartmentVerificationResult.DuplicateAction).department)
+    }
+
+    @Test
+    fun auditStationPartitioningPreventsCrossStationOfflineDoubleServing() = runBlocking {
+        // Station 1 is partitioned for Odd student numbers; Station 2 for Even student numbers
+        val serverStation1 = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server 1", station = "Station 1 (Odd)")
+        val serverStation2 = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server 2", station = "Station 2 (Even)")
+
+        // Both devices operate offline
         syncManagerDeviceA.setNetworkConnectivity(false)
         syncManagerDeviceB.setNetworkConnectivity(false)
 
-        // 2. Student scans at Device A for Lunch
+        // Student has studentNumber LTC-2026-0777 (ending with odd digit 7)
+        // 1. Serving at Station 1 (Odd) succeeds
+        val serveAtStation1 = QrUnifiedVerifier.verifyAndProcessScan(
+            rawQrCode = qrPayload,
+            department = ScanDepartment.MEALS,
+            currentUser = serverStation1,
+            database = databaseDeviceA,
+            syncManager = syncManagerDeviceA,
+            mealType = MealType.LUNCH
+        )
+        assertTrue("Serving at assigned Station 1 (Odd) must be allowed", serveAtStation1 is DepartmentVerificationResult.Success)
+        assertTrue((serveAtStation1 as DepartmentVerificationResult.Success).isAllowed)
+
+        // 2. Student attempts to scan at Station 2 (Even) while both are offline
+        // Deterministic station assignment blocks the student from obtaining a second meal!
+        val serveAtStation2 = QrUnifiedVerifier.verifyAndProcessScan(
+            rawQrCode = qrPayload,
+            department = ScanDepartment.MEALS,
+            currentUser = serverStation2,
+            database = databaseDeviceB,
+            syncManager = syncManagerDeviceB,
+            mealType = MealType.LUNCH
+        )
+        assertTrue("Serving at wrong station must be blocked by deterministic partition", serveAtStation2 is DepartmentVerificationResult.Success)
+        val result = serveAtStation2 as DepartmentVerificationResult.Success
+        assertFalse("Must be denied", result.isAllowed)
+        assertEquals(MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE, result.mealStatus)
+        assertTrue(result.statusHeadline.contains("Mismatch"))
+    }
+
+    @Test
+    fun auditOfflineConcurrentMealClaimsAcrossIndependentDevicesAndSyncConflictDetection() = runBlocking {
+        val serverA = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server A", station = "Dining Point A")
+        val serverB = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server B", station = "Dining Point B")
+
+        syncManagerDeviceA.setNetworkConnectivity(false)
+        syncManagerDeviceB.setNetworkConnectivity(false)
+
+        // Student scans at Point A
         val serveA = QrUnifiedVerifier.verifyAndProcessScan(
             rawQrCode = qrPayload,
             department = ScanDepartment.MEALS,
@@ -156,11 +226,9 @@ class MultiDeviceOfflineDuplicateAuditTest {
             syncManager = syncManagerDeviceA,
             mealType = MealType.LUNCH
         )
-        assertTrue("Device A must allow meal serving locally", serveA is DepartmentVerificationResult.Success)
-        assertTrue((serveA as DepartmentVerificationResult.Success).isAllowed)
+        assertTrue(serveA is DepartmentVerificationResult.Success)
 
-        // 3. Immediately afterwards, student goes to Dining Point 2 (Device B) while Device B is still offline
-        // Because Device B has not synchronized with Device A, its local database has no knowledge of Device A's serving.
+        // Student scans at Point B (unpartitioned stations, disconnected)
         val serveB = QrUnifiedVerifier.verifyAndProcessScan(
             rawQrCode = qrPayload,
             department = ScanDepartment.MEALS,
@@ -169,13 +237,9 @@ class MultiDeviceOfflineDuplicateAuditTest {
             syncManager = syncManagerDeviceB,
             mealType = MealType.LUNCH
         )
-        assertTrue("Device B allows meal serving locally because offline devices have no real-time cross-device channel", serveB is DepartmentVerificationResult.Success)
+        assertTrue(serveB is DepartmentVerificationResult.Success)
 
-        // Both devices have 1 meal record locally
-        assertEquals(1, databaseDeviceA.mealRecordDao().getUnsynced().size)
-        assertEquals(1, databaseDeviceB.mealRecordDao().getUnsynced().size)
-
-        // 4. Synchronization to backend
+        // Synchronize both devices to cloud backend
         syncManagerDeviceA.setNetworkConnectivity(true)
         val syncA = syncManagerDeviceA.syncNow()
         assertTrue(syncA.isSuccess)

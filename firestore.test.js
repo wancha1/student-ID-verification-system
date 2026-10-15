@@ -1,3 +1,4 @@
+const assert = require("node:assert");
 const {
   initializeTestEnvironment,
   assertFails,
@@ -127,3 +128,178 @@ test("Scan logs: append-only, cannot be deleted or updated", async () => {
     aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").delete()
   );
 });
+
+// -------------------------------------------------------------------
+// SCHOOL-WIDE MULTI-DEVICE & ROLE-BASED ACCESS CONTROL TESTS
+// -------------------------------------------------------------------
+
+const SCHOOL_LTC = "ltc_school_01";
+const OTHER_SCHOOL = "other_school_99";
+const ADMIN_UID = "admin_staff_01";
+const GATE_UID = "gate_officer_02";
+const BURSAR_UID = "bursar_florence_03";
+const TEACHER_UID = "teacher_akello_04";
+const MEAL_UID = "meal_patron_05";
+const EXAM_UID = "exam_supervisor_06";
+const UNRELATED_UID = "unrelated_user_99";
+
+
+async function setupSchoolStaff() {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    const ltcRef = db.collection("schools").doc(SCHOOL_LTC).collection("staff");
+    await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin" });
+    await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello" });
+    await ltcRef.doc(BURSAR_UID).set({ role: "BURSAR", name: "Bursar Florence" });
+    await ltcRef.doc(TEACHER_UID).set({ role: "TEACHER", name: "Teacher Akello" });
+    await ltcRef.doc(MEAL_UID).set({ role: "MEAL_STAFF", name: "Dining Hall Staff" });
+    await ltcRef.doc(EXAM_UID).set({ role: "EXAM_STAFF", name: "Examiner Charles" });
+
+    // Other school staff
+    await db.collection("schools").doc(OTHER_SCHOOL).collection("staff").doc(UNRELATED_UID).set({
+      role: "ADMIN",
+      name: "Other School Admin"
+    });
+  });
+}
+
+
+test("Cross-device sync: Admin on Device A registers student, Gate on Device B reads student", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+
+  // Admin registers student
+  const stuDoc = adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01");
+  await assertSucceeds(
+    stuDoc.set({
+      id: "STU-CROSS-01",
+      studentNumber: "LTC-2026-8800",
+      firstName: "Emmanuel",
+      lastName: "Ocen",
+      name: "Emmanuel Ocen",
+      gradeClass: "Senior 4-Sci",
+      isDayScholar: true,
+      feesStatus: "CLEARED",
+      outstandingAmount: 0,
+      updatedAt: Date.now()
+    })
+  );
+
+  // Gate staff on Device B can read the student record
+  const gateStuDoc = gateDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01");
+  const snapshot = await assertSucceeds(gateStuDoc.get());
+  assert.strictEqual(snapshot.data().studentNumber, "LTC-2026-8800");
+});
+
+test("School isolation: Unrelated school user cannot access LTC students", async () => {
+  await setupSchoolStaff();
+  const otherDb = testEnv.authenticatedContext(UNRELATED_UID).firestore();
+  const doc = otherDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01");
+  await assertFails(doc.get());
+});
+
+test("Role permission: Gate staff cannot modify student fees", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01").set({
+      id: "STU-CROSS-01",
+      studentNumber: "LTC-2026-8800",
+      firstName: "Emmanuel",
+      lastName: "Ocen",
+      name: "Emmanuel Ocen",
+      gradeClass: "Senior 4-Sci",
+      isDayScholar: true,
+      feesStatus: "CLEARED",
+      outstandingAmount: 0,
+      updatedAt: Date.now()
+    });
+  });
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const doc = gateDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01");
+  await assertFails(
+    doc.update({
+      feesStatus: "CLEARED",
+      outstandingAmount: 0
+    })
+  );
+});
+
+test("Role permission: Bursar / Finance CAN update student fees", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01").set({
+      id: "STU-CROSS-01",
+      studentNumber: "LTC-2026-8800",
+      firstName: "Emmanuel",
+      lastName: "Ocen",
+      name: "Emmanuel Ocen",
+      gradeClass: "Senior 4-Sci",
+      isDayScholar: true,
+      feesStatus: "CLEARED",
+      outstandingAmount: 0,
+      updatedAt: Date.now()
+    });
+  });
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const doc = bursarDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01");
+  await assertSucceeds(
+    doc.update({
+      feesStatus: "OUTSTANDING",
+      outstandingAmount: 150000,
+      updatedAt: Date.now()
+    })
+  );
+});
+
+test("Role permission: Teachers cannot record meals, but Meal Staff can", async () => {
+  await setupSchoolStaff();
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const mealDb = testEnv.authenticatedContext(MEAL_UID).firestore();
+
+  const mealDoc = {
+    id: "MEAL-LOG-01",
+    studentId: "STU-CROSS-01",
+    mealType: "LUNCH",
+    servingStation: "Station-1",
+    timestamp: Date.now()
+  };
+
+  // Teacher cannot create meal record
+  await assertFails(
+    teacherDb.collection("schools").doc(SCHOOL_LTC).collection("meals").doc("MEAL-LOG-01").set(mealDoc)
+  );
+
+  // Meal staff can create meal record
+  await assertSucceeds(
+    mealDb.collection("schools").doc(SCHOOL_LTC).collection("meals").doc("MEAL-LOG-01").set(mealDoc)
+  );
+
+  // Meal logs are immutable (cannot be updated or deleted)
+  await assertFails(
+    mealDb.collection("schools").doc(SCHOOL_LTC).collection("meals").doc("MEAL-LOG-01").delete()
+  );
+});
+
+test("Role permission: Gate staff can record gate logs, but cannot alter or delete them", async () => {
+  await setupSchoolStaff();
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+
+  const gateLog = {
+    id: "GATE-LOG-01",
+    studentNumber: "LTC-2026-8800",
+    decision: "APPROVED",
+    gateLocation: "Main Gate",
+    timestamp: Date.now()
+  };
+
+  await assertSucceeds(
+    gateDb.collection("schools").doc(SCHOOL_LTC).collection("gate_logs").doc("GATE-LOG-01").set(gateLog)
+  );
+
+  // Immutable audit trail
+  await assertFails(
+    gateDb.collection("schools").doc(SCHOOL_LTC).collection("gate_logs").doc("GATE-LOG-01").delete()
+  );
+});
+

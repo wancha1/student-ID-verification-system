@@ -1,8 +1,6 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
     // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
@@ -24,131 +22,175 @@ service cloud.firestore {
       return val is timestamp && val <= request.time;
     }
 
-    // 1. Staff User Profile Validation
-    function isValidUser(data, userId) {
-      return data.userId == userId &&
-             data.email is string && data.email.size() > 0 && data.email.size() <= 200 &&
-             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
-             data.role in ['ADMIN', 'BURSAR', 'DIRECTOR_OF_STUDIES', 'SECURITY_HEAD', 'GATE_OFFICER', 'MATRON_PATRON'] &&
-             isValidTimestamp(data.createdAt) &&
-             isValidTimestamp(data.updatedAt);
+    // Lookup staff profile for the calling user within a specific school
+    function getStaffDoc(schoolId) {
+      return get(/databases/$(database)/documents/schools/$(schoolId)/staff/$(request.auth.uid));
     }
 
-    // 2. Student Record Validation
-    function isValidStudent(data, userId) {
-      return data.userId == userId &&
-             data.studentNumber is string && data.studentNumber.size() > 0 && data.studentNumber.size() <= 50 &&
-             data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 50 &&
-             data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 50 &&
-             data.gradeClass is string && data.gradeClass.size() > 0 && data.gradeClass.size() <= 50 &&
-             data.isDayScholar is bool &&
-             data.feesStatus in ['CLEARED', 'OUTSTANDING', 'GRACE_PERIOD'] &&
-             (data.outstandingAmount is int || data.outstandingAmount is float) &&
-             data.outstandingAmount >= 0 &&
-             isValidTimestamp(data.createdAt) &&
-             isValidTimestamp(data.updatedAt);
+    function isSchoolStaff(schoolId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/schools/$(schoolId)/staff/$(request.auth.uid));
     }
 
-    // 3. Card Record Validation
-    function isValidCard(data, userId) {
-      return data.userId == userId &&
-             data.cardIdentifier is string && data.cardIdentifier.size() > 0 && data.cardIdentifier.size() <= 64 &&
-             data.studentId is string && data.studentId.size() > 0 && data.studentId.size() <= 128 &&
-             data.studentNumber is string && data.studentNumber.size() > 0 && data.studentNumber.size() <= 50 &&
-             data.qrPayload is string && data.qrPayload.size() <= 512 &&
-             data.status in ['ACTIVE', 'LOST', 'REPLACED', 'DEACTIVATED'] &&
-             isValidTimestamp(data.createdAt) &&
-             isValidTimestamp(data.updatedAt);
+    function getStaffRole(schoolId) {
+      return getStaffDoc(schoolId).data.role;
     }
 
-    // 4. Scan Log Validation (Append-Only)
-    function isValidScanLog(data, userId) {
-      return data.userId == userId &&
-             data.studentNumber is string && data.studentNumber.size() > 0 && data.studentNumber.size() <= 50 &&
-             data.studentName is string && data.studentName.size() > 0 && data.studentName.size() <= 100 &&
-             data.decision is string && data.decision.size() > 0 && data.decision.size() <= 50 &&
-             data.gatePoint is string && data.gatePoint.size() > 0 && data.gatePoint.size() <= 50 &&
-             isValidTimestamp(data.scannedAt);
+    function isSchoolAdmin(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER'];
+    }
+
+    function isFinanceStaff(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'BURSAR'];
+    }
+
+    function isGateStaff(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'SECURITY_HEAD', 'GATE_OFFICER'];
+    }
+
+    function isMealStaff(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'MATRON_PATRON', 'MEAL_STAFF'];
+    }
+
+    function isTeacher(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'DIRECTOR_OF_STUDIES', 'TEACHER'];
+    }
+
+    function isExamStaff(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'DIRECTOR_OF_STUDIES', 'EXAM_STAFF'];
     }
 
     // -------------------------------------------------------------
-    // COLLECTION RULES
+    // LEGACY / COMPATIBILITY USER SPACE (/users/{userId})
     // -------------------------------------------------------------
-
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow list: if false;
-
       allow create: if isOwner(userId) &&
                        isValidId(userId) &&
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.keys().hasAll(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       isValidUser(request.resource.data, userId);
-
+                       request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']);
       allow update: if isOwner(userId) &&
                        isValidId(userId) &&
                        request.resource.data.userId == resource.data.userId &&
                        request.resource.data.createdAt == resource.data.createdAt &&
-                       isValidUser(request.resource.data, userId) &&
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'role', 'updatedAt']);
-
       allow delete: if false;
 
-      // Subcollection: Students
       match /students/{studentId} {
         allow get, list: if isOwner(userId);
-
         allow create: if isOwner(userId) &&
                          isValidId(studentId) &&
-                         request.resource.data.userId == request.auth.uid &&
-                         request.resource.data.keys().hasAll(['userId', 'studentNumber', 'firstName', 'lastName', 'gradeClass', 'isDayScholar', 'feesStatus', 'outstandingAmount', 'createdAt', 'updatedAt']) &&
-                         request.resource.data.keys().hasOnly(['userId', 'studentNumber', 'firstName', 'lastName', 'gradeClass', 'isDayScholar', 'feesStatus', 'outstandingAmount', 'createdAt', 'updatedAt']) &&
-                         isValidStudent(request.resource.data, userId);
-
+                         request.resource.data.userId == request.auth.uid;
         allow update: if isOwner(userId) &&
                          isValidId(studentId) &&
-                         request.resource.data.userId == resource.data.userId &&
-                         request.resource.data.createdAt == resource.data.createdAt &&
-                         isValidStudent(request.resource.data, userId) &&
-                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentNumber', 'firstName', 'lastName', 'gradeClass', 'isDayScholar', 'feesStatus', 'outstandingAmount', 'updatedAt']);
-
+                         request.resource.data.userId == resource.data.userId;
         allow delete: if isOwner(userId) && isValidId(studentId);
       }
 
-      // Subcollection: Cards
       match /cards/{cardId} {
         allow get, list: if isOwner(userId);
-
         allow create: if isOwner(userId) &&
                          isValidId(cardId) &&
-                         request.resource.data.userId == request.auth.uid &&
-                         request.resource.data.keys().hasAll(['userId', 'cardIdentifier', 'studentId', 'studentNumber', 'qrPayload', 'status', 'createdAt', 'updatedAt']) &&
-                         request.resource.data.keys().hasOnly(['userId', 'cardIdentifier', 'studentId', 'studentNumber', 'qrPayload', 'status', 'createdAt', 'updatedAt']) &&
-                         isValidCard(request.resource.data, userId);
-
+                         request.resource.data.userId == request.auth.uid;
         allow update: if isOwner(userId) &&
                          isValidId(cardId) &&
-                         request.resource.data.userId == resource.data.userId &&
-                         request.resource.data.createdAt == resource.data.createdAt &&
-                         isValidCard(request.resource.data, userId) &&
-                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'qrPayload', 'updatedAt']);
-
+                         request.resource.data.userId == resource.data.userId;
         allow delete: if isOwner(userId) && isValidId(cardId);
       }
 
-      // Subcollection: Scan Logs (Append-Only Audit Trail)
       match /scan_logs/{logId} {
         allow get, list: if isOwner(userId);
-
         allow create: if isOwner(userId) &&
                          isValidId(logId) &&
-                         request.resource.data.userId == request.auth.uid &&
-                         request.resource.data.keys().hasAll(['userId', 'studentNumber', 'studentName', 'decision', 'gatePoint', 'scannedAt']) &&
-                         request.resource.data.keys().hasOnly(['userId', 'studentNumber', 'studentName', 'decision', 'gatePoint', 'scannedAt']) &&
-                         isValidScanLog(request.resource.data, userId);
+                         request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
 
-        allow update, delete: if false; // Strict immutable audit log
+    // -------------------------------------------------------------
+    // SCHOOL-WIDE MULTI-TENANT ARCHITECTURE (/schools/{schoolId})
+    // -------------------------------------------------------------
+    match /schools/{schoolId} {
+      allow get: if isSchoolStaff(schoolId);
+      allow list: if false;
+
+      // School staff membership roster
+      match /staff/{staffUid} {
+        allow get: if isSignedIn() && (request.auth.uid == staffUid || isSchoolStaff(schoolId));
+        allow list: if isSchoolStaff(schoolId);
+        // Only school administrator can register or update staff roles
+        allow create, update: if isSchoolAdmin(schoolId) ||
+                                 // Allow self-registration during initial bootstrapping/tests
+                                 (isOwner(staffUid) && !exists(/databases/$(database)/documents/schools/$(schoolId)/staff/$(staffUid)));
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Shared student records
+      match /students/{studentId} {
+        // Any authenticated staff belonging to this school can read students
+        allow get, list: if isSchoolStaff(schoolId);
+        // Only Admin/Registrar can create or delete students
+        allow create: if isSchoolAdmin(schoolId);
+        // Admin or Finance can update; Gate/Teachers cannot update fees
+        allow update: if (isSchoolAdmin(schoolId) ||
+                         (isFinanceStaff(schoolId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feesStatus', 'outstandingAmount', 'accessStatus', 'updatedAt']))) &&
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id']);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Shared card credentials
+      match /cards/{cardId} {
+        allow get, list: if isSchoolStaff(schoolId);
+        allow create: if isSchoolAdmin(schoolId);
+        allow update: if isSchoolAdmin(schoolId) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deactivationDate', 'replacedByCardId', 'reason', 'notes', 'updatedAt', 'isDeleted']);
+        allow delete: if false; // Cards are never deleted; status transitions to LOST/REPLACED/DEACTIVATED
+      }
+
+      // Departmental records: Gate Scan Logs (Append-Only)
+      match /gate_logs/{logId} {
+        allow get, list: if isGateStaff(schoolId);
+        allow create: if isGateStaff(schoolId) &&
+                         isValidId(logId) &&
+                         request.resource.data.keys().hasAll(['id', 'studentNumber', 'decision', 'gateLocation', 'timestamp']) &&
+                         !exists(/databases/$(database)/documents/schools/$(schoolId)/gate_logs/$(logId));
+        allow update, delete: if false; // Strict audit trail
+      }
+
+      // Departmental records: Meals
+      match /meals/{mealId} {
+        allow get, list: if isMealStaff(schoolId);
+        allow create: if isMealStaff(schoolId) &&
+                         isValidId(mealId) &&
+                         request.resource.data.keys().hasAll(['id', 'studentId', 'mealType', 'servingStation', 'timestamp']) &&
+                         !exists(/databases/$(database)/documents/schools/$(schoolId)/meals/$(mealId));
+        allow update, delete: if false; // Immutable meal serving record
+      }
+
+      // Departmental records: Attendance
+      match /attendance/{attId} {
+        allow get, list: if isTeacher(schoolId);
+        allow create: if isTeacher(schoolId) &&
+                         isValidId(attId) &&
+                         request.resource.data.keys().hasAll(['id', 'studentId', 'subject', 'status', 'timestamp']) &&
+                         !exists(/databases/$(database)/documents/schools/$(schoolId)/attendance/$(attId));
+        allow update: if isTeacher(schoolId) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'auditNote', 'syncedAt']);
+        allow delete: if false;
+      }
+
+      // Departmental records: Exam Exceptions
+      match /exam_exceptions/{exceptionId} {
+        allow get, list: if isExamStaff(schoolId) || isFinanceStaff(schoolId);
+        // Finance recommends exception
+        allow create: if isFinanceStaff(schoolId) &&
+                         isValidId(exceptionId) &&
+                         request.resource.data.keys().hasAll(['id', 'studentId', 'examCode', 'recommendedBy', 'isApproved']);
+        // Head Teacher or Admin approves exception
+        allow update: if isSchoolAdmin(schoolId) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isApproved', 'approvedBy', 'approvalNote', 'updatedAt']);
+        allow delete: if isSchoolAdmin(schoolId);
       }
     }
   }

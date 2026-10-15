@@ -18,6 +18,10 @@ object SecurityManager {
     private const val KEY_ADMIN_NAME = "admin_staff_name"
     private const val KEY_SUPERVISOR_PIN_HASH = "supervisor_pin_hash"
     private const val KEY_ROLE_PIN_PREFIX = "role_pin_hash_"
+    private const val KEY_ACTIVE_USER_ROLE = "active_user_role"
+    private const val KEY_ACTIVE_USER_NAME = "active_user_name"
+    private const val KEY_ACTIVE_USER_STATION = "active_user_station"
+    private const val KEY_ACTIVE_USER_FINANCE = "active_user_finance"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -199,4 +203,52 @@ object SecurityManager {
     fun resetForTesting(context: Context) {
         getPrefs(context).edit().clear().apply()
     }
+    /**
+     * Persists the active authenticated duty session to survive application restarts.
+     */
+    fun saveActiveSession(context: Context, user: com.example.model.AuthUser?) {
+        val prefs = getPrefs(context)
+        if (user == null) {
+            prefs.edit()
+                .remove(KEY_ACTIVE_USER_ROLE)
+                .remove(KEY_ACTIVE_USER_NAME)
+                .remove(KEY_ACTIVE_USER_STATION)
+                .remove(KEY_ACTIVE_USER_FINANCE)
+                .apply()
+        } else {
+            prefs.edit()
+                .putString(KEY_ACTIVE_USER_ROLE, user.role.name)
+                .putString(KEY_ACTIVE_USER_NAME, user.name)
+                .putString(KEY_ACTIVE_USER_STATION, user.station)
+                .putBoolean(KEY_ACTIVE_USER_FINANCE, user.hasExplicitFinanceAccess)
+                .apply()
+        }
+    }
+
+    /**
+     * Restores persisted duty session on launch if terminal is provisioned.
+     */
+    fun getActiveSession(context: Context): com.example.model.AuthUser? {
+        if (!isProvisioned(context)) return null
+        val prefs = getPrefs(context)
+        val roleStr = prefs.getString(KEY_ACTIVE_USER_ROLE, null) ?: return null
+        val role = try { UserRole.valueOf(roleStr) } catch (_: Exception) { return null }
+        val name = prefs.getString(KEY_ACTIVE_USER_NAME, role.defaultUsername) ?: role.defaultUsername
+        val station = prefs.getString(KEY_ACTIVE_USER_STATION, role.subtitle) ?: role.subtitle
+        val hasFinance = prefs.getBoolean(KEY_ACTIVE_USER_FINANCE, false)
+        return com.example.model.AuthUser(
+            role = role,
+            name = name,
+            station = station,
+            hasExplicitFinanceAccess = if (role == UserRole.BURSAR_FINANCE) true else hasFinance
+        )
+    }
+
+    /**
+     * Clears the persisted duty session on logout / terminal lock.
+     */
+    fun clearActiveSession(context: Context) {
+        saveActiveSession(context, null)
+    }
+
 }
