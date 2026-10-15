@@ -257,28 +257,6 @@ class MainViewModel(
         dismissScanResult()
     }
 
-    /**
-     * Authenticates credentials against local salted SHA-256 store before granting duty mode.
-     */
-    fun authenticateAndLogin(
-        context: Context,
-        role: UserRole,
-        pin: String,
-        customName: String? = null,
-        requestFinanceAccess: Boolean = false
-    ): Boolean {
-        if (!SecurityManager.isProvisioned(context)) {
-            _userFeedbackMessage.value = "Terminal is not provisioned. Master Administrator setup required."
-            return false
-        }
-        if (!SecurityManager.verifyRolePin(context, role, pin)) {
-            _userFeedbackMessage.value = "Invalid credentials. Authentication failed for ${role.title}."
-            return false
-        }
-        val hasFinance = if (role == UserRole.BURSAR_FINANCE) true else requestFinanceAccess
-        loginAs(role, customName, hasFinance)
-        return true
-    }
 
     /**
      * Locks terminal session. Unlocks only after entering valid staff credentials.
