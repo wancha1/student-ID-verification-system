@@ -31,7 +31,12 @@ class FirestoreCloudBackend(
         "ltc_school_01"
     )
 
-    private fun getSchoolRef() = db.collection("schools").document(schoolId)\n\n    companion object {\n        // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.\n        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"\n    }
+    private fun getSchoolRef() = db.collection("schools").document(schoolId)
+
+    companion object {
+        // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
+        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
+    }\n\n    companion object {\n        // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.\n        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"\n    }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = try {
         val snapshot = getSchoolRef()
