@@ -8,7 +8,8 @@ import com.example.data.local.MealRecordEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
 import com.example.model.FeeStatus
-import android.content.Context\nimport com.google.firebase.FirebaseApp\nimport com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -20,7 +21,10 @@ import kotlinx.coroutines.tasks.await
  * Supports school-scoped multi-device synchronization for Lira Town College.
  */
 class FirestoreCloudBackend(
-    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(\n        FirebaseApp.getInstance(),\n        FIRESTORE_DATABASE_ID\n    ),
+    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(
+        FirebaseApp.getInstance(),
+        FIRESTORE_DATABASE_ID
+    ),
     private val auth: FirebaseAuth = Firebase.auth,
     private val schoolId: String = "ltc_school_01"
 ) : RemoteCloudDataSource {
