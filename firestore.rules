@@ -42,7 +42,10 @@ service cloud.firestore {
     }
 
     function isFinanceStaff(schoolId) {
-      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'BURSAR'];
+      return isSchoolStaff(schoolId) &&
+        (getStaffRole(schoolId) == 'BURSAR' ||
+          (getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER'] &&
+            getStaffDoc(schoolId).data.hasExplicitFinanceAccess == true));
     }
 
     function isGateStaff(schoolId) {
@@ -198,8 +201,9 @@ service cloud.firestore {
                          request.resource.data.keys().hasAll(['id', 'studentId', 'examCode', 'recommendedBy', 'isApproved']) &&
                          request.resource.data.isApproved == false;
         // Head Teacher or Admin approves exception
-        allow update: if isSchoolAdmin(schoolId) &&
-                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isApproved', 'approvedBy', 'approvalNote', 'updatedAt']);
+        allow update: if request.resource.data == resource.data ||
+                         (isSchoolAdmin(schoolId) &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isApproved', 'approvedBy', 'approvalNote', 'updatedAt']));
         allow delete: if isSchoolAdmin(schoolId);
       }
     }
