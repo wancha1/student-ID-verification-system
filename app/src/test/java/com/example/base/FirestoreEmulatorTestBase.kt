@@ -19,6 +19,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import java.net.HttpURLConnection
+import java.net.URL
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -64,6 +66,34 @@ abstract class FirestoreEmulatorTestBase {
   @After
   open fun tearDownFirebase() {
     auth.signOut()
+  }
+
+  /**
+   * Provisions staff records through the Firestore Emulator's owner bypass.
+   * This helper is test-only; production clients must never self-provision staff roles.
+   */
+  protected fun provisionStaffForTest(uid: String, role: String, name: String) {
+    val safeRole = role.replace("\\", "\\\\").replace("\"", "\\\"")
+    val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
+    val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")
+    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"}}}"""
+    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff/$uid")
+    val connection = (url.openConnection() as HttpURLConnection).apply {
+      requestMethod = "PATCH"
+      setRequestProperty("Authorization", "Bearer owner")
+      setRequestProperty("Content-Type", "application/json")
+      doOutput = true
+    }
+    try {
+      connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+      val code = connection.responseCode
+      if (code !in 200..299) {
+        val detail = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "no response body"
+        throw IllegalStateException("Test staff provisioning failed (HTTP $code): $detail")
+      }
+    } finally {
+      connection.disconnect()
+    }
   }
 
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
