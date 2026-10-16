@@ -318,17 +318,9 @@ fun StudentAccessApp(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.SwapHoriz,
-                                                contentDescription = "Switch Role",
+                                                contentDescription = "Change staff account",
                                                 tint = GoldAccent,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = roleTitle,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White,
-                                                fontSize = 11.sp
+                                                modifier = Modifier.size(19.dp)
                                             )
                                         }
                                     }
@@ -1099,7 +1091,7 @@ fun StudentAccessApp(
                                     }
                                 }
                                 Spacer(Modifier.width(10.dp))
-                                Text("Authorize ${targetRole.title}", fontWeight = FontWeight.Bold)
+                                Text("Change staff account", fontWeight = FontWeight.Bold)
                             }
                         },
                         text = {
