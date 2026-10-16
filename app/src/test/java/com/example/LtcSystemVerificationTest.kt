@@ -423,8 +423,23 @@ class LtcSystemVerificationTest {
             ) { success, _ -> invalidOverrideSuccess = success }
             assertFalse("Emergency override must NEVER authorize an invalid or unknown QR code", invalidOverrideSuccess)
 
-            // 3. Valid supervisor override on identified student -> Approved & Logged!
+            // 3. A valid scan for one student must never authorize a different target.
             viewModel.handleBarcodeScan(card.qrPayload, context)
+            var mismatchedTargetSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = "STU-OTHER-0001",
+                supervisorName = "Mrs. Clara Nambi",
+                overridePin = "7891",
+                reason = "Attempt to reuse the scan for another student",
+                context = context
+            ) { success, _ -> mismatchedTargetSuccess = success }
+            assertFalse("Override target must match the student on the scanned card", mismatchedTargetSuccess)
+            assertFalse(
+                "Mismatched target must not approve the current scan",
+                (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved
+            )
+
+            // 4. Valid supervisor override on the identified student -> Approved & Logged!
             var validOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
                 studentId = studentNumber,
@@ -444,7 +459,8 @@ class LtcSystemVerificationTest {
             val logs = repository.scanLogsFlow.first()
             val latestLog = logs.first()
             assertEquals(GateVerificationDecision.APPROVED, latestLog.decision)
-            assertTrue(latestLog.guardName.contains("Mrs. Clara Nambi"))
+            assertTrue("Audit attribution must use the authenticated session identity", latestLog.guardName.contains("System Administrator"))
+            assertFalse("Caller-supplied supervisor names must not be trusted", latestLog.guardName.contains("Mrs. Clara Nambi"))
             assertTrue(latestLog.reason.contains("EMERGENCY SUPERVISOR OVERRIDE"))
         }
     }
