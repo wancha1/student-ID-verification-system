@@ -581,7 +581,7 @@ test("Exam exception: identical retry by Bursar is idempotent", async () => {
 });
 
 
-test("Student privacy: only authorized leadership/finance can read private contact records", async () => {
+test("Student privacy: only school leadership can read private contact records", async () => {
   await setupSchoolStaff();
   await testEnv.withSecurityRulesDisabled(async (context) => {
     await context.firestore().collection("schools").doc(SCHOOL_LTC)
@@ -595,8 +595,11 @@ test("Student privacy: only authorized leadership/finance can read private conta
       });
   });
   const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
   const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
   await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-01").get());
+  await assertFails(bursarDb.collection("schools").doc(SCHOOL_LTC)
     .collection("student_private").doc("STU-PRIVATE-01").get());
   const privateRecord = await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
     .collection("student_private").doc("STU-PRIVATE-01").get());
@@ -620,4 +623,34 @@ test("Student privacy: public student documents reject guardian and emergency-co
       guardianPhone: "+256700000000",
       updatedAt: Date.now()
     }));
+});
+
+test("Requirements checklist: teacher can sync structured checklist but cannot add free-text notes", async () => {
+  await setupSchoolStaff();
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const ref = teacherDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-01");
+  const payload = {
+    studentId: "STU-REQ-01", studentNumber: "LTC-2026-9001", studentName: "Test Student", gradeClass: "Senior 4",
+    uniformComplete: true, sportsKitComplete: false, textbooksSubmitted: true, medicalFormSigned: true,
+    schoolIdIssued: true, rulesAgreementSigned: true, busPassCleared: false, updatedAt: Date.now()
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.update({ sportsKitComplete: true, updatedAt: Date.now() }));
+  await assertFails(ref.update({ notes: "Potentially sensitive note" }));
+});
+
+test("Requirements checklist: gate and meal staff cannot read or modify checklists", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-02").set({
+      studentId: "STU-REQ-02", studentNumber: "LTC-2026-9002", studentName: "Test Student", gradeClass: "Senior 3",
+      uniformComplete: true, sportsKitComplete: true, textbooksSubmitted: true, medicalFormSigned: true,
+      schoolIdIssued: true, rulesAgreementSigned: true, busPassCleared: true, updatedAt: Date.now()
+    });
+  });
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const mealDb = testEnv.authenticatedContext(MEAL_UID).firestore();
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").get());
+  await assertFails(mealDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-02")
+    .update({ uniformComplete: false, updatedAt: Date.now() }));
 });
