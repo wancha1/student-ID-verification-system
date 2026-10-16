@@ -109,7 +109,7 @@ service cloud.firestore {
 
       // Sensitive guardian and emergency-contact data is stored separately.
       match /student_private/{studentId} {
-        allow get, list: if isSchoolAdmin(schoolId) || isFinanceStaff(schoolId);
+        allow get, list: if isSchoolAdmin(schoolId);
         allow create, update: if isSchoolAdmin(schoolId) &&
           request.resource.data.studentId == studentId &&
           request.resource.data.keys().hasOnly(['studentId', 'guardianName', 'guardianPhone', 'emergencyContact', 'notes', 'updatedAt']);
