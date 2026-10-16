@@ -1293,6 +1293,11 @@ class MainViewModel(
         viewModelScope.launch {
             val db = repository.database
             if (db != null) {
+                val recommenderUid = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+                if (recommenderUid.isNullOrBlank()) {
+                    _userFeedbackMessage.value = "Recommendation blocked: sign in again before recording an exam exception."
+                    return@launch
+                }
                 val ex = ExamException(
                     studentId = studentId,
                     studentNumber = studentNumber,
@@ -1302,7 +1307,9 @@ class MainViewModel(
                     recommendationReason = reason,
                     isApproved = false
                 )
-                db.examExceptionDao().insertOrUpdate(com.example.data.local.ExamExceptionEntity.fromDomain(ex, isSynced = false))
+                val entity = com.example.data.local.ExamExceptionEntity.fromDomain(ex, isSynced = false)
+                    .copy(recommendedByUid = recommenderUid)
+                db.examExceptionDao().insertOrUpdate(entity)
                 repository.syncManagerInstance?.notifyLocalLogAdded()
                 _examExceptions.value = listOf(ex) + _examExceptions.value
                 _userFeedbackMessage.value = "Bursar exception recommended for $studentName. Awaiting Head Teacher approval."
@@ -1320,9 +1327,19 @@ class MainViewModel(
             if (db != null) {
                 val existing = db.examExceptionDao().findException(studentId, examCode)
                 if (existing != null) {
+                    val approverUid = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+                    if (approverUid.isNullOrBlank()) {
+                        _userFeedbackMessage.value = "Approval blocked: sign in again before approving an exam exception."
+                        return@launch
+                    }
+                    if (existing.recommendedByUid.isBlank() || existing.recommendedByUid == approverUid) {
+                        _userFeedbackMessage.value = "Approval blocked: the requester must have a trusted UID and a different staff member must approve."
+                        return@launch
+                    }
                     val approved = existing.copy(
                         isApproved = true,
                         approvedByHeadTeacher = _currentUser.value?.name ?: "Head Teacher",
+                        approvedByUid = approverUid,
                         approvedAt = System.currentTimeMillis()
                     )
                     db.examExceptionDao().insertOrUpdate(approved)
