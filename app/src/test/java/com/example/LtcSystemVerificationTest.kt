@@ -377,7 +377,7 @@ class LtcSystemVerificationTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             SecurityManager.configureTestCredentials(context, adminPin = "7891", supervisorPin = "7891")
 
-            viewModel.loginAs(UserRole.GATE_KEEPER)
+            viewModel.loginAs(UserRole.GATE_STAFF)
 
             // Student with outstanding fees scanned via authentic V2 card
             val studentNumber = outstandingStudent.studentNumber
@@ -399,7 +399,19 @@ class LtcSystemVerificationTest {
             assertFalse("Override with invalid PIN must fail", overrideSuccess)
             assertFalse("Scan result must remain unapproved after failed override", (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved)
 
-            // 2. Override on invalid / unknown QR code -> Rejected!
+            // Gate staff cannot authorize an override even with the supervisor PIN.
+            var gateOverrideSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = studentNumber,
+                supervisorName = "Mrs. Clara Nambi",
+                overridePin = "7891",
+                reason = "Gate staff must not self-authorize a supervisor override",
+                context = context
+            ) { success, _ -> gateOverrideSuccess = success }
+            assertFalse("Gate staff must not authorize an emergency override", gateOverrideSuccess)
+
+            // 2. Unknown QR remains blocked even when a senior supervisor is signed in.
+            viewModel.loginAs(UserRole.ADMINISTRATOR)
             viewModel.handleBarcodeScan("INVALID_MALFORMED_QR_XYZ", context)
             var invalidOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
