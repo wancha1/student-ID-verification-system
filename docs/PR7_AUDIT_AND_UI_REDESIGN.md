@@ -36,8 +36,8 @@ CI must be checked on the latest branch head before merging. Earlier CI confirme
 
 1. **Live Firebase setup remains external.** The actual LTC `google-services.json`, Email/Password enablement, named Firestore database, deployed rules, and trusted first-admin staff document must be configured for the real project.
 2. **Offline re-unlock is not implemented.** First sign-in requires connectivity. This is not yet a fully offline-first authentication experience.
-3. **Legacy `/users/{uid}` rules remain permissive for self-owned legacy data.** They allow a user to create their own legacy profile with a `GATE_OFFICER` role. This does not grant membership in `/schools/ltc_school_01/staff`, but the legacy path should be deprecated or explicitly migrated/isolated so old clients cannot confuse the two authorization models.
-4. **Student read scope is broad.** Any active LTC staff role can read school-wide student records. This may be needed for gate, meals, and attendance workflows, but production privacy review should confirm that every role needs the full student document, particularly guardian/emergency contact details.
+3. **Legacy `/users/{uid}` client access is disabled by rules.** Old clients that still use that path will fail until migrated to the school-scoped staff and data model. Keep it disabled; do not restore self-created role profiles.
+4. **Student operational records are still readable by all active LTC staff.** Guardian/emergency-contact fields are separated into `student_private` and now restricted to Admin/Head Teacher. Review the remaining operational fields for least privilege before production.
 5. **Emergency override remains a local workflow.** It is now role-gated in the app and PIN-protected, but its authorization/audit event should eventually be verified server-side when connected, with explicit policy for offline override records and reconciliation.
 6. **No real-device visual verification yet.** The layout compiles in CI, but it should be checked on a small Android phone with the keyboard open, larger font scaling, and both light/dark system settings before calling the redesign finished.
 
