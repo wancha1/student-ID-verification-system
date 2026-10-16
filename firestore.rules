@@ -236,19 +236,22 @@ service cloud.firestore {
 
         // Approval is a one-way transition and is bound to the authenticated leadership UID.
         // Recommendation identity and exam/student identity are immutable.
-        allow update: if isSchoolAdmin(schoolId) &&
-                         resource.data.isApproved == false &&
-                         request.resource.data.isApproved == true &&
-                         request.resource.data.approvedByUid == request.auth.uid &&
-                         request.resource.data.approvedAt is timestamp &&
-                         request.resource.data.approvedAt <= request.time &&
-                         request.resource.data.recommendedByUid == resource.data.recommendedByUid &&
-                         request.resource.data.id == resource.data.id &&
-                         request.resource.data.studentId == resource.data.studentId &&
-                         request.resource.data.examCode == resource.data.examCode &&
-                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                           'isApproved', 'approvedByUid', 'approvedBy', 'approvalNote', 'approvedAt', 'updatedAt'
-                         ]);
+        allow update: if
+                         ((isFinanceStaff(schoolId) || isExamStaff(schoolId)) &&
+                           request.resource.data == resource.data) ||
+                         (isSchoolAdmin(schoolId) &&
+                           resource.data.isApproved == false &&
+                           request.resource.data.isApproved == true &&
+                           request.resource.data.approvedByUid == request.auth.uid &&
+                           request.resource.data.approvedAt is timestamp &&
+                           request.resource.data.approvedAt <= request.time &&
+                           request.resource.data.recommendedByUid == resource.data.recommendedByUid &&
+                           request.resource.data.id == resource.data.id &&
+                           request.resource.data.studentId == resource.data.studentId &&
+                           request.resource.data.examCode == resource.data.examCode &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                             'isApproved', 'approvedByUid', 'approvedBy', 'approvalNote', 'approvedAt', 'updatedAt'
+                           ]));
 
         allow delete: if isSchoolAdmin(schoolId);
       }
