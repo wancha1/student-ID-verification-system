@@ -164,6 +164,35 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Student requirements checklists. Free-text notes remain local because they may
+      // contain sensitive information; only structured checklist flags are synchronized.
+      match /requirements/{requirementId} {
+        allow get, list: if isTeacher(schoolId);
+        allow create: if isTeacher(schoolId) &&
+          isValidId(requirementId) &&
+          request.resource.data.studentId == requirementId &&
+          request.resource.data.keys().hasOnly([
+            'studentId', 'studentNumber', 'studentName', 'gradeClass',
+            'uniformComplete', 'sportsKitComplete', 'textbooksSubmitted',
+            'medicalFormSigned', 'schoolIdIssued', 'rulesAgreementSigned',
+            'busPassCleared', 'updatedAt'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'studentId', 'studentNumber', 'studentName', 'gradeClass',
+            'uniformComplete', 'sportsKitComplete', 'textbooksSubmitted',
+            'medicalFormSigned', 'schoolIdIssued', 'rulesAgreementSigned',
+            'busPassCleared', 'updatedAt'
+          ]);
+        allow update: if isTeacher(schoolId) &&
+          request.resource.data.studentId == resource.data.studentId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'uniformComplete', 'sportsKitComplete', 'textbooksSubmitted',
+            'medicalFormSigned', 'schoolIdIssued', 'rulesAgreementSigned',
+            'busPassCleared', 'updatedAt'
+          ]);
+        allow delete: if false;
+      }
+
       // Departmental records: Exam Exceptions
       match /exam_exceptions/{exceptionId} {
         allow get, list: if isExamStaff(schoolId) || isFinanceStaff(schoolId);
