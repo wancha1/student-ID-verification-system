@@ -1114,6 +1114,13 @@ class LtcSystemVerificationTest {
             assertNotNull("meal_records table must be queryable and retain inserted meal", servedMeal)
             assertEquals("meal-migrated-01", servedMeal?.id)
 
+            // Atomic first-write-wins guard must reject a second serving for the same meal/date.
+            val duplicateMeal = mealRecord.copy(id = "meal-duplicate-01", timestamp = now + 1)
+            val duplicateInsertResult = roomDb.mealRecordDao().insertIfAbsent(duplicateMeal)
+            assertEquals("Duplicate serving must be ignored atomically", -1L, duplicateInsertResult)
+            val retainedMeal = roomDb.mealRecordDao().findServing("stu-v4-01", "LUNCH", "2026-10-13")
+            assertEquals("Duplicate attempt must not replace the original meal audit", "meal-migrated-01", retainedMeal?.id)
+
             val attendanceRecord = com.example.data.local.AttendanceRecordEntity(
                 id = "att-migrated-01",
                 studentId = "stu-v4-01",
