@@ -13,7 +13,7 @@ This follow-up addresses CI regressions after the Firebase staff-authentication 
 - Staff login continues to use Firebase Authentication and the trusted `schools/ltc_school_01/staff/{uid}` roster document.
 - The role lookup now explicitly uses Firestore `Source.SERVER`. A cached staff record must not be enough to establish the active role after sign-in.
 - Explicit finance access is honored for both Administrator and Head Teacher accounts when the staff record grants it. Bursar access remains role-based.
-- Emergency gate overrides now require an authenticated Administrator or Head Teacher app session before checking the supervisor PIN. Gate staff cannot authorize their own override using the PIN alone.
+- Emergency gate overrides require an authenticated Administrator or Head Teacher session before checking the supervisor PIN. Gate staff cannot authorize their own override using the PIN alone. The target must match the student identified by the current verified scan, the scan's actual card is used in the audit record, and attribution comes from the authenticated session rather than a caller-supplied name.
 - Role switching remains a sign-out/account-change flow; the UI does not grant a different role locally.
 
 ### CI and test reliability
@@ -26,6 +26,7 @@ This follow-up addresses CI regressions after the Firebase staff-authentication 
 - Redesigned staff login with a distinctive midnight-blue and champagne-gold visual identity, clearer hierarchy, a more prominent sign-in action, and a scrollable/IME-aware layout for small phones.
 - Added specific guidance for inactive accounts and unsupported roles instead of returning only a generic sign-in failure.
 - Refined the main app header with a school identity mark, role-specific department badge, stronger contrast, and a compact account-change control to reduce crowding on narrow screens.
+- Reworked admin quick actions into two rows with larger touch targets and a clear section label, avoiding four cramped actions on small phones.
 
 ## Validation status
 
