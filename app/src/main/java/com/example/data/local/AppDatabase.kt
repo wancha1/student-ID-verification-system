@@ -198,6 +198,7 @@ abstract class AppDatabase : RoomDatabase() {
                         `busPassCleared` INTEGER NOT NULL,
                         `notes` TEXT NOT NULL,
                         `updatedAt` INTEGER NOT NULL,
+                        `isSyncedToCloud` INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY(`studentId`)
                     )
                     """.trimIndent()
