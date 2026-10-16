@@ -14,6 +14,12 @@ interface StudentRequirementDao {
     @Query("SELECT * FROM student_requirements WHERE studentId = :studentId LIMIT 1")
     suspend fun getByStudentId(studentId: String): StudentRequirementEntity?
 
+    @Query("SELECT * FROM student_requirements WHERE isSyncedToCloud = 0")
+    suspend fun getUnsynced(): List<StudentRequirementEntity>
+
+    @Query("UPDATE student_requirements SET isSyncedToCloud = 1 WHERE studentId IN (:studentIds)")
+    suspend fun markSynced(studentIds: List<String>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(requirement: StudentRequirementEntity)
 
