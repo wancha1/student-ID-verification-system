@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -1241,7 +1242,6 @@ class MainViewModel(
                                 serverName = user.name,
                                 status = result.mealStatus ?: MealServingStatus.SERVED
                             )
-                            _mealRecords.value = listOf(newMeal) + _mealRecords.value
                             _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
@@ -1254,7 +1254,6 @@ class MainViewModel(
                                 lessonDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()),
                                 teacherName = user.name
                             )
-                            _attendanceRecords.value = listOf(newAtt) + _attendanceRecords.value
                         }
                         context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
                     }
