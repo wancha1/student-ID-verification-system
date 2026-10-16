@@ -10,6 +10,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.data.local.SyncEntityType
 import com.example.data.local.SyncOperationType
 import com.example.model.AccessStatus
@@ -19,6 +20,7 @@ import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
 import com.example.model.StaffPermission
 import com.example.model.Student
+import com.example.model.StudentRequirement
 import com.example.model.StudentScanResult
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
@@ -1950,4 +1952,68 @@ class LtcSystemVerificationTest {
         assertFalse("Wrong PIN rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "9999"))
         assertFalse("Old default 2026 rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "2026"))
     }
+    @Test
+    fun testRequirementChecklistPersistsAndTracksSyncState() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val dao = database.studentRequirementDao()
+            val requirement = StudentRequirement(
+                studentId = "req-student-01",
+                studentNumber = "LTC-2026-9901",
+                studentName = "Test Student",
+                gradeClass = "Senior 4",
+                uniformComplete = false,
+                notes = "Local-only note"
+            )
+            dao.upsert(StudentRequirementEntity.fromDomain(requirement))
+            val stored = dao.getByStudentId(requirement.studentId)
+            assertNotNull("Checklist must be saved in Room", stored)
+            assertFalse("New checklist changes must remain pending until cloud upload", stored!!.isSyncedToCloud)
+            assertEquals(false, stored.uniformComplete)
+            assertEquals("Local-only note", stored.notes)
+            dao.markSynced(listOf(requirement.studentId))
+            assertTrue("Successful upload must mark the checklist synced", dao.getByStudentId(requirement.studentId)!!.isSyncedToCloud)
+            database.close()
+        }
+    }
+
+    @Test
+    fun testQrLookupDoesNotFallBackToInternalCardRowId() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val student = Student(
+                id = "strict-card-student",
+                studentNumber = "LTC-2026-9902",
+                firstName = "Strict",
+                lastName = "Lookup",
+                gradeClass = "Senior 3",
+                feesStatus = FeeStatus.CLEARED
+            )
+            database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+            database.cardDao().insertOrUpdateCard(
+                CardEntity(
+                    id = "internal-row-id",
+                    cardIdentifier = "CRD-EXACT-9902",
+                    studentId = student.id,
+                    studentNumber = student.studentNumber,
+                    qrPayload = "test-payload",
+                    status = CardStatus.ACTIVE.name,
+                    issueDate = 1L,
+                    activationDate = 1L,
+                    deactivationDate = null,
+                    replacedByCardId = null,
+                    reason = null,
+                    notes = "",
+                    updatedAt = 1L
+                )
+            )
+            val repository = RoomStudentRepository(database)
+            assertNull("Internal database row ID must not be accepted as a QR card identifier", repository.getStudentByCardIdentifier("internal-row-id"))
+            assertEquals(student.id, repository.getStudentByCardIdentifier("CRD-EXACT-9902")?.id)
+            database.close()
+        }
+    }
+
 }
