@@ -37,7 +37,7 @@ class FirebaseStaffAuthenticator {
             // Refuse LTC staff sign-in until the owner supplies the confirmed LTC database ID.
             if (databaseId.isBlank() ||
                 databaseId.contains("oakridge", ignoreCase = true) ||
-                databaseId.startsWith("UNCONFIGURED_", ignoreCase = true)) {
+                databaseId.contains("unconfigured", ignoreCase = true)) {
                 throw IllegalStateException(
                     "LTC Firebase is not configured. Set firestore_database_id to the confirmed LTC Firestore database ID before staff sign-in."
                 )
