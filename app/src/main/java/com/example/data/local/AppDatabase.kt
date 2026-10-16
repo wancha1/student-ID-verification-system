@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AttendanceRecordEntity::class,
         ExamExceptionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -163,6 +163,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 7 to 8: persist immutable Firebase UIDs for exam-exception recommendation
+         * and approval attribution. Existing legacy rows have no trusted UID and must not
+         * be treated as cloud-authorized approvals until reviewed.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `recommendedByUid` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `approvedByUid` TEXT")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -170,7 +182,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "oakridge_student_access.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                 INSTANCE = instance
                 instance
