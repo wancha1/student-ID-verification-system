@@ -268,40 +268,56 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // Security Hub Action Tiles
+            // Quick access: two comfortable rows instead of four cramped
+            // touch targets, especially on narrow Android phones.
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HubButton(
-                        icon = Icons.Default.History,
-                        title = "Gate Logs",
-                        onClick = onViewScanLogs,
-                        testTag = "button_hub_gate_logs",
-                        modifier = Modifier.weight(1f)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "QUICK ACCESS",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.6.sp,
+                        modifier = Modifier.padding(start = 2.dp)
                     )
-                    HubButton(
-                        icon = Icons.Default.Notifications,
-                        title = "SMS Alerts",
-                        onClick = onViewGuardianAlerts,
-                        testTag = "button_hub_sms_alerts",
-                        modifier = Modifier.weight(1f)
-                    )
-                    HubButton(
-                        icon = Icons.Default.ConfirmationNumber,
-                        title = "Exeat Passes",
-                        onClick = onViewExeatPasses,
-                        testTag = "button_hub_exeat_passes",
-                        modifier = Modifier.weight(1f)
-                    )
-                    HubButton(
-                        icon = Icons.Default.Badge,
-                        title = "Print Badges",
-                        onClick = onViewBatchPrint,
-                        testTag = "button_hub_print_badges",
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HubButton(
+                            icon = Icons.Default.History,
+                            title = "Gate Logs",
+                            onClick = onViewScanLogs,
+                            testTag = "button_hub_gate_logs",
+                            modifier = Modifier.weight(1f)
+                        )
+                        HubButton(
+                            icon = Icons.Default.Notifications,
+                            title = "SMS Alerts",
+                            onClick = onViewGuardianAlerts,
+                            testTag = "button_hub_sms_alerts",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HubButton(
+                            icon = Icons.Default.ConfirmationNumber,
+                            title = "Exeat Passes",
+                            onClick = onViewExeatPasses,
+                            testTag = "button_hub_exeat_passes",
+                            modifier = Modifier.weight(1f)
+                        )
+                        HubButton(
+                            icon = Icons.Default.Badge,
+                            title = "Print Badges",
+                            onClick = onViewBatchPrint,
+                            testTag = "button_hub_print_badges",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
