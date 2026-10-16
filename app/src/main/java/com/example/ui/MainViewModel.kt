@@ -68,27 +68,6 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
-    init {
-        // Operational history is sourced from Room, not in-memory demo lists.
-        repository.database?.let { db ->
-            viewModelScope.launch {
-                db.mealRecordDao().observeAll().collect { rows ->
-                    _mealRecords.value = rows.map { it.toDomain() }
-                }
-            }
-            viewModelScope.launch {
-                db.attendanceRecordDao().observeAll().collect { rows ->
-                    _attendanceRecords.value = rows.map { it.toDomain() }
-                }
-            }
-            viewModelScope.launch {
-                db.examExceptionDao().observeAll().collect { rows ->
-                    _examExceptions.value = rows.map { it.toDomain() }
-                }
-            }
-        }
-    }
-
     // Current Authenticated User (Requires staff login on initial launch)
     private val _currentUser = MutableStateFlow<AuthUser?>(null)
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
@@ -227,6 +206,27 @@ class MainViewModel(
 
     private val _isMealScannerOpen = MutableStateFlow(false)
     val isMealScannerOpen: StateFlow<Boolean> = _isMealScannerOpen.asStateFlow()
+
+    init {
+        // Operational history is sourced from Room, not in-memory demo lists.
+        repository.database?.let { db ->
+            viewModelScope.launch {
+                db.mealRecordDao().observeAll().collect { rows ->
+                    _mealRecords.value = rows.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.attendanceRecordDao().observeAll().collect { rows ->
+                    _attendanceRecords.value = rows.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.examExceptionDao().observeAll().collect { rows ->
+                    _examExceptions.value = rows.map { it.toDomain() }
+                }
+            }
+        }
+    }
 
     // ==========================================
     // REQUIREMENTS MASTER STATE & CHECKLIST
