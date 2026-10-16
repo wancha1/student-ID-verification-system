@@ -9,6 +9,7 @@ import com.example.data.local.ExamExceptionEntity
 import com.example.data.local.MealRecordEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.model.FeeStatus
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -132,6 +133,38 @@ class FirestoreCloudBackend(
             }
         }
         Result.success(list)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    override suspend fun fetchRequirementsUpdatedSince(timestamp: Long): Result<List<StudentRequirementEntity>> = try {
+        val snapshot = getSchoolRef()
+            .collection("requirements")
+            .whereGreaterThan("updatedAt", timestamp)
+            .get()
+            .await()
+        Result.success(snapshot.documents.mapNotNull { doc ->
+            try {
+                StudentRequirementEntity(
+                    studentId = doc.getString("studentId") ?: doc.id,
+                    studentNumber = doc.getString("studentNumber") ?: "",
+                    studentName = doc.getString("studentName") ?: "",
+                    gradeClass = doc.getString("gradeClass") ?: "",
+                    uniformComplete = doc.getBoolean("uniformComplete") ?: false,
+                    sportsKitComplete = doc.getBoolean("sportsKitComplete") ?: false,
+                    textbooksSubmitted = doc.getBoolean("textbooksSubmitted") ?: false,
+                    medicalFormSigned = doc.getBoolean("medicalFormSigned") ?: false,
+                    schoolIdIssued = doc.getBoolean("schoolIdIssued") ?: false,
+                    rulesAgreementSigned = doc.getBoolean("rulesAgreementSigned") ?: false,
+                    busPassCleared = doc.getBoolean("busPassCleared") ?: false,
+                    notes = "",
+                    updatedAt = doc.getLong("updatedAt") ?: 0L,
+                    isSyncedToCloud = true
+                )
+            } catch (_: Exception) {
+                null
+            }
+        })
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -275,6 +308,33 @@ class FirestoreCloudBackend(
                 "sessionName" to att.sessionName,
                 "status" to if (att.isPresent) "PRESENT" else "ABSENT",
                 "timestamp" to att.timestamp
+            )
+            batch.set(docRef, data)
+        }
+        batch.commit().await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    override suspend fun pushRequirementRecords(requirements: List<StudentRequirementEntity>): Result<Unit> = try {
+        val batch = db.batch()
+        for (requirement in requirements) {
+            val docRef = getSchoolRef().collection("requirements").document(requirement.studentId)
+            // Free-text notes are deliberately excluded from shared cloud documents.
+            val data = mapOf(
+                "studentId" to requirement.studentId,
+                "studentNumber" to requirement.studentNumber,
+                "studentName" to requirement.studentName,
+                "gradeClass" to requirement.gradeClass,
+                "uniformComplete" to requirement.uniformComplete,
+                "sportsKitComplete" to requirement.sportsKitComplete,
+                "textbooksSubmitted" to requirement.textbooksSubmitted,
+                "medicalFormSigned" to requirement.medicalFormSigned,
+                "schoolIdIssued" to requirement.schoolIdIssued,
+                "rulesAgreementSigned" to requirement.rulesAgreementSigned,
+                "busPassCleared" to requirement.busPassCleared,
+                "updatedAt" to requirement.updatedAt
             )
             batch.set(docRef, data)
         }
