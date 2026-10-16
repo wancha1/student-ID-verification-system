@@ -147,6 +147,8 @@ data class ExamExceptionEntity(
     val recommendationReason: String,
     val isApproved: Boolean,
     val approvedByHeadTeacher: String? = null,
+    val recommendedByUid: String = "",
+    val approvedByUid: String? = null,
     val requestedAt: Long,
     val approvedAt: Long? = null,
     val isSyncedToCloud: Boolean = false
