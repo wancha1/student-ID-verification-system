@@ -58,8 +58,14 @@ class FirestoreCloudBackend(
             .get()
             .await()
 
+        val privateByStudentId = if (canReadPrivateStudentData()) {
+            getSchoolRef().collection("student_private").get().await()
+                .documents.associateBy { it.id }
+        } else emptyMap()
+
         val list = snapshot.documents.mapNotNull { doc ->
             try {
+                val privateDoc = privateByStudentId[doc.id]
                 StudentEntity(
                     id = doc.getString("id") ?: doc.id,
                     studentNumber = doc.getString("studentNumber") ?: "",
@@ -76,12 +82,12 @@ class FirestoreCloudBackend(
                     outstandingAmount = (doc.getDouble("outstandingAmount") ?: (doc.getLong("outstandingAmount")?.toDouble()) ?: 0.0),
                     gender = doc.getString("gender") ?: "Male",
                     avatarColorSeed = doc.getLong("avatarColorSeed") ?: 42L,
-                    guardianName = doc.getString("guardianName") ?: "",
-                    guardianPhone = doc.getString("guardianPhone") ?: "",
-                    emergencyContact = doc.getString("emergencyContact") ?: "",
+                    guardianName = privateDoc?.getString("guardianName") ?: "",
+                    guardianPhone = privateDoc?.getString("guardianPhone") ?: "",
+                    emergencyContact = privateDoc?.getString("emergencyContact") ?: "",
                     homeroomTeacher = doc.getString("homeroomTeacher") ?: "",
                     academicYear = doc.getString("academicYear") ?: "2026",
-                    notes = doc.getString("notes") ?: "",
+                    notes = privateDoc?.getString("notes") ?: "",
                     qrToken = doc.getString("qrToken") ?: "",
                     updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
                     isDeleted = doc.getBoolean("isDeleted") ?: false
@@ -131,6 +137,7 @@ class FirestoreCloudBackend(
 
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
         val batch = db.batch()
+        val canWritePrivate = canManageStudentPrivateData()
         for (student in students) {
             val docRef = getSchoolRef().collection("students").document(student.id)
             val data = hashMapOf(
@@ -149,22 +156,45 @@ class FirestoreCloudBackend(
                 "outstandingAmount" to student.outstandingAmount,
                 "gender" to student.gender,
                 "avatarColorSeed" to student.avatarColorSeed,
-                "guardianName" to student.guardianName,
-                "guardianPhone" to student.guardianPhone,
-                "emergencyContact" to student.emergencyContact,
                 "homeroomTeacher" to student.homeroomTeacher,
                 "academicYear" to student.academicYear,
-                "notes" to student.notes,
                 "qrToken" to student.qrToken,
                 "updatedAt" to student.updatedAt,
                 "isDeleted" to student.isDeleted
             )
             batch.set(docRef, data)
+            if (canWritePrivate) {
+                val privateRef = getSchoolRef().collection("student_private").document(student.id)
+                batch.set(privateRef, mapOf(
+                    "studentId" to student.id,
+                    "guardianName" to student.guardianName,
+                    "guardianPhone" to student.guardianPhone,
+                    "emergencyContact" to student.emergencyContact,
+                    "notes" to student.notes,
+                    "updatedAt" to student.updatedAt
+                ))
+            }
         }
         batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+    }
+
+    private suspend fun canReadPrivateStudentData(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        if (staff.getBoolean("active") != true) return false
+        val role = staff.getString("role")?.uppercase() ?: return false
+        return role in setOf("ADMIN", "HEAD_TEACHER", "BURSAR") ||
+            (role in setOf("ADMIN", "HEAD_TEACHER") && staff.getBoolean("hasExplicitFinanceAccess") == true)
+    }
+
+    private suspend fun canManageStudentPrivateData(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        return staff.getBoolean("active") == true &&
+            staff.getString("role")?.uppercase() in setOf("ADMIN", "HEAD_TEACHER")
     }
 
     override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = try {
