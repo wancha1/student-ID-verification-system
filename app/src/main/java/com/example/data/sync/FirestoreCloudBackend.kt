@@ -34,7 +34,7 @@ class FirestoreCloudBackend(
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
             FirebaseApp.getInstance(),
-            context.getString(R.string.firestore_database_id)
+            requireConfiguredLtcDatabaseId(context)
         ),
         FirebaseAuth.getInstance(FirebaseApp.getInstance()),
         "ltc_school_01"
@@ -50,7 +50,7 @@ class FirestoreCloudBackend(
 
     companion object {
         // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
-        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
+        const val FIRESTORE_DATABASE_ID = "UNCONFIGURED_LTC_FIRESTORE_DATABASE_ID"
     }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = try {
@@ -426,4 +426,14 @@ class FirestoreCloudBackend(
     } catch (e: Exception) {
         Result.failure(e)
     }
+}
+
+private fun requireConfiguredLtcDatabaseId(context: Context): String {
+    val databaseId = context.getString(R.string.firestore_database_id).trim()
+    require(databaseId.isNotBlank() &&
+        !databaseId.contains("oakridge", ignoreCase = true) &&
+        !databaseId.startsWith("UNCONFIGURED_", ignoreCase = true)) {
+        "LTC Firebase is not configured. Set firestore_database_id to the confirmed LTC Firestore database ID."
+    }
+    return databaseId
 }
