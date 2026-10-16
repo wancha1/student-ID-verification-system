@@ -67,6 +67,27 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
+    init {
+        // Operational history is sourced from Room, not in-memory demo lists.
+        repository.database?.let { db ->
+            viewModelScope.launch {
+                db.mealRecordDao().observeAll().collect { rows ->
+                    _mealRecords.value = rows.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.attendanceRecordDao().observeAll().collect { rows ->
+                    _attendanceRecords.value = rows.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.examExceptionDao().observeAll().collect { rows ->
+                    _examExceptions.value = rows.map { it.toDomain() }
+                }
+            }
+        }
+    }
+
     // Current Authenticated User (Requires staff login on initial launch)
     private val _currentUser = MutableStateFlow<AuthUser?>(null)
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
@@ -197,7 +218,7 @@ class MainViewModel(
     private val _activeMealType = MutableStateFlow(MealType.LUNCH)
     val activeMealType: StateFlow<MealType> = _activeMealType.asStateFlow()
 
-    private val _mealRecords = MutableStateFlow<List<MealRecord>>(createInitialSampleMeals())
+    private val _mealRecords = MutableStateFlow<List<MealRecord>>(emptyList())
     val mealRecords: StateFlow<List<MealRecord>> = _mealRecords.asStateFlow()
 
     private val _mealScanOutcome = MutableStateFlow<MealVerificationResult?>(null)
@@ -859,58 +880,62 @@ class MainViewModel(
     }
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
-        if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
-            }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
-        }
-
-        if (student == null) {
+        val user = _currentUser.value
+        if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
+            _userFeedbackMessage.value = "Access Denied: authenticated Meal Staff authorization is required."
             _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
             FeedbackHelper.playDeniedSoundAndHaptic(context)
             return
         }
 
-        val activeMeal = _activeMealType.value
-
-        // Check for double-serving on same date and same meal session
-        val previousRecord = _mealRecords.value.find {
-            it.studentId == student.id &&
-            it.mealType == activeMeal &&
-            it.mealDate == todayStr &&
-            it.status == MealServingStatus.SERVED
-        }
-
-        if (previousRecord != null) {
-            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
-            FeedbackHelper.playWarningSoundAndHaptic(context)
+        // Production path uses the shared verifier, which validates the exact signed card,
+        // checks its lifecycle status, enforces meal permissions, and persists the event to Room.
+        if (repository.database != null && repository.syncManagerInstance != null) {
+            _selectedDepartment.value = ScanDepartment.MEALS
+            scanUnifiedQr(rawCode, context)
             return
         }
 
-        // Meal Approved & Served
-        val newRecord = MealRecord(
-            studentId = student.id,
-            studentNumber = student.studentNumber,
-            studentName = student.fullName,
-            gradeClass = student.gradeClass,
-            mealType = activeMeal,
-            mealDate = todayStr,
-            timestamp = System.currentTimeMillis(),
-            serverName = _currentUser.value?.name ?: "Chef Jackson Omondi",
-            status = MealServingStatus.SERVED
-        )
-
-        _mealRecords.value = listOf(newRecord) + _mealRecords.value
-        _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
-        FeedbackHelper.playApprovedSoundAndHaptic(context)
+        // Test/demo repositories have no Room database. Still use the repository's full
+        // credential and card-lifecycle verifier rather than trusting the QR signature alone.
+        viewModelScope.launch {
+            when (val verification = repository.verifyStudentByQr(rawCode)) {
+                is StudentScanResult.Success -> {
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    val meal = _activeMealType.value
+                    val previous = _mealRecords.value.find {
+                        it.studentId == verification.student.id &&
+                            it.mealType == meal && it.mealDate == today &&
+                            it.status == MealServingStatus.SERVED
+                    }
+                    if (previous != null) {
+                        _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
+                            verification.student, meal, previous
+                        )
+                        FeedbackHelper.playWarningSoundAndHaptic(context)
+                    } else {
+                        val record = MealRecord(
+                            studentId = verification.student.id,
+                            studentNumber = verification.student.studentNumber,
+                            studentName = verification.student.fullName,
+                            gradeClass = verification.student.gradeClass,
+                            mealType = meal,
+                            mealDate = today,
+                            timestamp = System.currentTimeMillis(),
+                            serverName = user.name,
+                            status = MealServingStatus.SERVED
+                        )
+                        _mealRecords.value = listOf(record) + _mealRecords.value
+                        _mealScanOutcome.value = MealVerificationResult.Success(record)
+                        FeedbackHelper.playApprovedSoundAndHaptic(context)
+                    }
+                }
+                else -> {
+                    _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                    FeedbackHelper.playDeniedSoundAndHaptic(context)
+                }
+            }
+        }
     }
 
     // ==========================================
@@ -935,22 +960,20 @@ class MainViewModel(
     fun handleRequirementBarcodeScan(rawCode: String) {
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
+        viewModelScope.launch {
+            // Reuse the repository's full V2/date/signature/card-status/student-status checks.
+            // A valid signature alone is not sufficient because a signed card can be revoked.
+            when (val result = repository.verifyStudentByQr(rawCode)) {
+                is StudentScanResult.Success -> {
+                    _scannedRequirementStudentId.value = result.student.id
+                    _requirementsSearchQuery.value = result.student.studentNumber
+                    _userFeedbackMessage.value = "Pulled up requirements record for ${result.student.fullName}."
+                }
+                else -> {
+                    _scannedRequirementStudentId.value = null
+                    _userFeedbackMessage.value = "Requirements scan rejected: card is invalid, inactive, revoked, or the student is unavailable."
+                }
             }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
-        }
-        if (student != null) {
-            _scannedRequirementStudentId.value = student.id
-            _requirementsSearchQuery.value = student.studentNumber
-            _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
-        } else {
-            _userFeedbackMessage.value = "Student not found for scanned QR: $rawCode"
         }
     }
 
