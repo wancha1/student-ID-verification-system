@@ -137,6 +137,16 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
+    override suspend fun canSyncRequirements(): Boolean {
+        return try {
+            val uid = auth.currentUser?.uid ?: return false
+            val staff = getSchoolRef().collection("staff").document(uid).get().await()
+            staff.getBoolean("active") == true &&
+                staff.getString("role")?.uppercase() in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "TEACHER")
+        } catch (_: Exception) {
+            false
+        }
+    }
     override suspend fun fetchRequirementsUpdatedSince(timestamp: Long): Result<List<StudentRequirementEntity>> = try {
         val snapshot = getSchoolRef()
             .collection("requirements")
