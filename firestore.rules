@@ -193,8 +193,7 @@ service cloud.firestore {
                            request.resource.data.approvedByUid == request.auth.uid &&
                            request.resource.data.approvedAt is int &&
                            request.resource.data.approvedAt > 0 &&
-                           request.resource.data.approvedAt <= request.time.toMillis() &&
-                           request.resource.data.diff(resource.data).affectedKeys()
+                                                      request.resource.data.diff(resource.data).affectedKeys()
                              .hasOnly(['isApproved', 'approvedBy', 'approvedByUid', 'approvedAt', 'approvalNote', 'updatedAt'])
                          );
         allow delete: if isSchoolAdmin(schoolId);
