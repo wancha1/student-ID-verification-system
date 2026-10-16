@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MealRecordDao {
+    // Atomic first-write-wins operation for one student/meal/date; -1 means already served.
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(record: MealRecordEntity): Long
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(record: MealRecordEntity)
 
