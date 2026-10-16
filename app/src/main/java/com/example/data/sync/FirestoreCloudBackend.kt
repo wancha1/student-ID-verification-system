@@ -263,7 +263,11 @@ class FirestoreCloudBackend(
                 "studentId" to ex.studentId,
                 "examCode" to ex.examCode,
                 "recommendedBy" to ex.requestedByBursar,
-                "isApproved" to ex.isApproved
+                "recommendedByUid" to ex.recommendedByUid,
+                "isApproved" to ex.isApproved,
+                "approvedBy" to (ex.approvedByHeadTeacher ?: ""),
+                "approvedByUid" to (ex.approvedByUid ?: ""),
+                "approvedAt" to (ex.approvedAt ?: 0L)
             )
             batch.set(docRef, data)
         }
