@@ -6,6 +6,7 @@ import com.example.data.local.ExamExceptionEntity
 import com.example.data.local.MealRecordEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.model.FeeStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -18,12 +19,14 @@ import kotlinx.coroutines.sync.withLock
 interface RemoteCloudDataSource {
     suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>>
     suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>>
+    suspend fun fetchRequirementsUpdatedSince(timestamp: Long): Result<List<StudentRequirementEntity>>
     suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit>
     suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit>
     suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit>
     suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit>
     suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit>
     suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit>
+    suspend fun pushRequirementRecords(requirements: List<StudentRequirementEntity>): Result<Unit>
     suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>>
     suspend fun fetchAllRemoteCards(): Result<List<CardEntity>>
     suspend fun updateRemoteFeeStatus(studentId: String, newStatus: FeeStatus, outstandingAmount: Double, updatedAt: Long): Result<Unit>
@@ -42,6 +45,7 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
         remoteMealsList.clear()
         remoteAttendanceList.clear()
         remoteExceptionsList.clear()
+        remoteRequirementsMap.clear()
     }
 
     private val mutex = Mutex()
@@ -51,6 +55,7 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
     private val remoteMealsList = mutableListOf<MealRecordEntity>()
     private val remoteAttendanceList = mutableListOf<AttendanceRecordEntity>()
     private val remoteExceptionsList = mutableListOf<ExamExceptionEntity>()
+    private val remoteRequirementsMap = mutableMapOf<String, StudentRequirementEntity>()
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = mutex.withLock {
         delay(50)
@@ -62,6 +67,11 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
         delay(50)
         val modified = remoteCardsMap.values.filter { it.updatedAt > timestamp }
         Result.success(modified)
+    }
+
+    override suspend fun fetchRequirementsUpdatedSince(timestamp: Long): Result<List<StudentRequirementEntity>> = mutex.withLock {
+        delay(50)
+        Result.success(remoteRequirementsMap.values.filter { it.updatedAt > timestamp }.map { it.copy(isSyncedToCloud = true) })
     }
 
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = mutex.withLock {
@@ -124,6 +134,17 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
                 remoteExceptionsList[existing] = ex.copy(isSyncedToCloud = true)
             } else {
                 remoteExceptionsList.add(ex.copy(isSyncedToCloud = true))
+            }
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun pushRequirementRecords(requirements: List<StudentRequirementEntity>): Result<Unit> = mutex.withLock {
+        delay(50)
+        requirements.forEach { requirement ->
+            val existing = remoteRequirementsMap[requirement.studentId]
+            if (existing == null || requirement.updatedAt >= existing.updatedAt) {
+                remoteRequirementsMap[requirement.studentId] = requirement.copy(notes = "", isSyncedToCloud = true)
             }
         }
         Result.success(Unit)
