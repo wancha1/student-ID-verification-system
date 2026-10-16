@@ -246,11 +246,11 @@ fun StudentAccessApp(
                             title = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
-                                        modifier = Modifier.size(38.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = roleColor,
-                                        border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.7f)),
-                                        shadowElevation = 3.dp
+                                        modifier = Modifier.size(42.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = Color(0xFF15283D),
+                                        border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.9f)),
+                                        shadowElevation = 4.dp
                                     ) {
                                         Box(
                                             modifier = Modifier.fillMaxSize(),
@@ -259,37 +259,42 @@ fun StudentAccessApp(
                                             Icon(
                                                 imageVector = roleIcon,
                                                 contentDescription = roleTitle,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(22.dp)
+                                                tint = GoldAccent,
+                                                modifier = Modifier.size(23.dp)
                                             )
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
-                                            text = "Lira Town College (LTC)",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
+                                            text = "LIRA TOWN COLLEGE",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White,
+                                            letterSpacing = 1.1.sp,
+                                            maxLines = 1
                                         )
+                                        Spacer(modifier = Modifier.height(3.dp))
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Surface(
-                                                shape = RoundedCornerShape(4.dp),
+                                                shape = RoundedCornerShape(5.dp),
                                                 color = roleTheme.containerColor
                                             ) {
                                                 Text(
                                                     text = roleTheme.stationBadge,
                                                     color = roleTheme.badgeTextColor,
-                                                    fontSize = 9.sp,
+                                                    fontSize = 8.sp,
                                                     fontWeight = FontWeight.Black,
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    letterSpacing = 0.4.sp,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
                                                 )
                                             }
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
                                                 text = "$roleTitle • ${user.name}",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontSize = 11.sp,
+                                                color = Color.White.copy(alpha = 0.78f),
+                                                fontSize = 10.sp,
                                                 maxLines = 1
                                             )
                                         }
@@ -301,8 +306,8 @@ fun StudentAccessApp(
                                 Box {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = roleColor.copy(alpha = 0.12f),
-                                        border = BorderStroke(1.dp, roleTheme.accentBorderColor.copy(alpha = 0.5f)),
+                                        color = Color.White.copy(alpha = 0.08f),
+                                        border = BorderStroke(1.dp, roleTheme.accentGlowColor.copy(alpha = 0.65f)),
                                         modifier = Modifier
                                             .testTag("button_switch_role")
                                             .clickable { showRoleSwitchMenu = true }
@@ -314,7 +319,7 @@ fun StudentAccessApp(
                                             Icon(
                                                 imageVector = Icons.Default.SwapHoriz,
                                                 contentDescription = "Switch Role",
-                                                tint = roleColor,
+                                                tint = GoldAccent,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
@@ -322,7 +327,7 @@ fun StudentAccessApp(
                                                 text = roleTitle,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = roleColor,
+                                                color = Color.White,
                                                 fontSize = 11.sp
                                             )
                                         }
@@ -434,7 +439,7 @@ fun StudentAccessApp(
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = "Lock Terminal",
-                                    tint = roleColor
+                                    tint = GoldAccent
                                 )
                             }
 
@@ -611,7 +616,10 @@ fun StudentAccessApp(
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                            containerColor = Color(0xFF0B1726),
+                            titleContentColor = Color.White,
+                            actionIconContentColor = Color.White,
+                            navigationIconContentColor = Color.White
                         )
                     )
                 }
