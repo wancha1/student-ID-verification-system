@@ -13,6 +13,8 @@ import com.example.model.FeeStatus
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
 
@@ -46,6 +48,13 @@ class FirestoreCloudBackend(
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
 
+    private suspend fun isStudentPrivacyStaff(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        return staff.getBoolean("active") == true &&
+            staff.getString("role") in setOf("ADMIN", "HEAD_TEACHER")
+    }
+
     companion object {
         // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
         const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
@@ -57,10 +66,14 @@ class FirestoreCloudBackend(
             .whereGreaterThan("updatedAt", timestamp)
             .get()
             .await()
-
-        val list = snapshot.documents.mapNotNull { doc ->
+        val canReadPrivate = isStudentPrivacyStaff()
+        val list = mutableListOf<StudentEntity>()
+        for (doc in snapshot.documents) {
             try {
-                StudentEntity(
+                val privateDoc = if (canReadPrivate) {
+                    getSchoolRef().collection("student_private").document(doc.id).get().await()
+                } else null
+                list += StudentEntity(
                     id = doc.getString("id") ?: doc.id,
                     studentNumber = doc.getString("studentNumber") ?: "",
                     name = doc.getString("name") ?: "${doc.getString("firstName") ?: ""} ${doc.getString("lastName") ?: ""}".trim(),
@@ -73,21 +86,21 @@ class FirestoreCloudBackend(
                     dayScholarType = doc.getString("dayScholarType") ?: "DAY_SCHOLAR_WALK",
                     transportRoute = doc.getString("transportRoute") ?: "",
                     feesStatus = doc.getString("feesStatus") ?: "CLEARED",
-                    outstandingAmount = (doc.getDouble("outstandingAmount") ?: (doc.getLong("outstandingAmount")?.toDouble()) ?: 0.0),
+                    outstandingAmount = doc.getDouble("outstandingAmount") ?: (doc.getLong("outstandingAmount")?.toDouble() ?: 0.0),
                     gender = doc.getString("gender") ?: "Male",
                     avatarColorSeed = doc.getLong("avatarColorSeed") ?: 42L,
-                    guardianName = doc.getString("guardianName") ?: "",
-                    guardianPhone = doc.getString("guardianPhone") ?: "",
-                    emergencyContact = doc.getString("emergencyContact") ?: "",
+                    guardianName = privateDoc?.getString("guardianName") ?: "",
+                    guardianPhone = privateDoc?.getString("guardianPhone") ?: "",
+                    emergencyContact = privateDoc?.getString("emergencyContact") ?: "",
                     homeroomTeacher = doc.getString("homeroomTeacher") ?: "",
                     academicYear = doc.getString("academicYear") ?: "2026",
-                    notes = doc.getString("notes") ?: "",
+                    notes = privateDoc?.getString("notes") ?: "",
                     qrToken = doc.getString("qrToken") ?: "",
                     updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
                     isDeleted = doc.getBoolean("isDeleted") ?: false
                 )
             } catch (_: Exception) {
-                null
+                // Skip malformed records; Firestore permission failures propagate from the query above.
             }
         }
         Result.success(list)
@@ -131,9 +144,10 @@ class FirestoreCloudBackend(
 
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
         val batch = db.batch()
+        val canWritePrivate = isStudentPrivacyStaff()
         for (student in students) {
             val docRef = getSchoolRef().collection("students").document(student.id)
-            val data = hashMapOf(
+            val data = hashMapOf<String, Any>(
                 "id" to student.id,
                 "studentNumber" to student.studentNumber,
                 "name" to student.name,
@@ -144,22 +158,38 @@ class FirestoreCloudBackend(
                 "gradeClass" to student.gradeClass,
                 "isDayScholar" to student.isDayScholar,
                 "dayScholarType" to student.dayScholarType,
-                "transportRoute" to (student.transportRoute ?: ""),
+                "transportRoute" to student.transportRoute,
                 "feesStatus" to student.feesStatus,
                 "outstandingAmount" to student.outstandingAmount,
                 "gender" to student.gender,
                 "avatarColorSeed" to student.avatarColorSeed,
-                "guardianName" to student.guardianName,
-                "guardianPhone" to student.guardianPhone,
-                "emergencyContact" to student.emergencyContact,
                 "homeroomTeacher" to student.homeroomTeacher,
                 "academicYear" to student.academicYear,
-                "notes" to student.notes,
                 "qrToken" to student.qrToken,
                 "updatedAt" to student.updatedAt,
                 "isDeleted" to student.isDeleted
             )
-            batch.set(docRef, data)
+            if (canWritePrivate) {
+                // Remove legacy sensitive fields from the shared student document.
+                data["guardianName"] = FieldValue.delete()
+                data["guardianPhone"] = FieldValue.delete()
+                data["emergencyContact"] = FieldValue.delete()
+                data["notes"] = FieldValue.delete()
+                val privateRef = getSchoolRef().collection("student_private").document(student.id)
+                batch.set(
+                    privateRef,
+                    mapOf(
+                        "studentId" to student.id,
+                        "guardianName" to student.guardianName,
+                        "guardianPhone" to student.guardianPhone,
+                        "emergencyContact" to student.emergencyContact,
+                        "notes" to student.notes,
+                        "updatedAt" to student.updatedAt
+                    ),
+                    SetOptions.merge()
+                )
+            }
+            batch.set(docRef, data, SetOptions.merge())
         }
         batch.commit().await()
         Result.success(Unit)
