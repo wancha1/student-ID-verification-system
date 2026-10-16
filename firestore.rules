@@ -186,6 +186,7 @@ service cloud.firestore {
         allow update: if isTeacher(schoolId) &&
           request.resource.data.studentId == resource.data.studentId &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'studentNumber', 'studentName', 'gradeClass',
             'uniformComplete', 'sportsKitComplete', 'textbooksSubmitted',
             'medicalFormSigned', 'schoolIdIssued', 'rulesAgreementSigned',
             'busPassCleared', 'updatedAt'
