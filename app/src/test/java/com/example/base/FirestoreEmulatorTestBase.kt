@@ -83,7 +83,7 @@ abstract class FirestoreEmulatorTestBase {
     val safeRole = role.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")
-    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"}}}"""
+    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"},"active":{"booleanValue":true}}}"""
     val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff/$uid")
     val request = Request.Builder()
       .url(url)
