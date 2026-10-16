@@ -5,6 +5,7 @@ import com.example.data.local.PendingChangeEntity
 import com.example.data.local.SyncEntityType
 import com.example.data.local.SyncOperationType
 import com.example.data.local.StudentProfileEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.data.local.SyncMetadataEntity
 import com.example.model.SyncInfo
 import com.example.model.SyncStatus
@@ -58,6 +59,7 @@ class SyncManager(
                 database.mealRecordDao().getUnsynced().size +
                 database.attendanceRecordDao().getUnsynced().size +
                 database.examExceptionDao().getUnsynced().size +
+                database.studentRequirementDao().getUnsynced().size +
                 database.pendingChangeDao().getPendingCount()
     }
 
@@ -137,6 +139,15 @@ class SyncManager(
                     }
                 }
 
+                // 4b. Upload unsynced student requirement checklists.
+                val unsyncedRequirements = database.studentRequirementDao().getUnsynced()
+                if (unsyncedRequirements.isNotEmpty()) {
+                    val requirementsResult = remoteCloudDataSource.pushRequirementRecords(unsyncedRequirements)
+                    if (requirementsResult.isSuccess) {
+                        database.studentRequirementDao().markSynced(unsyncedRequirements.map { it.studentId })
+                    }
+                }
+
                 // Dispatch local outbox mutations before pulling remote state, so a remote
                 // snapshot cannot overwrite a local change that has not yet been uploaded.
                 val queueAttemptTime = System.currentTimeMillis()
@@ -199,6 +210,25 @@ class SyncManager(
                         if (local == null || remoteCard.updatedAt >= local.updatedAt) {
                             database.cardDao().insertOrUpdateCard(remoteCard)
                         }
+                    }
+                }
+
+                // 7b. Pull remote requirement checklists without overwriting local unsynced edits.
+                val requirementsResult = remoteCloudDataSource.fetchRequirementsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
+                if (requirementsResult.isFailure) {
+                    throw requirementsResult.exceptionOrNull()
+                        ?: IllegalStateException("Failed to fetch remote requirement checklists")
+                }
+                for (remoteRequirement in requirementsResult.getOrThrow()) {
+                    val localRequirement = database.studentRequirementDao().getByStudentId(remoteRequirement.studentId)
+                    if (localRequirement == null ||
+                        (localRequirement.isSyncedToCloud && remoteRequirement.updatedAt >= localRequirement.updatedAt)) {
+                        database.studentRequirementDao().upsert(
+                            remoteRequirement.copy(
+                                notes = localRequirement?.notes ?: "",
+                                isSyncedToCloud = true
+                            )
+                        )
                     }
                 }
 
