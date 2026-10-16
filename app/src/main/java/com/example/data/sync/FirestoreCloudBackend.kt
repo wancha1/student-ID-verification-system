@@ -187,8 +187,7 @@ class FirestoreCloudBackend(
         val staff = getSchoolRef().collection("staff").document(uid).get().await()
         if (staff.getBoolean("active") != true) return false
         val role = staff.getString("role")?.uppercase() ?: return false
-        return role in setOf("ADMIN", "HEAD_TEACHER", "BURSAR") ||
-            (role in setOf("ADMIN", "HEAD_TEACHER") && staff.getBoolean("hasExplicitFinanceAccess") == true)
+        return role in setOf("ADMIN", "HEAD_TEACHER")
     }
 
     private suspend fun canManageStudentPrivateData(): Boolean {
