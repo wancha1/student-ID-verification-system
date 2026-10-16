@@ -143,8 +143,8 @@ fun AdminDashboardScreen(
                         Surface(
                             modifier = Modifier.size(52.dp),
                             shape = RoundedCornerShape(16.dp),
-                            color = roleColor.copy(alpha = 0.12f),
-                            border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.5f))
+                            color = Color.White.copy(alpha = 0.08f),
+                            border = BorderStroke(1.2.dp, GoldAccent.copy(alpha = 0.6f))
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -153,7 +153,7 @@ fun AdminDashboardScreen(
                                 Icon(
                                     imageVector = roleTheme.icon,
                                     contentDescription = roleTheme.departmentTagline,
-                                    tint = roleColor,
+                                    tint = GoldAccent,
                                     modifier = Modifier.size(30.dp)
                                 )
                             }
@@ -208,12 +208,12 @@ fun AdminDashboardScreen(
                             modifier = Modifier
                                 .testTag("button_admin_view_logs")
                                 .size(42.dp)
-                                .background(roleColor.copy(alpha = 0.1f), CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f), CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.History,
                                 contentDescription = "Gate Activity Logs",
-                                tint = roleColor,
+                                tint = GoldAccent,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
