@@ -20,6 +20,7 @@ interface RemoteCloudDataSource {
     suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>>
     suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>>
     suspend fun fetchRequirementsUpdatedSince(timestamp: Long): Result<List<StudentRequirementEntity>>
+    suspend fun canSyncRequirements(): Boolean = true
     suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit>
     suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit>
     suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit>
