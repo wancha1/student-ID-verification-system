@@ -589,7 +589,10 @@ class LtcSystemVerificationTest {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
-            val repo = RoomStudentRepository(database)
+            val repo = RoomStudentRepository(
+                database,
+                remoteCloudDataSource = OutboxPreservingCloudBackend()
+            )
 
             val studentId = "stu-tx-success-01"
             val studentNumber = "LTC-2026-7777"
@@ -676,7 +679,10 @@ class LtcSystemVerificationTest {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
-            val repo = RoomStudentRepository(database)
+            val repo = RoomStudentRepository(
+                database,
+                remoteCloudDataSource = OutboxPreservingCloudBackend()
+            )
 
             val studentId = "stu-tx-rollback-01"
             val studentNumber = "LTC-2026-8888"
