@@ -149,9 +149,7 @@ data class ExamExceptionEntity(
     val approvedByHeadTeacher: String? = null,
     val requestedAt: Long,
     val approvedAt: Long? = null,
-    val isSyncedToCloud: Boolean = false,
-    val recommendedByUid: String? = null,
-    val approvedByUid: String? = null
+    val isSyncedToCloud: Boolean = false
 ) {
     fun toDomain(): ExamException = ExamException(
         id = id,
