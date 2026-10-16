@@ -36,5 +36,8 @@ data class ExamException(
     val isApproved: Boolean = false,
     val approvedByHeadTeacher: String? = null,
     val requestedAt: Long = System.currentTimeMillis(),
-    val approvedAt: Long? = null
+    val approvedAt: Long? = null,
+    // Immutable audit identities captured when the action is performed, not when it syncs.
+    val recommendedByUid: String? = null,
+    val approvedByUid: String? = null
 )
