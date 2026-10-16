@@ -377,7 +377,7 @@ class LtcSystemVerificationTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             SecurityManager.configureTestCredentials(context, adminPin = "7891", supervisorPin = "7891")
 
-            viewModel.loginAs(UserRole.GATE_KEEPER)
+            viewModel.loginAs(UserRole.GATE_STAFF)
 
             // Student with outstanding fees scanned via authentic V2 card
             val studentNumber = outstandingStudent.studentNumber
@@ -399,7 +399,19 @@ class LtcSystemVerificationTest {
             assertFalse("Override with invalid PIN must fail", overrideSuccess)
             assertFalse("Scan result must remain unapproved after failed override", (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved)
 
-            // 2. Override on invalid / unknown QR code -> Rejected!
+            // Gate staff cannot authorize an override even with the supervisor PIN.
+            var gateOverrideSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = studentNumber,
+                supervisorName = "Mrs. Clara Nambi",
+                overridePin = "7891",
+                reason = "Gate staff must not self-authorize a supervisor override",
+                context = context
+            ) { success, _ -> gateOverrideSuccess = success }
+            assertFalse("Gate staff must not authorize an emergency override", gateOverrideSuccess)
+
+            // 2. Unknown QR remains blocked even when a senior supervisor is signed in.
+            viewModel.loginAs(UserRole.ADMINISTRATOR)
             viewModel.handleBarcodeScan("INVALID_MALFORMED_QR_XYZ", context)
             var invalidOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
@@ -411,8 +423,23 @@ class LtcSystemVerificationTest {
             ) { success, _ -> invalidOverrideSuccess = success }
             assertFalse("Emergency override must NEVER authorize an invalid or unknown QR code", invalidOverrideSuccess)
 
-            // 3. Valid supervisor override on identified student -> Approved & Logged!
+            // 3. A valid scan for one student must never authorize a different target.
             viewModel.handleBarcodeScan(card.qrPayload, context)
+            var mismatchedTargetSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = "STU-OTHER-0001",
+                supervisorName = "Mrs. Clara Nambi",
+                overridePin = "7891",
+                reason = "Attempt to reuse the scan for another student",
+                context = context
+            ) { success, _ -> mismatchedTargetSuccess = success }
+            assertFalse("Override target must match the student on the scanned card", mismatchedTargetSuccess)
+            assertFalse(
+                "Mismatched target must not approve the current scan",
+                (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved
+            )
+
+            // 4. Valid supervisor override on the identified student -> Approved & Logged!
             var validOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
                 studentId = studentNumber,
@@ -432,8 +459,23 @@ class LtcSystemVerificationTest {
             val logs = repository.scanLogsFlow.first()
             val latestLog = logs.first()
             assertEquals(GateVerificationDecision.APPROVED, latestLog.decision)
-            assertTrue(latestLog.guardName.contains("Mrs. Clara Nambi"))
+            assertTrue("Audit attribution must use the authenticated session identity", latestLog.guardName.contains("System Administrator"))
+            assertFalse("Caller-supplied supervisor names must not be trusted", latestLog.guardName.contains("Mrs. Clara Nambi"))
             assertTrue(latestLog.reason.contains("EMERGENCY SUPERVISOR OVERRIDE"))
+
+            // Inactive/revoked cards are not a fee exception and must never be overridden.
+            assertTrue(repository.deactivateCard(outstandingStudent.id, card.id, "Test card revocation").isSuccess)
+            viewModel.handleBarcodeScan(card.qrPayload, context)
+            assertTrue("Revoked card scan should be classified as inactive", viewModel.activeScanResult.value is StudentScanResult.CardInactive)
+            var inactiveOverrideSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = studentNumber,
+                supervisorName = "Forged Supervisor Name",
+                overridePin = "7891",
+                reason = "Attempt to bypass revoked card",
+                context = context
+            ) { success, _ -> inactiveOverrideSuccess = success }
+            assertFalse("Inactive/revoked cards must not be overridden", inactiveOverrideSuccess)
         }
     }
 
@@ -589,7 +631,10 @@ class LtcSystemVerificationTest {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
-            val repo = RoomStudentRepository(database)
+            val repo = RoomStudentRepository(
+                database,
+                remoteCloudDataSource = OutboxPreservingCloudBackend()
+            )
 
             val studentId = "stu-tx-success-01"
             val studentNumber = "LTC-2026-7777"
@@ -676,7 +721,10 @@ class LtcSystemVerificationTest {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
-            val repo = RoomStudentRepository(database)
+            val repo = RoomStudentRepository(
+                database,
+                remoteCloudDataSource = OutboxPreservingCloudBackend()
+            )
 
             val studentId = "stu-tx-rollback-01"
             val studentNumber = "LTC-2026-8888"

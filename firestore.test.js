@@ -193,6 +193,83 @@ test("Cross-device sync: Admin on Device A registers student, Gate on Device B r
   assert.strictEqual(snapshot.data().studentNumber, "LTC-2026-8800");
 });
 
+test("Student privacy: gate staff cannot read legacy shared records containing guardian details", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("students").doc("STU-PRIVATE-LEGACY")
+      .set({
+        id: "STU-PRIVATE-LEGACY",
+        studentNumber: "LTC-PRIVATE-01",
+        firstName: "Test",
+        lastName: "Student",
+        gradeClass: "Senior 4",
+        guardianPhone: "+256700000001",
+        emergencyContact: "+256770000001",
+        updatedAt: Date.now()
+      });
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("STU-PRIVATE-LEGACY")
+      .set({ studentId: "STU-PRIVATE-LEGACY", guardianPhone: "+256700000001" });
+  });
+
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("students").doc("STU-PRIVATE-LEGACY").get());
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
+  await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
+});
+
+test("Exam exception: only the authenticated Bursar UID can be recorded as recommender", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  await assertFails(
+    bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-SPOOF-01")
+      .set({
+        id: "EX-SPOOF-01",
+        studentId: "STU-01",
+        examCode: "UACE-MATH",
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: ADMIN_UID,
+        isApproved: false
+      })
+  );
+});
+
+test("Exam exception: approval is one-way and attributed to authenticated leadership UID", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-APPROVAL-01");
+  await assertSucceeds(ref.set({
+    id: "EX-APPROVAL-01",
+    studentId: "STU-01",
+    examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
+    isApproved: false
+  }));
+  const adminRef = adminDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-APPROVAL-01");
+  await assertFails(adminRef.update({
+    isApproved: true,
+    approvedBy: "Someone Else",
+    approvedByUid: BURSAR_UID,
+    approvedAt: new Date()
+  }));
+  await assertSucceeds(adminRef.update({
+    isApproved: true,
+    approvedBy: "System Admin",
+    approvedByUid: ADMIN_UID,
+    approvedAt: new Date()
+  }));
+  await assertFails(adminRef.update({
+    isApproved: false
+  }));
+});
+
 test("School isolation: Unrelated school user cannot access LTC students", async () => {
   await setupSchoolStaff();
   const otherDb = testEnv.authenticatedContext(UNRELATED_UID).firestore();
@@ -403,7 +480,8 @@ test("Exam exception: finance staff can create a pending recommendation", async 
         id: "EX-PENDING-01",
         studentId: "STU-01",
         examCode: "UACE-MATH",
-        recommendedBy: BURSAR_UID,
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: BURSAR_UID,
         isApproved: false
       })
   );
@@ -552,7 +630,8 @@ test("Exam exception: identical retry by Bursar is idempotent", async () => {
     id: "EX-RETRY-01",
     studentId: "STU-01",
     examCode: "UACE-MATH",
-    recommendedBy: BURSAR_UID,
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
     isApproved: false
   };
   await assertSucceeds(ref.set(payload));
