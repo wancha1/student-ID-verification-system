@@ -1,5 +1,6 @@
 package com.example.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.model.StudentRequirement
@@ -22,7 +23,8 @@ data class StudentRequirementEntity(
     val rulesAgreementSigned: Boolean,
     val busPassCleared: Boolean,
     val notes: String,
-    val updatedAt: Long
+    val updatedAt: Long,
+    @ColumnInfo(defaultValue = "0") val isSyncedToCloud: Boolean = false
 ) {
     fun toDomain() = StudentRequirement(
         studentId = studentId,
