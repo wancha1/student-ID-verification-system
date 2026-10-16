@@ -59,3 +59,22 @@ Keep PR #7 open until the latest CI passes. Review the final diff and the remain
 ### Private student-field migration runbook
 
 Before deploying the new rules to a live database, back up the real LTC Firestore database and run `scripts/migrate-private-student-fields.mjs` in dry-run mode with confirmed `GOOGLE_CLOUD_PROJECT` and `FIRESTORE_DATABASE_ID`. Review the document count, then use `--apply` only after approval. The script moves guardian name, guardian phone, emergency contact, and notes to `schools/ltc_school_01/student_private/{studentId}` and removes them from public student documents. It is intentionally not run by CI and never chooses a Firebase project automatically.
+
+## Follow-up implementation — findings 1–5
+
+- QR lookup now requires an exact registered `cardIdentifier`; production gate and shared department verification no longer fall back to matching the database's internal card-row ID.
+- Student requirements checklists now have a Room table and a non-destructive database v8→v9 migration. Changes are loaded from Room, saved before UI success is reported, and uploaded/downloaded through the offline sync manager. Free-text requirement notes remain local and are deliberately excluded from Firestore.
+- Firestore rules now allow only active teachers/academic leadership to read or modify structured requirements. Tests cover allowed checklist updates, blocked free-text notes, and denial to gate/meal staff.
+- Private guardian/emergency-contact records are restricted to Admin/Head Teacher in both Firestore rules and the Android cloud adapter. The old database migration script remains a **pre-deployment requirement**; rules cannot retroactively move existing sensitive fields.
+- The checked-in Oakridge database ID was replaced with `unconfigured-ltc-firestore-database-id` in the app resource and Firebase CLI config. Staff sign-in and the context-based cloud backend fail closed while that placeholder is present. The actual LTC database ID is intentionally not guessed.
+- Exam-exception cloud authorization continues to use immutable requester/approver Firebase UIDs and a one-way approval transition; the server rules, not display names, are authoritative.
+
+### Remaining verification and deployment gates
+
+1. Run Android compilation and all unit tests, plus Firestore emulator rules tests, on the latest branch head. Do not merge if either job fails.
+2. Confirm the real LTC Firebase project and named database with the project owner. Replace the placeholder consistently in `app/src/main/res/values/firebase_applet_config.xml` and `firebase.json`, and update `FirestoreCloudBackend.FIRESTORE_DATABASE_ID` to the same confirmed ID.
+3. Back up the real Firestore database, run `scripts/migrate-private-student-fields.mjs` in dry-run mode, review the count, then obtain approval before `--apply`.
+4. Deploy `firestore.rules` to the confirmed database and verify role access there. Emulator tests do not deploy production rules.
+5. Test on at least two physical Android devices: restart persistence, offline scans, retry after reconnection, duplicate meal prevention, card revocation propagation, requirements sync, and staff account deactivation.
+
+**Do not treat the application as production-ready until these external configuration, data-migration, and device-verification steps are complete.**
