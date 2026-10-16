@@ -128,11 +128,11 @@ fun AdminDashboardScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1726)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.5.dp, roleTheme.accentBorderColor.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                        .border(1.2.dp, GoldAccent.copy(alpha = 0.58f), RoundedCornerShape(20.dp))
                 ) {
                     Row(
                         modifier = Modifier
@@ -165,10 +165,10 @@ fun AdminDashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = roleTheme.departmentTagline,
-                                    color = roleColor,
+                                    color = GoldAccent,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    letterSpacing = 1.sp
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.2.sp
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Surface(
@@ -194,12 +194,12 @@ fun AdminDashboardScreen(
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = Color.White
                             )
                             Text(
                                 text = "Authenticated Officer: ${user.name}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color.White.copy(alpha = 0.72f)
                             )
                         }
 
