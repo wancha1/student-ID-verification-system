@@ -378,7 +378,7 @@ test("Exam exception: finance staff cannot create a pre-approved exception", asy
         recommendedByUid: BURSAR_UID,
         isApproved: true,
         approvedByUid: "",
-        approvedAt: 0
+        approvedAt: null
       })
   );
 });
@@ -397,7 +397,7 @@ test("Exam exception: finance staff can create a pending recommendation", async 
         recommendedByUid: BURSAR_UID,
         isApproved: false,
         approvedByUid: "",
-        approvedAt: 0
+        approvedAt: null
       })
   );
 });
@@ -415,7 +415,7 @@ test("Exam exception: only a distinct authenticated school administrator can app
     recommendedByUid: BURSAR_UID,
     isApproved: false,
     approvedByUid: "",
-    approvedAt: 0
+    approvedAt: null
   }));
   const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
   await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
@@ -423,7 +423,7 @@ test("Exam exception: only a distinct authenticated school administrator can app
       isApproved: true,
       approvedBy: "System Admin",
       approvedByUid: ADMIN_UID,
-      approvedAt: Date.now()
+      approvedAt: new Date()
     }));
 });
 
@@ -574,7 +574,7 @@ test("Exam exception: identical retry by Bursar is idempotent", async () => {
     recommendedByUid: BURSAR_UID,
     isApproved: false,
     approvedByUid: "",
-    approvedAt: 0
+    approvedAt: null
   };
   await assertSucceeds(ref.set(payload));
   await assertSucceeds(ref.set(payload));
