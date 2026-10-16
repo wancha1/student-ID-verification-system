@@ -321,10 +321,10 @@ test("Privilege escalation: user cannot self-assign ADMIN in legacy profile", as
   );
 });
 
-test("Privilege escalation: user cannot change legacy profile role after creation", async () => {
+test("Legacy self-managed user profiles are disabled", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
       email: "alice@oakridge.ac.ug",
@@ -334,9 +334,7 @@ test("Privilege escalation: user cannot change legacy profile role after creatio
       updatedAt: now,
     })
   );
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).update({ role: "ADMIN", updatedAt: new Date() })
-  );
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).get());
 });
 
 test("Privilege escalation: user cannot self-register as school ADMIN", async () => {
@@ -387,8 +385,11 @@ test("Exam exception: finance staff cannot create a pre-approved exception", asy
         id: "EX-PREAPPROVED-01",
         studentId: "STU-01",
         examCode: "UACE-MATH",
-        recommendedBy: BURSAR_UID,
-        isApproved: true
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: BURSAR_UID,
+        isApproved: true,
+        approvedByUid: "",
+        approvedAt: 0
       })
   );
 });
@@ -403,10 +404,38 @@ test("Exam exception: finance staff can create a pending recommendation", async 
         id: "EX-PENDING-01",
         studentId: "STU-01",
         examCode: "UACE-MATH",
-        recommendedBy: BURSAR_UID,
-        isApproved: false
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: BURSAR_UID,
+        isApproved: false,
+        approvedByUid: "",
+        approvedAt: 0
       })
   );
+});
+
+test("Exam exception: only a distinct authenticated school administrator can approve", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("exam_exceptions").doc("EX-APPROVE-01");
+  await assertSucceeds(ref.set({
+    id: "EX-APPROVE-01",
+    studentId: "STU-01",
+    examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
+    isApproved: false,
+    approvedByUid: "",
+    approvedAt: 0
+  }));
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("exam_exceptions").doc("EX-APPROVE-01").update({
+      isApproved: true,
+      approvedBy: "System Admin",
+      approvedByUid: ADMIN_UID,
+      approvedAt: Date.now()
+    }));
 });
 
 test("Idempotent retry: identical gate-log upload is accepted without changing the record", async () => {
