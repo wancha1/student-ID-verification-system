@@ -54,3 +54,8 @@ Keep PR #7 open until the latest CI passes. Review the final diff and the remain
 - The legacy `/users` namespace is denied all client access so self-created legacy role profiles cannot be confused with trusted school staff.
 - **Student privacy migration is still a deployment blocker:** current student documents contain guardian/emergency-contact fields. Firestore rules cannot hide selected fields inside a document. Move those fields to a restricted `student_private/{studentId}` collection, migrate existing records, update sync/read paths, and verify role-based access before deploying.
 - **Firebase/device verification remains external:** the repository still references the generated AI Studio/Oakridge Firestore database ID. Do not change it blindly. Confirm the actual LTC Firebase project and database with the project owner, install its local `google-services.json`, deploy rules to that database, and run emulator plus physical-device tests for offline recovery, revocation sync, small-screen layout, and restart persistence. These steps cannot be completed from source changes alone.
+
+
+### Private student-field migration runbook
+
+Before deploying the new rules to a live database, back up the real LTC Firestore database and run `scripts/migrate-private-student-fields.mjs` in dry-run mode with confirmed `GOOGLE_CLOUD_PROJECT` and `FIRESTORE_DATABASE_ID`. Review the document count, then use `--apply` only after approval. The script moves guardian name, guardian phone, emergency contact, and notes to `schools/ltc_school_01/student_private/{studentId}` and removes them from public student documents. It is intentionally not run by CI and never chooses a Firebase project automatically.
