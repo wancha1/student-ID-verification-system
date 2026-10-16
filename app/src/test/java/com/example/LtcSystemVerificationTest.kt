@@ -462,6 +462,20 @@ class LtcSystemVerificationTest {
             assertTrue("Audit attribution must use the authenticated session identity", latestLog.guardName.contains("System Administrator"))
             assertFalse("Caller-supplied supervisor names must not be trusted", latestLog.guardName.contains("Mrs. Clara Nambi"))
             assertTrue(latestLog.reason.contains("EMERGENCY SUPERVISOR OVERRIDE"))
+
+            // Inactive/revoked cards are not a fee exception and must never be overridden.
+            assertTrue(repository.deactivateCard(outstandingStudent.id, card.id, "Test card revocation").isSuccess)
+            viewModel.handleBarcodeScan(card.qrPayload, context)
+            assertTrue("Revoked card scan should be classified as inactive", viewModel.activeScanResult.value is StudentScanResult.CardInactive)
+            var inactiveOverrideSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = studentNumber,
+                supervisorName = "Forged Supervisor Name",
+                overridePin = "7891",
+                reason = "Attempt to bypass revoked card",
+                context = context
+            ) { success, _ -> inactiveOverrideSuccess = success }
+            assertFalse("Inactive/revoked cards must not be overridden", inactiveOverrideSuccess)
         }
     }
 
