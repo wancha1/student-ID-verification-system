@@ -32,7 +32,16 @@ class FirebaseStaffAuthenticator {
             ?: throw IllegalStateException("Firebase Authentication returned no user.")
 
         try {
-            val databaseId = context.getString(R.string.firestore_database_id)
+            val databaseId = context.getString(R.string.firestore_database_id).trim()
+            // The checked-in resource currently contains the AI Studio/Oakridge database ID.
+            // Refuse LTC staff sign-in until the owner supplies the confirmed LTC database ID.
+            if (databaseId.isBlank() ||
+                databaseId.contains("oakridge", ignoreCase = true) ||
+                databaseId.startsWith("UNCONFIGURED_", ignoreCase = true)) {
+                throw IllegalStateException(
+                    "LTC Firebase is not configured. Set firestore_database_id to the confirmed LTC Firestore database ID before staff sign-in."
+                )
+            }
             val db = FirebaseFirestore.getInstance(app, databaseId)
             val staffSnapshot = db.collection("schools")
                 .document(SCHOOL_ID)
