@@ -53,7 +53,7 @@ abstract class FirestoreEmulatorTestBase {
         TEST_APP_NAME
       )
 
-    synchronized(FirebaseEmulatorTestBase::class.java) {
+    synchronized(FirestoreEmulatorTestBase::class.java) {
       if (!emulatorConfigured) {
         val emulatorFirestore = FirebaseFirestore.getInstance(app, databaseId)
         emulatorFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
