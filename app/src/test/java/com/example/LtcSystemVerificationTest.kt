@@ -1053,7 +1053,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1156,7 +1156,7 @@ class LtcSystemVerificationTest {
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1334,7 +1334,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open with Room specifying MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1377,7 +1377,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1548,7 +1548,7 @@ class LtcSystemVerificationTest {
 
         // 2. Perform Room migration to Version 6
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries()
             .build()
 
@@ -1605,7 +1605,7 @@ class LtcSystemVerificationTest {
         assertTrue("Index on createdAt must exist", indexList.contains("index_pending_changes_createdAt"))
         assertTrue("Index on (entityType, recordId) must exist", indexList.contains("index_pending_changes_entityType_recordId"))
 
-                // 6. Inspect PRAGMA table_info and index_list for Version 7 tables: meal_records, attendance_records, exam_exceptions
+                // 6. Inspect PRAGMA table_info and index_list for Version 8 schema: department tables and exam attribution UIDs
         val mealColumns = mutableMapOf<String, String>()
         val mealCursor = db.query("PRAGMA table_info(`meal_records`)")
         while (mealCursor.moveToNext()) {
@@ -1639,6 +1639,15 @@ class LtcSystemVerificationTest {
         }
         examIndexCursor.close()
         assertTrue("Composite unique index on (studentId, examCode) must exist", examIndexList.contains("index_exam_exceptions_studentId_examCode"))
+
+        val examColumns = mutableSetOf<String>()
+        val examColumnCursor = db.query("PRAGMA table_info(`exam_exceptions`)")
+        while (examColumnCursor.moveToNext()) {
+            examColumns.add(examColumnCursor.getString(1))
+        }
+        examColumnCursor.close()
+        assertTrue("Exam exceptions must persist the authenticated recommender UID", examColumns.contains("recommendedByUid"))
+        assertTrue("Exam exceptions must persist the authenticated approver UID", examColumns.contains("approvedByUid"))
 
         // 7. Test idempotent execution of MIGRATION DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
