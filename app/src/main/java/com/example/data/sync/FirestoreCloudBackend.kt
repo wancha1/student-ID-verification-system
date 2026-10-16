@@ -13,6 +13,7 @@ import com.example.model.FeeStatus
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
 
@@ -297,7 +298,9 @@ class FirestoreCloudBackend(
                 "isApproved" to ex.isApproved,
                 "approvedBy" to (ex.approvedByHeadTeacher ?: ""),
                 "approvedByUid" to (ex.approvedByUid ?: ""),
-                "approvedAt" to (ex.approvedAt ?: 0L)
+                // Server time is authoritative for the cloud audit event; the local Room
+                // timestamp remains available for offline UI/history.
+                "approvedAt" to if (ex.isApproved) FieldValue.serverTimestamp() else null
             )
             batch.set(docRef, data)
         }
