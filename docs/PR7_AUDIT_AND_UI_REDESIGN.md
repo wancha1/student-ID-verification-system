@@ -44,3 +44,13 @@ CI must be checked on the latest branch head before merging. Earlier CI confirme
 ## Merge recommendation
 
 Keep PR #7 open until the latest CI passes. Review the final diff and the remaining live-Firebase/offline-auth risks before considering a production release.
+
+
+## Follow-up hardening (2026-10-16)
+
+- Meal and requirements scans now call the repository's production QR verifier, so signature validity, validity dates, exact registered card identity, card lifecycle, and active student status are checked consistently before a department action.
+- Meal records are loaded from Room and written before success is reported. The insert uses the existing unique (studentId, mealType, mealDate) index with an atomic IGNORE operation to prevent duplicate servings on repeated/concurrent scans. If local persistence is unavailable, serving fails closed.
+- Exam-exception local records now carry Firebase UIDs for recommendation and approval. Database v8 migration adds UID columns; approval rejects missing requester identity and self-approval. Cloud writes include the UIDs, and Firestore rules enforce authenticated attribution and a one-way approval transition.
+- The legacy `/users` namespace is denied all client access so self-created legacy role profiles cannot be confused with trusted school staff.
+- **Student privacy migration is still a deployment blocker:** current student documents contain guardian/emergency-contact fields. Firestore rules cannot hide selected fields inside a document. Move those fields to a restricted `student_private/{studentId}` collection, migrate existing records, update sync/read paths, and verify role-based access before deploying.
+- **Firebase/device verification remains external:** the repository still references the generated AI Studio/Oakridge Firestore database ID. Do not change it blindly. Confirm the actual LTC Firebase project and database with the project owner, install its local `google-services.json`, deploy rules to that database, and run emulator plus physical-device tests for offline recovery, revocation sync, small-screen layout, and restart persistence. These steps cannot be completed from source changes alone.
