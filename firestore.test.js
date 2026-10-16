@@ -654,3 +654,23 @@ test("Requirements checklist: gate and meal staff cannot read or modify checklis
   await assertFails(mealDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-02")
     .update({ uniformComplete: false, updatedAt: Date.now() }));
 });
+
+test("Exam exception: requester cannot spoof requester UID or approve their own request", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-SELF-APPROVE-01");
+  await assertFails(ref.set({
+    id: "EX-SELF-APPROVE-01", studentId: "STU-01", examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence", recommendedByUid: ADMIN_UID,
+    isApproved: false, approvedByUid: "", approvedAt: null
+  }));
+  await assertSucceeds(ref.set({
+    id: "EX-SELF-APPROVE-01", studentId: "STU-01", examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence", recommendedByUid: BURSAR_UID,
+    isApproved: false, approvedByUid: "", approvedAt: null
+  }));
+  await assertFails(ref.update({
+    isApproved: true, approvedBy: "Bursar Florence",
+    approvedByUid: BURSAR_UID, approvedAt: new Date()
+  }));
+});
