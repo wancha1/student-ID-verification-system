@@ -19,7 +19,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
-import java.net.HttpURLConnection
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.OkHttpClient
 import java.net.URL
 
 @RunWith(RobolectricTestRunner::class)
@@ -37,26 +40,30 @@ abstract class FirestoreEmulatorTestBase {
     val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
     databaseId = if (resId != 0) context.getString(resId) else "demo-database"
 
-    val app = if (FirebaseApp.getApps(context).isEmpty()) {
-      val newApp = FirebaseApp.initializeApp(
+    // Use a dedicated Firebase app so a google-services.json app initialized by
+    // Robolectric cannot silently send emulator tests to a real Firebase project.
+    val app = FirebaseApp.getApps(context).firstOrNull { it.name == TEST_APP_NAME }
+      ?: FirebaseApp.initializeApp(
         context,
         FirebaseOptions.Builder()
           .setApplicationId("com.aistudio.studentaccess.xpkz")
           .setProjectId(PROJECT_ID)
           .setApiKey("fake-api-key-for-emulator")
-          .build()
+          .build(),
+        TEST_APP_NAME
       )
-      val newFirestore = FirebaseFirestore.getInstance(newApp, databaseId)
-      newFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
-      newFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
-        .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
-        .build()
 
-      val newAuth = FirebaseAuth.getInstance(newApp)
-      newAuth.useEmulator(EMULATOR_HOST, AUTH_PORT)
-      newApp
-    } else {
-      FirebaseApp.getInstance()
+    synchronized(FirestoreEmulatorTestBase::class.java) {
+      if (!emulatorConfigured) {
+        val emulatorFirestore = FirebaseFirestore.getInstance(app, databaseId)
+        emulatorFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
+        emulatorFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
+          .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
+          .build()
+
+        FirebaseAuth.getInstance(app).useEmulator(EMULATOR_HOST, AUTH_PORT)
+        emulatorConfigured = true
+      }
     }
 
     firestore = FirebaseFirestore.getInstance(app, databaseId)
@@ -76,23 +83,19 @@ abstract class FirestoreEmulatorTestBase {
     val safeRole = role.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")
-    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"}}}"""
+    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"},"active":{"booleanValue":true}}}"""
     val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff/$uid")
-    val connection = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "PATCH"
-      setRequestProperty("Authorization", "Bearer owner")
-      setRequestProperty("Content-Type", "application/json")
-      doOutput = true
-    }
-    try {
-      connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-      val code = connection.responseCode
-      if (code !in 200..299) {
-        val detail = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "no response body"
-        throw IllegalStateException("Test staff provisioning failed (HTTP $code): $detail")
+    val request = Request.Builder()
+      .url(url)
+      .header("Authorization", "Bearer owner")
+      .patch(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+      .build()
+
+    OkHttpClient().newCall(request).execute().use { response ->
+      if (!response.isSuccessful) {
+        val detail = response.body?.string() ?: "no response body"
+        throw IllegalStateException("Test staff provisioning failed (HTTP ${response.code}): $detail")
       }
-    } finally {
-      connection.disconnect()
     }
   }
 
@@ -112,7 +115,9 @@ abstract class FirestoreEmulatorTestBase {
     const val FIRESTORE_PORT = 8085
     const val AUTH_PORT = 9099
     const val PROJECT_ID = "demo-no-project"
+    const val TEST_APP_NAME = "ltc_emulator_test"
     const val DEFAULT_PASSWORD = "password123"
     const val AUTH_TIMEOUT_MS = 5000L
+    @Volatile var emulatorConfigured = false
   }
 }

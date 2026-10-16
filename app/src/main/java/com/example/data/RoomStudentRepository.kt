@@ -87,7 +87,6 @@ class RoomStudentRepository(
     override suspend fun getStudentByCardIdentifier(cardIdentifier: String): Student? = withContext(ioDispatcher) {
         val cleanCardId = cardIdentifier.trim().uppercase()
         val cardEntity = database.cardDao().getCardByIdentifier(cleanCardId)
-            ?: database.cardDao().getCardById(cleanCardId)
             ?: return@withContext null
 
         val studentEntity = database.studentDao().getStudentById(cardEntity.studentId)
@@ -174,7 +173,6 @@ class RoomStudentRepository(
 
                 // 2. Query exact card record corresponding to the scanned cardId
                 val cardEntity = database.cardDao().getCardByIdentifier(parseResult.cardId)
-                    ?: database.cardDao().getCardById(parseResult.cardId)
 
                 if (cardEntity == null) {
                     return@withContext StudentScanResult.StudentNotFound(

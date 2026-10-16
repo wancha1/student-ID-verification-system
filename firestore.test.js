@@ -44,21 +44,20 @@ test("Unauthenticated user: cannot read staff profile", async () => {
   await assertFails(unauthDb.collection("users").doc(ALICE_UID).get());
 });
 
-test("Authenticated user: can create and read their own staff profile", async () => {
+test("Authenticated users cannot self-create legacy staff profiles", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
-      email: "alice@oakridge.ac.ug",
+      email: "alice@ltc.example",
       displayName: "Alice Staff",
       role: "STAFF",
       createdAt: now,
       updatedAt: now,
     })
   );
-
-  const doc = await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).get());
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).get());
 });
 
 test("Cross-user isolation: Bob cannot read Alice's student records", async () => {
@@ -83,10 +82,10 @@ test("Cross-user isolation: Bob cannot read Alice's student records", async () =
   await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("students").get());
 });
 
-test("Authenticated user: can create and list their own student records", async () => {
+test("Authenticated users cannot create or list legacy student records", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).collection("students").doc("stu_001").set({
       userId: ALICE_UID,
       studentNumber: "LTC-2026-0001",
@@ -100,33 +99,23 @@ test("Authenticated user: can create and list their own student records", async 
       updatedAt: now,
     })
   );
-
-  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("students").get());
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).collection("students").get());
 });
 
-test("Scan logs: append-only, cannot be deleted or updated", async () => {
+test("Legacy scan logs are disabled in favor of school-scoped append-only logs", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").set({
-      userId: ALICE_UID,
-      studentNumber: "LTC-2026-0001",
-      studentName: "Michael Kasule",
-      decision: "APPROVED",
-      gatePoint: "Main Gate",
-      scannedAt: now,
-    })
-  );
-
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").update({
-      decision: "DENIED",
-    })
-  );
-
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").delete()
-  );
+  const ref = aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001");
+  await assertFails(ref.set({
+    userId: ALICE_UID,
+    studentNumber: "LTC-2026-0001",
+    studentName: "Michael Kasule",
+    decision: "APPROVED",
+    gatePoint: "Main Gate",
+    scannedAt: now,
+  }));
+  await assertFails(ref.update({ decision: "DENIED" }));
+  await assertFails(ref.delete());
 });
 
 // -------------------------------------------------------------------
@@ -321,10 +310,10 @@ test("Privilege escalation: user cannot self-assign ADMIN in legacy profile", as
   );
 });
 
-test("Privilege escalation: user cannot change legacy profile role after creation", async () => {
+test("Legacy self-managed user profiles are disabled", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
       email: "alice@oakridge.ac.ug",
@@ -334,9 +323,7 @@ test("Privilege escalation: user cannot change legacy profile role after creatio
       updatedAt: now,
     })
   );
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).update({ role: "ADMIN", updatedAt: new Date() })
-  );
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).get());
 });
 
 test("Privilege escalation: user cannot self-register as school ADMIN", async () => {
@@ -387,8 +374,11 @@ test("Exam exception: finance staff cannot create a pre-approved exception", asy
         id: "EX-PREAPPROVED-01",
         studentId: "STU-01",
         examCode: "UACE-MATH",
-        recommendedBy: BURSAR_UID,
-        isApproved: true
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: BURSAR_UID,
+        isApproved: true,
+        approvedByUid: "",
+        approvedAt: null
       })
   );
 });
@@ -403,10 +393,38 @@ test("Exam exception: finance staff can create a pending recommendation", async 
         id: "EX-PENDING-01",
         studentId: "STU-01",
         examCode: "UACE-MATH",
-        recommendedBy: BURSAR_UID,
-        isApproved: false
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: BURSAR_UID,
+        isApproved: false,
+        approvedByUid: "",
+        approvedAt: null
       })
   );
+});
+
+test("Exam exception: only a distinct authenticated school administrator can approve", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("exam_exceptions").doc("EX-APPROVE-01");
+  await assertSucceeds(ref.set({
+    id: "EX-APPROVE-01",
+    studentId: "STU-01",
+    examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
+    isApproved: false,
+    approvedByUid: "",
+    approvedAt: null
+  }));
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("exam_exceptions").doc("EX-APPROVE-01").update({
+      isApproved: true,
+      approvedBy: "System Admin",
+      approvedByUid: ADMIN_UID,
+      approvedAt: new Date()
+    }));
 });
 
 test("Idempotent retry: identical gate-log upload is accepted without changing the record", async () => {
@@ -552,9 +570,107 @@ test("Exam exception: identical retry by Bursar is idempotent", async () => {
     id: "EX-RETRY-01",
     studentId: "STU-01",
     examCode: "UACE-MATH",
-    recommendedBy: BURSAR_UID,
-    isApproved: false
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
+    isApproved: false,
+    approvedByUid: "",
+    approvedAt: null
   };
   await assertSucceeds(ref.set(payload));
   await assertSucceeds(ref.set(payload));
+});
+
+
+test("Student privacy: only school leadership can read private contact records", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("STU-PRIVATE-01").set({
+        studentId: "STU-PRIVATE-01",
+        guardianName: "Private Guardian",
+        guardianPhone: "+256700000000",
+        emergencyContact: "+256770000000",
+        notes: "Sensitive note",
+        updatedAt: Date.now()
+      });
+  });
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-01").get());
+  await assertFails(bursarDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-01").get());
+  const privateRecord = await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-01").get());
+  assert.strictEqual(privateRecord.data().guardianPhone, "+256700000000");
+});
+
+test("Student privacy: public student documents reject guardian and emergency-contact fields", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("students").doc("STU-PRIVATE-FIELD-01").set({
+      id: "STU-PRIVATE-FIELD-01",
+      studentNumber: "LTC-2026-9911",
+      firstName: "Student",
+      lastName: "Privacy",
+      name: "Student Privacy",
+      gradeClass: "Senior 4",
+      isDayScholar: true,
+      feesStatus: "CLEARED",
+      outstandingAmount: 0,
+      guardianPhone: "+256700000000",
+      updatedAt: Date.now()
+    }));
+});
+
+test("Requirements checklist: teacher can sync structured checklist but cannot add free-text notes", async () => {
+  await setupSchoolStaff();
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const ref = teacherDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-01");
+  const payload = {
+    studentId: "STU-REQ-01", studentNumber: "LTC-2026-9001", studentName: "Test Student", gradeClass: "Senior 4",
+    uniformComplete: true, sportsKitComplete: false, textbooksSubmitted: true, medicalFormSigned: true,
+    schoolIdIssued: true, rulesAgreementSigned: true, busPassCleared: false, updatedAt: Date.now()
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.update({ sportsKitComplete: true, updatedAt: Date.now() }));
+  await assertFails(ref.update({ notes: "Potentially sensitive note" }));
+});
+
+test("Requirements checklist: gate and meal staff cannot read or modify checklists", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-02").set({
+      studentId: "STU-REQ-02", studentNumber: "LTC-2026-9002", studentName: "Test Student", gradeClass: "Senior 3",
+      uniformComplete: true, sportsKitComplete: true, textbooksSubmitted: true, medicalFormSigned: true,
+      schoolIdIssued: true, rulesAgreementSigned: true, busPassCleared: true, updatedAt: Date.now()
+    });
+  });
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const mealDb = testEnv.authenticatedContext(MEAL_UID).firestore();
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").get());
+  await assertFails(mealDb.collection("schools").doc(SCHOOL_LTC).collection("requirements").doc("STU-REQ-02")
+    .update({ uniformComplete: false, updatedAt: Date.now() }));
+});
+
+test("Exam exception: requester cannot spoof requester UID or approve their own request", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-SELF-APPROVE-01");
+  await assertFails(ref.set({
+    id: "EX-SELF-APPROVE-01", studentId: "STU-01", examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence", recommendedByUid: ADMIN_UID,
+    isApproved: false, approvedByUid: "", approvedAt: null
+  }));
+  await assertSucceeds(ref.set({
+    id: "EX-SELF-APPROVE-01", studentId: "STU-01", examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence", recommendedByUid: BURSAR_UID,
+    isApproved: false, approvedByUid: "", approvedAt: null
+  }));
+  await assertFails(ref.update({
+    isApproved: true, approvedBy: "Bursar Florence",
+    approvedByUid: BURSAR_UID, approvedAt: new Date()
+  }));
 });

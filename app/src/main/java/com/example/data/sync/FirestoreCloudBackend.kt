@@ -9,10 +9,12 @@ import com.example.data.local.ExamExceptionEntity
 import com.example.data.local.MealRecordEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.model.FeeStatus
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
 
@@ -32,7 +34,7 @@ class FirestoreCloudBackend(
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
             FirebaseApp.getInstance(),
-            context.getString(R.string.firestore_database_id)
+            requireConfiguredLtcDatabaseId(context)
         ),
         FirebaseAuth.getInstance(FirebaseApp.getInstance()),
         "ltc_school_01"
@@ -48,7 +50,7 @@ class FirestoreCloudBackend(
 
     companion object {
         // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
-        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
+        const val FIRESTORE_DATABASE_ID = "unconfigured-ltc-firestore-database-id"
     }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = try {
@@ -58,8 +60,14 @@ class FirestoreCloudBackend(
             .get()
             .await()
 
+        val privateByStudentId = if (canReadPrivateStudentData()) {
+            getSchoolRef().collection("student_private").get().await()
+                .documents.associateBy { it.id }
+        } else emptyMap()
+
         val list = snapshot.documents.mapNotNull { doc ->
             try {
+                val privateDoc = privateByStudentId[doc.id]
                 StudentEntity(
                     id = doc.getString("id") ?: doc.id,
                     studentNumber = doc.getString("studentNumber") ?: "",
@@ -76,12 +84,12 @@ class FirestoreCloudBackend(
                     outstandingAmount = (doc.getDouble("outstandingAmount") ?: (doc.getLong("outstandingAmount")?.toDouble()) ?: 0.0),
                     gender = doc.getString("gender") ?: "Male",
                     avatarColorSeed = doc.getLong("avatarColorSeed") ?: 42L,
-                    guardianName = doc.getString("guardianName") ?: "",
-                    guardianPhone = doc.getString("guardianPhone") ?: "",
-                    emergencyContact = doc.getString("emergencyContact") ?: "",
+                    guardianName = privateDoc?.getString("guardianName") ?: "",
+                    guardianPhone = privateDoc?.getString("guardianPhone") ?: "",
+                    emergencyContact = privateDoc?.getString("emergencyContact") ?: "",
                     homeroomTeacher = doc.getString("homeroomTeacher") ?: "",
                     academicYear = doc.getString("academicYear") ?: "2026",
-                    notes = doc.getString("notes") ?: "",
+                    notes = privateDoc?.getString("notes") ?: "",
                     qrToken = doc.getString("qrToken") ?: "",
                     updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
                     isDeleted = doc.getBoolean("isDeleted") ?: false
@@ -129,8 +137,51 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
+    override suspend fun canSyncRequirements(): Boolean {
+        return try {
+            val uid = auth.currentUser?.uid ?: return false
+            val staff = getSchoolRef().collection("staff").document(uid).get().await()
+            staff.getBoolean("active") == true &&
+                staff.getString("role")?.uppercase() in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "TEACHER")
+        } catch (_: Exception) {
+            false
+        }
+    }
+    override suspend fun fetchRequirementsUpdatedSince(timestamp: Long): Result<List<StudentRequirementEntity>> = try {
+        val snapshot = getSchoolRef()
+            .collection("requirements")
+            .whereGreaterThan("updatedAt", timestamp)
+            .get()
+            .await()
+        Result.success(snapshot.documents.mapNotNull { doc ->
+            try {
+                StudentRequirementEntity(
+                    studentId = doc.getString("studentId") ?: doc.id,
+                    studentNumber = doc.getString("studentNumber") ?: "",
+                    studentName = doc.getString("studentName") ?: "",
+                    gradeClass = doc.getString("gradeClass") ?: "",
+                    uniformComplete = doc.getBoolean("uniformComplete") ?: false,
+                    sportsKitComplete = doc.getBoolean("sportsKitComplete") ?: false,
+                    textbooksSubmitted = doc.getBoolean("textbooksSubmitted") ?: false,
+                    medicalFormSigned = doc.getBoolean("medicalFormSigned") ?: false,
+                    schoolIdIssued = doc.getBoolean("schoolIdIssued") ?: false,
+                    rulesAgreementSigned = doc.getBoolean("rulesAgreementSigned") ?: false,
+                    busPassCleared = doc.getBoolean("busPassCleared") ?: false,
+                    notes = "",
+                    updatedAt = doc.getLong("updatedAt") ?: 0L,
+                    isSyncedToCloud = true
+                )
+            } catch (_: Exception) {
+                null
+            }
+        })
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
         val batch = db.batch()
+        val canWritePrivate = canManageStudentPrivateData()
         for (student in students) {
             val docRef = getSchoolRef().collection("students").document(student.id)
             val data = hashMapOf(
@@ -149,22 +200,44 @@ class FirestoreCloudBackend(
                 "outstandingAmount" to student.outstandingAmount,
                 "gender" to student.gender,
                 "avatarColorSeed" to student.avatarColorSeed,
-                "guardianName" to student.guardianName,
-                "guardianPhone" to student.guardianPhone,
-                "emergencyContact" to student.emergencyContact,
                 "homeroomTeacher" to student.homeroomTeacher,
                 "academicYear" to student.academicYear,
-                "notes" to student.notes,
                 "qrToken" to student.qrToken,
                 "updatedAt" to student.updatedAt,
                 "isDeleted" to student.isDeleted
             )
             batch.set(docRef, data)
+            if (canWritePrivate) {
+                val privateRef = getSchoolRef().collection("student_private").document(student.id)
+                batch.set(privateRef, mapOf(
+                    "studentId" to student.id,
+                    "guardianName" to student.guardianName,
+                    "guardianPhone" to student.guardianPhone,
+                    "emergencyContact" to student.emergencyContact,
+                    "notes" to student.notes,
+                    "updatedAt" to student.updatedAt
+                ))
+            }
         }
         batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+    }
+
+    private suspend fun canReadPrivateStudentData(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        if (staff.getBoolean("active") != true) return false
+        val role = staff.getString("role")?.uppercase() ?: return false
+        return role in setOf("ADMIN", "HEAD_TEACHER")
+    }
+
+    private suspend fun canManageStudentPrivateData(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        return staff.getBoolean("active") == true &&
+            staff.getString("role")?.uppercase() in setOf("ADMIN", "HEAD_TEACHER")
     }
 
     override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = try {
@@ -254,6 +327,33 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
+    override suspend fun pushRequirementRecords(requirements: List<StudentRequirementEntity>): Result<Unit> = try {
+        val batch = db.batch()
+        for (requirement in requirements) {
+            val docRef = getSchoolRef().collection("requirements").document(requirement.studentId)
+            // Free-text notes are deliberately excluded from shared cloud documents.
+            val data = mapOf(
+                "studentId" to requirement.studentId,
+                "studentNumber" to requirement.studentNumber,
+                "studentName" to requirement.studentName,
+                "gradeClass" to requirement.gradeClass,
+                "uniformComplete" to requirement.uniformComplete,
+                "sportsKitComplete" to requirement.sportsKitComplete,
+                "textbooksSubmitted" to requirement.textbooksSubmitted,
+                "medicalFormSigned" to requirement.medicalFormSigned,
+                "schoolIdIssued" to requirement.schoolIdIssued,
+                "rulesAgreementSigned" to requirement.rulesAgreementSigned,
+                "busPassCleared" to requirement.busPassCleared,
+                "updatedAt" to requirement.updatedAt
+            )
+            batch.set(docRef, data)
+        }
+        batch.commit().await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> = try {
         val batch = db.batch()
         for (ex in exceptions) {
@@ -263,7 +363,13 @@ class FirestoreCloudBackend(
                 "studentId" to ex.studentId,
                 "examCode" to ex.examCode,
                 "recommendedBy" to ex.requestedByBursar,
-                "isApproved" to ex.isApproved
+                "recommendedByUid" to ex.recommendedByUid,
+                "isApproved" to ex.isApproved,
+                "approvedBy" to (ex.approvedByHeadTeacher ?: ""),
+                "approvedByUid" to (ex.approvedByUid ?: ""),
+                // Server time is authoritative for the cloud audit event; the local Room
+                // timestamp remains available for offline UI/history.
+                "approvedAt" to if (ex.isApproved) FieldValue.serverTimestamp() else null
             )
             batch.set(docRef, data)
         }
@@ -330,4 +436,14 @@ class FirestoreCloudBackend(
     } catch (e: Exception) {
         Result.failure(e)
     }
+}
+
+private fun requireConfiguredLtcDatabaseId(context: Context): String {
+    val databaseId = context.getString(R.string.firestore_database_id).trim()
+    require(databaseId.isNotBlank() &&
+        !databaseId.contains("oakridge", ignoreCase = true) &&
+        !databaseId.contains("unconfigured", ignoreCase = true)) {
+        "LTC Firebase is not configured. Set firestore_database_id to the confirmed LTC Firestore database ID."
+    }
+    return databaseId
 }

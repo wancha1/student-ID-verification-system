@@ -131,7 +131,6 @@ object QrUnifiedVerifier {
 
         // Step 5: Look up exact card ID
         val cardEntity = database.cardDao().getCardByIdentifier(parseResult.cardId)
-            ?: database.cardDao().getCardById(parseResult.cardId)
         if (cardEntity == null) {
             return@withContext DepartmentVerificationResult.StudentNotFound(
                 cardId = parseResult.cardId,

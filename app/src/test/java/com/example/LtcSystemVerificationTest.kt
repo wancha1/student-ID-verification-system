@@ -10,6 +10,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.data.local.SyncEntityType
 import com.example.data.local.SyncOperationType
 import com.example.model.AccessStatus
@@ -19,6 +20,7 @@ import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
 import com.example.model.StaffPermission
 import com.example.model.Student
+import com.example.model.StudentRequirement
 import com.example.model.StudentScanResult
 import com.example.model.UserRole
 import com.example.ui.MainViewModel
@@ -377,7 +379,7 @@ class LtcSystemVerificationTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             SecurityManager.configureTestCredentials(context, adminPin = "7891", supervisorPin = "7891")
 
-            viewModel.loginAs(UserRole.GATE_KEEPER)
+            viewModel.loginAs(UserRole.GATE_STAFF)
 
             // Student with outstanding fees scanned via authentic V2 card
             val studentNumber = outstandingStudent.studentNumber
@@ -399,7 +401,19 @@ class LtcSystemVerificationTest {
             assertFalse("Override with invalid PIN must fail", overrideSuccess)
             assertFalse("Scan result must remain unapproved after failed override", (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved)
 
-            // 2. Override on invalid / unknown QR code -> Rejected!
+            // Gate staff cannot authorize an override even with the supervisor PIN.
+            var gateOverrideSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = studentNumber,
+                supervisorName = "Mrs. Clara Nambi",
+                overridePin = "7891",
+                reason = "Gate staff must not self-authorize a supervisor override",
+                context = context
+            ) { success, _ -> gateOverrideSuccess = success }
+            assertFalse("Gate staff must not authorize an emergency override", gateOverrideSuccess)
+
+            // 2. Unknown QR remains blocked even when a senior supervisor is signed in.
+            viewModel.loginAs(UserRole.ADMINISTRATOR)
             viewModel.handleBarcodeScan("INVALID_MALFORMED_QR_XYZ", context)
             var invalidOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
@@ -411,8 +425,23 @@ class LtcSystemVerificationTest {
             ) { success, _ -> invalidOverrideSuccess = success }
             assertFalse("Emergency override must NEVER authorize an invalid or unknown QR code", invalidOverrideSuccess)
 
-            // 3. Valid supervisor override on identified student -> Approved & Logged!
+            // 3. A valid scan for one student must never authorize a different target.
             viewModel.handleBarcodeScan(card.qrPayload, context)
+            var mismatchedTargetSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = "STU-OTHER-0001",
+                supervisorName = "Mrs. Clara Nambi",
+                overridePin = "7891",
+                reason = "Attempt to reuse the scan for another student",
+                context = context
+            ) { success, _ -> mismatchedTargetSuccess = success }
+            assertFalse("Override target must match the student on the scanned card", mismatchedTargetSuccess)
+            assertFalse(
+                "Mismatched target must not approve the current scan",
+                (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved
+            )
+
+            // 4. Valid supervisor override on the identified student -> Approved & Logged!
             var validOverrideSuccess = false
             viewModel.authorizeEmergencyOverride(
                 studentId = studentNumber,
@@ -432,8 +461,23 @@ class LtcSystemVerificationTest {
             val logs = repository.scanLogsFlow.first()
             val latestLog = logs.first()
             assertEquals(GateVerificationDecision.APPROVED, latestLog.decision)
-            assertTrue(latestLog.guardName.contains("Mrs. Clara Nambi"))
+            assertTrue("Audit attribution must use the authenticated session identity", latestLog.guardName.contains("System Administrator"))
+            assertFalse("Caller-supplied supervisor names must not be trusted", latestLog.guardName.contains("Mrs. Clara Nambi"))
             assertTrue(latestLog.reason.contains("EMERGENCY SUPERVISOR OVERRIDE"))
+
+            // Inactive/revoked cards are not a fee exception and must never be overridden.
+            assertTrue(repository.deactivateCard(outstandingStudent.id, card.id, "Test card revocation").isSuccess)
+            viewModel.handleBarcodeScan(card.qrPayload, context)
+            assertTrue("Revoked card scan should be classified as inactive", viewModel.activeScanResult.value is StudentScanResult.CardInactive)
+            var inactiveOverrideSuccess = false
+            viewModel.authorizeEmergencyOverride(
+                studentId = studentNumber,
+                supervisorName = "Forged Supervisor Name",
+                overridePin = "7891",
+                reason = "Attempt to bypass revoked card",
+                context = context
+            ) { success, _ -> inactiveOverrideSuccess = success }
+            assertFalse("Inactive/revoked cards must not be overridden", inactiveOverrideSuccess)
         }
     }
 
@@ -589,7 +633,10 @@ class LtcSystemVerificationTest {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
-            val repo = RoomStudentRepository(database)
+            val repo = RoomStudentRepository(
+                database,
+                remoteCloudDataSource = OutboxPreservingCloudBackend()
+            )
 
             val studentId = "stu-tx-success-01"
             val studentNumber = "LTC-2026-7777"
@@ -676,7 +723,10 @@ class LtcSystemVerificationTest {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
-            val repo = RoomStudentRepository(database)
+            val repo = RoomStudentRepository(
+                database,
+                remoteCloudDataSource = OutboxPreservingCloudBackend()
+            )
 
             val studentId = "stu-tx-rollback-01"
             val studentNumber = "LTC-2026-8888"
@@ -1005,7 +1055,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1066,6 +1116,13 @@ class LtcSystemVerificationTest {
             assertNotNull("meal_records table must be queryable and retain inserted meal", servedMeal)
             assertEquals("meal-migrated-01", servedMeal?.id)
 
+            // Atomic first-write-wins guard must reject a second serving for the same meal/date.
+            val duplicateMeal = mealRecord.copy(id = "meal-duplicate-01", timestamp = now + 1)
+            val duplicateInsertResult = roomDb.mealRecordDao().insertIfAbsent(duplicateMeal)
+            assertEquals("Duplicate serving must be ignored atomically", -1L, duplicateInsertResult)
+            val retainedMeal = roomDb.mealRecordDao().findServing("stu-v4-01", "LUNCH", "2026-10-13")
+            assertEquals("Duplicate attempt must not replace the original meal audit", "meal-migrated-01", retainedMeal?.id)
+
             val attendanceRecord = com.example.data.local.AttendanceRecordEntity(
                 id = "att-migrated-01",
                 studentId = "stu-v4-01",
@@ -1108,7 +1165,7 @@ class LtcSystemVerificationTest {
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1286,7 +1343,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open with Room specifying MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1329,7 +1386,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1500,7 +1557,7 @@ class LtcSystemVerificationTest {
 
         // 2. Perform Room migration to Version 6
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
             .allowMainThreadQueries()
             .build()
 
@@ -1557,7 +1614,7 @@ class LtcSystemVerificationTest {
         assertTrue("Index on createdAt must exist", indexList.contains("index_pending_changes_createdAt"))
         assertTrue("Index on (entityType, recordId) must exist", indexList.contains("index_pending_changes_entityType_recordId"))
 
-                // 6. Inspect PRAGMA table_info and index_list for Version 7 tables: meal_records, attendance_records, exam_exceptions
+                // 6. Inspect PRAGMA table_info and index_list for Version 8 schema: department tables and exam attribution UIDs
         val mealColumns = mutableMapOf<String, String>()
         val mealCursor = db.query("PRAGMA table_info(`meal_records`)")
         while (mealCursor.moveToNext()) {
@@ -1591,6 +1648,24 @@ class LtcSystemVerificationTest {
         }
         examIndexCursor.close()
         assertTrue("Composite unique index on (studentId, examCode) must exist", examIndexList.contains("index_exam_exceptions_studentId_examCode"))
+
+        val examColumns = mutableSetOf<String>()
+        val examColumnCursor = db.query("PRAGMA table_info(`exam_exceptions`)")
+        while (examColumnCursor.moveToNext()) {
+            examColumns.add(examColumnCursor.getString(1))
+        }
+        examColumnCursor.close()
+        assertTrue("Exam exceptions must persist the authenticated recommender UID", examColumns.contains("recommendedByUid"))
+        assertTrue("Exam exceptions must persist the authenticated approver UID", examColumns.contains("approvedByUid"))
+
+        val requirementColumns = mutableSetOf<String>()
+        val requirementCursor = db.query("PRAGMA table_info(`student_requirements`)")
+        while (requirementCursor.moveToNext()) {
+            requirementColumns.add(requirementCursor.getString(1))
+        }
+        requirementCursor.close()
+        assertTrue("Requirements table must be created by migration 8 to 9", requirementColumns.contains("studentId"))
+        assertTrue("Requirements table must track cloud sync state", requirementColumns.contains("isSyncedToCloud"))
 
         // 7. Test idempotent execution of MIGRATION DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
@@ -1877,4 +1952,68 @@ class LtcSystemVerificationTest {
         assertFalse("Wrong PIN rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "9999"))
         assertFalse("Old default 2026 rejected", SecurityManager.verifyRolePin(context, UserRole.GATE_STAFF, "2026"))
     }
+    @Test
+    fun testRequirementChecklistPersistsAndTracksSyncState() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val dao = database.studentRequirementDao()
+            val requirement = StudentRequirement(
+                studentId = "req-student-01",
+                studentNumber = "LTC-2026-9901",
+                studentName = "Test Student",
+                gradeClass = "Senior 4",
+                uniformComplete = false,
+                notes = "Local-only note"
+            )
+            dao.upsert(StudentRequirementEntity.fromDomain(requirement))
+            val stored = dao.getByStudentId(requirement.studentId)
+            assertNotNull("Checklist must be saved in Room", stored)
+            assertFalse("New checklist changes must remain pending until cloud upload", stored!!.isSyncedToCloud)
+            assertEquals(false, stored.uniformComplete)
+            assertEquals("Local-only note", stored.notes)
+            dao.markSynced(listOf(requirement.studentId))
+            assertTrue("Successful upload must mark the checklist synced", dao.getByStudentId(requirement.studentId)!!.isSyncedToCloud)
+            database.close()
+        }
+    }
+
+    @Test
+    fun testQrLookupDoesNotFallBackToInternalCardRowId() {
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = AppDatabase.createInMemory(context)
+            val student = Student(
+                id = "strict-card-student",
+                studentNumber = "LTC-2026-9902",
+                firstName = "Strict",
+                lastName = "Lookup",
+                gradeClass = "Senior 3",
+                feesStatus = FeeStatus.CLEARED
+            )
+            database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+            database.cardDao().insertOrUpdateCard(
+                CardEntity(
+                    id = "internal-row-id",
+                    cardIdentifier = "CRD-EXACT-9902",
+                    studentId = student.id,
+                    studentNumber = student.studentNumber,
+                    qrPayload = "test-payload",
+                    status = CardStatus.ACTIVE.name,
+                    issueDate = 1L,
+                    activationDate = 1L,
+                    deactivationDate = null,
+                    replacedByCardId = null,
+                    reason = null,
+                    notes = "",
+                    updatedAt = 1L
+                )
+            )
+            val repository = RoomStudentRepository(database)
+            assertNull("Internal database row ID must not be accepted as a QR card identifier", repository.getStudentByCardIdentifier("internal-row-id"))
+            assertEquals(student.id, repository.getStudentByCardIdentifier("CRD-EXACT-9902")?.id)
+            database.close()
+        }
+    }
+
 }

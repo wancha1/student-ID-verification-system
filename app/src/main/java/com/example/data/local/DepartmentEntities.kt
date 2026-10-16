@@ -1,5 +1,6 @@
 package com.example.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -147,6 +148,9 @@ data class ExamExceptionEntity(
     val recommendationReason: String,
     val isApproved: Boolean,
     val approvedByHeadTeacher: String? = null,
+    @ColumnInfo(defaultValue = "''")
+    val recommendedByUid: String = "",
+    val approvedByUid: String? = null,
     val requestedAt: Long,
     val approvedAt: Long? = null,
     val isSyncedToCloud: Boolean = false

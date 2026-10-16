@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.StudentRepository
+import com.example.data.local.MealRecordEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.model.AuthUser
 import com.example.model.Card
 import com.example.model.CardStatus
@@ -54,11 +56,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
 
@@ -197,8 +199,24 @@ class MainViewModel(
     private val _activeMealType = MutableStateFlow(MealType.LUNCH)
     val activeMealType: StateFlow<MealType> = _activeMealType.asStateFlow()
 
-    private val _mealRecords = MutableStateFlow<List<MealRecord>>(createInitialSampleMeals())
+    // Meal records are sourced from Room, not demo-only in-memory state.
+    private val _mealRecords = MutableStateFlow<List<MealRecord>>(emptyList())
     val mealRecords: StateFlow<List<MealRecord>> = _mealRecords.asStateFlow()
+
+    init {
+        repository.database?.let { db ->
+            viewModelScope.launch {
+                db.mealRecordDao().observeAll().collect { entities ->
+                    _mealRecords.value = entities.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.studentRequirementDao().observeAll().collect { entities ->
+                    _requirementsOverrides.value = entities.associate { it.studentId to it.toDomain() }
+                }
+            }
+        }
+    }
 
     private val _mealScanOutcome = MutableStateFlow<MealVerificationResult?>(null)
     val mealScanOutcome: StateFlow<MealVerificationResult?> = _mealScanOutcome.asStateFlow()
@@ -648,6 +666,19 @@ class MainViewModel(
         context: Context,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
+        val authenticatedSupervisor = _currentUser.value
+        if (authenticatedSupervisor == null ||
+            authenticatedSupervisor.role !in setOf(
+                UserRole.ADMINISTRATOR,
+                UserRole.HEAD_TEACHER_MANAGEMENT
+            )
+        ) {
+            val err = "Emergency override requires an authenticated Administrator or Head Teacher session."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+
         if (!com.example.util.SecurityManager.verifySupervisorOverridePin(context, overridePin)) {
             val err = "Invalid supervisor PIN. Emergency override denied."
             _userFeedbackMessage.value = err
@@ -656,16 +687,44 @@ class MainViewModel(
         }
 
         val currentScan = _activeScanResult.value
-        // Critical: Unknown or invalid cards never become authorized through a bypass
-        if (currentScan !is StudentScanResult.Success && currentScan !is StudentScanResult.CardInactive) {
+        // A supervisor may override a decision only for the exact student whose
+        // valid card was just scanned. Never let a valid scan for Student A be
+        // reused to approve Student B.
+        val scannedStudent = when (currentScan) {
+            is StudentScanResult.Success -> currentScan.student
+            is StudentScanResult.CardInactive -> {
+                val err = "Security restriction: Inactive, revoked, or replaced cards cannot be overridden."
+                _userFeedbackMessage.value = err
+                onResult(false, err)
+                return
+            }
+            else -> null
+        }
+        if (scannedStudent == null) {
             val err = "Security restriction: Emergency override cannot authorize unknown or invalid QR cards."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+        if (!scannedStudent.id.equals(studentId, ignoreCase = true) &&
+            !scannedStudent.studentNumber.equals(studentId, ignoreCase = true)
+        ) {
+            val err = "Security restriction: Override target must match the student identified by the current scan."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+
+        val scannedCard = (currentScan as? StudentScanResult.Success)?.card ?: run {
+            val err = "Security restriction: A verified student card is required for an emergency override."
             _userFeedbackMessage.value = err
             onResult(false, err)
             return
         }
 
         viewModelScope.launch {
-            val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
+            val student = repository.getStudentById(scannedStudent.id)
+                ?: repository.getStudentByStudentNumber(scannedStudent.studentNumber)
             if (student == null) {
                 val err = "Student not found in school registry."
                 _userFeedbackMessage.value = err
@@ -673,7 +732,10 @@ class MainViewModel(
                 return@launch
             }
 
-            val overrideReason = "EMERGENCY SUPERVISOR OVERRIDE: $reason (Authorized by $supervisorName)"
+            // The displayed name is not an authority source. Attribute the action
+            // to the authenticated session identity so a caller cannot forge the audit trail.
+            val authenticatedName = authenticatedSupervisor.name
+            val overrideReason = "EMERGENCY SUPERVISOR OVERRIDE: $reason (Authorized by $authenticatedName)"
 
             // Record this explicit emergency override in the persistent audit log
             repository.logVerificationScan(
@@ -682,17 +744,17 @@ class MainViewModel(
                     studentNumber = student.studentNumber,
                     studentName = student.fullName,
                     gradeClass = student.gradeClass,
-                    cardId = _currentScannedCard.value?.id,
-                    cardIdentifier = _currentScannedCard.value?.cardIdentifier ?: "CRD-OVERRIDE",
-                    qrPayload = _currentScannedCard.value?.qrPayload ?: "OVERRIDE:${student.studentNumber}",
+                    cardId = scannedCard.id,
+                    cardIdentifier = scannedCard.cardIdentifier,
+                    qrPayload = scannedCard.qrPayload,
                     decision = GateVerificationDecision.APPROVED,
                     feeStatus = student.feesStatus,
-                    cardStatus = _currentScannedCard.value?.status ?: CardStatus.ACTIVE,
+                    cardStatus = scannedCard.status,
                     isDayScholar = student.isDayScholar,
                     isApproved = true,
                     reason = overrideReason,
                     isOfflineDecision = true,
-                    guardName = "$supervisorName (Supervisor Override)",
+                    guardName = "$authenticatedName (Supervisor Override)",
                     deviceIdentifier = "GateTerminal-01",
                     gateLocation = "Gate 1 (Main Entrance)"
                 )
@@ -701,7 +763,7 @@ class MainViewModel(
             // Update active scan result to Approved with supervisor override attribution
             _activeScanResult.value = StudentScanResult.Success(
                 student = student,
-                card = _currentScannedCard.value,
+                card = scannedCard,
                 isApproved = true,
                 reason = overrideReason,
                 isOfflineData = true,
@@ -709,7 +771,7 @@ class MainViewModel(
             )
 
             com.example.util.FeedbackHelper.playFeedback(context, true)
-            _userFeedbackMessage.value = "Emergency gate access authorized by supervisor $supervisorName."
+            _userFeedbackMessage.value = "Emergency gate access authorized by supervisor $authenticatedName."
             onResult(true, "Emergency override authorized.")
         }
     }
@@ -816,57 +878,65 @@ class MainViewModel(
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
+        viewModelScope.launch {
+            val db = repository.database
+            if (db == null) {
+                _userFeedbackMessage.value = "Meal storage is unavailable. No serving was recorded."
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
             }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
+
+            // Reuse the full production verifier: signature, validity dates, exact card,
+            // active card lifecycle and active student are checked before any department acts.
+            val student = resolveStudentFromActiveSignedCard(rawCode)
+            if (student == null) {
+                _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val activeMeal = _activeMealType.value
+            val mealDao = db.mealRecordDao()
+            val previousEntity = mealDao.findServing(student.id, activeMeal.name, todayStr)
+            if (previousEntity != null && previousEntity.status == MealServingStatus.SERVED.name) {
+                val previousRecord = previousEntity.toDomain()
+                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
+                FeedbackHelper.playWarningSoundAndHaptic(context)
+                return@launch
+            }
+
+            val newRecord = MealRecord(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                gradeClass = student.gradeClass,
+                mealType = activeMeal,
+                mealDate = todayStr,
+                timestamp = System.currentTimeMillis(),
+                serverName = _currentUser.value?.name ?: "Authenticated staff",
+                status = MealServingStatus.SERVED
+            )
+
+            // The unique (studentId, mealType, mealDate) index plus IGNORE insert
+            // makes the double-serving guard safe against concurrent/repeated scans.
+            val insertedRowId = mealDao.insertIfAbsent(MealRecordEntity.fromDomain(newRecord))
+            if (insertedRowId == -1L) {
+                val existing = mealDao.findServing(student.id, activeMeal.name, todayStr)
+                if (existing != null) {
+                    _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, existing.toDomain())
+                    FeedbackHelper.playWarningSoundAndHaptic(context)
+                } else {
+                    _userFeedbackMessage.value = "Meal record was not saved. Please retry after checking sync status."
+                    FeedbackHelper.playDeniedSoundAndHaptic(context)
+                }
+                return@launch
+            }
+
+            _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
+            repository.syncManagerInstance?.notifyLocalLogAdded()
+            FeedbackHelper.playApprovedSoundAndHaptic(context)
         }
-
-        if (student == null) {
-            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
-            FeedbackHelper.playDeniedSoundAndHaptic(context)
-            return
-        }
-
-        val activeMeal = _activeMealType.value
-
-        // Check for double-serving on same date and same meal session
-        val previousRecord = _mealRecords.value.find {
-            it.studentId == student.id &&
-            it.mealType == activeMeal &&
-            it.mealDate == todayStr &&
-            it.status == MealServingStatus.SERVED
-        }
-
-        if (previousRecord != null) {
-            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
-            FeedbackHelper.playWarningSoundAndHaptic(context)
-            return
-        }
-
-        // Meal Approved & Served
-        val newRecord = MealRecord(
-            studentId = student.id,
-            studentNumber = student.studentNumber,
-            studentName = student.fullName,
-            gradeClass = student.gradeClass,
-            mealType = activeMeal,
-            mealDate = todayStr,
-            timestamp = System.currentTimeMillis(),
-            serverName = _currentUser.value?.name ?: "Chef Jackson Omondi",
-            status = MealServingStatus.SERVED
-        )
-
-        _mealRecords.value = listOf(newRecord) + _mealRecords.value
-        _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
-        FeedbackHelper.playApprovedSoundAndHaptic(context)
     }
 
     // ==========================================
@@ -891,22 +961,27 @@ class MainViewModel(
     fun handleRequirementBarcodeScan(rawCode: String) {
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
+        viewModelScope.launch {
+            val student = resolveStudentFromActiveSignedCard(rawCode)
+            if (student != null) {
+                _scannedRequirementStudentId.value = student.id
+                _requirementsSearchQuery.value = student.studentNumber
+                _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
+            } else {
+                _userFeedbackMessage.value = "No active registered student card was verified for this QR."
             }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
         }
-        if (student != null) {
-            _scannedRequirementStudentId.value = student.id
-            _requirementsSearchQuery.value = student.studentNumber
-            _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
-        } else {
-            _userFeedbackMessage.value = "Student not found for scanned QR: $rawCode"
+    }
+
+    /**
+     * Department scans must use the same production verifier as gate scans.
+     * A valid signature alone is insufficient: a signed card can be lost, replaced,
+     * deactivated, expired, or associated with a deleted student.
+     */
+    private suspend fun resolveStudentFromActiveSignedCard(rawCode: String): Student? {
+        return when (val result = repository.verifyStudentByQr(rawCode)) {
+            is StudentScanResult.Success -> result.student
+            else -> null
         }
     }
 
@@ -923,7 +998,7 @@ class MainViewModel(
             "busPass" -> current.copy(busPassCleared = !current.busPassCleared, updatedAt = System.currentTimeMillis())
             else -> current
         }
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        persistRequirement(updated)
     }
 
     fun markAllRequirementsCleared(studentId: String) {
@@ -939,7 +1014,7 @@ class MainViewModel(
             busPassCleared = true,
             updatedAt = System.currentTimeMillis()
         )
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        persistRequirement(updated)
         _userFeedbackMessage.value = "All items marked CLEARED for ${current.studentName}!"
     }
 
@@ -947,7 +1022,25 @@ class MainViewModel(
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Updating requirement notes")) return
         val current = requirementsList.value.find { it.studentId == studentId } ?: return
         val updated = current.copy(notes = notes, updatedAt = System.currentTimeMillis())
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        persistRequirement(updated)
+    }
+
+    private fun persistRequirement(requirement: StudentRequirement) {
+        val db = repository.database
+        if (db == null) {
+            _userFeedbackMessage.value = "Requirements storage is unavailable. No checklist change was saved."
+            return
+        }
+        viewModelScope.launch {
+            try {
+                db.studentRequirementDao().upsert(StudentRequirementEntity.fromDomain(requirement))
+                repository.syncManagerInstance?.notifyLocalLogAdded()
+                _requirementsOverrides.value = _requirementsOverrides.value + (requirement.studentId to requirement)
+                _userFeedbackMessage.value = "Requirements checklist saved on this device."
+            } catch (error: Exception) {
+                _userFeedbackMessage.value = "Requirements change was not saved: ${error.localizedMessage ?: "local storage error"}"
+            }
+        }
     }
 
     // ==========================================
@@ -1224,6 +1317,11 @@ class MainViewModel(
         viewModelScope.launch {
             val db = repository.database
             if (db != null) {
+                val recommenderUid = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+                if (recommenderUid.isNullOrBlank()) {
+                    _userFeedbackMessage.value = "Recommendation blocked: sign in again before recording an exam exception."
+                    return@launch
+                }
                 val ex = ExamException(
                     studentId = studentId,
                     studentNumber = studentNumber,
@@ -1233,7 +1331,9 @@ class MainViewModel(
                     recommendationReason = reason,
                     isApproved = false
                 )
-                db.examExceptionDao().insertOrUpdate(com.example.data.local.ExamExceptionEntity.fromDomain(ex, isSynced = false))
+                val entity = com.example.data.local.ExamExceptionEntity.fromDomain(ex, isSynced = false)
+                    .copy(recommendedByUid = recommenderUid)
+                db.examExceptionDao().insertOrUpdate(entity)
                 repository.syncManagerInstance?.notifyLocalLogAdded()
                 _examExceptions.value = listOf(ex) + _examExceptions.value
                 _userFeedbackMessage.value = "Bursar exception recommended for $studentName. Awaiting Head Teacher approval."
@@ -1251,9 +1351,19 @@ class MainViewModel(
             if (db != null) {
                 val existing = db.examExceptionDao().findException(studentId, examCode)
                 if (existing != null) {
+                    val approverUid = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+                    if (approverUid.isNullOrBlank()) {
+                        _userFeedbackMessage.value = "Approval blocked: sign in again before approving an exam exception."
+                        return@launch
+                    }
+                    if (existing.recommendedByUid.isBlank() || existing.recommendedByUid == approverUid) {
+                        _userFeedbackMessage.value = "Approval blocked: the requester must have a trusted UID and a different staff member must approve."
+                        return@launch
+                    }
                     val approved = existing.copy(
                         isApproved = true,
                         approvedByHeadTeacher = _currentUser.value?.name ?: "Head Teacher",
+                        approvedByUid = approverUid,
                         approvedAt = System.currentTimeMillis()
                     )
                     db.examExceptionDao().insertOrUpdate(approved)

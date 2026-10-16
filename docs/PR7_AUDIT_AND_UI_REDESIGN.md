@@ -1,0 +1,80 @@
+# PR #7 — Audit and UI redesign notes
+
+Date: 2026-10-16  
+Branch: `fix/audit-findings-1-to-5`
+
+## Scope
+
+This follow-up addresses CI regressions after the Firebase staff-authentication migration, improves the staff login and app shell, and closes an authorization gap in emergency gate overrides.
+
+## Changes made
+
+### Authentication and authorization
+- Staff login continues to use Firebase Authentication and the trusted `schools/ltc_school_01/staff/{uid}` roster document.
+- The role lookup now explicitly uses Firestore `Source.SERVER`. A cached staff record must not be enough to establish the active role after sign-in.
+- Explicit finance access is honored for both Administrator and Head Teacher accounts when the staff record grants it. Bursar access remains role-based.
+- Emergency gate overrides require an authenticated Administrator or Head Teacher session before checking the supervisor PIN. Gate staff cannot authorize their own override using the PIN alone. The target must match the student identified by the current verified scan; inactive, revoked, replaced, or unknown cards cannot be overridden; the scan's actual active card is used in the audit record; and attribution comes from the authenticated session rather than a caller-supplied name.
+- Role switching remains a sign-out/account-change flow; the UI does not grant a different role locally.
+
+### CI and test reliability
+- Added a test-only adapter for legacy PIN-based workflow tests. It lives in `src/test` and does not restore local PIN authentication to the production app.
+- Outbox persistence tests now use a backend that intentionally rejects remote writes. This makes the tests verify durable pending/failed mutations without racing a successful background sync.
+- Firestore emulator tests now use a dedicated named Firebase app, configure the emulator once, and use OkHttp for the emulator's owner-bypass PATCH request. Java's standard `HttpURLConnection` does not support PATCH directly.
+- Added the OkHttp test dependency through the existing version catalog.
+
+### UI/UX
+- Redesigned staff login with a distinctive midnight-blue and champagne-gold visual identity, clearer hierarchy, a more prominent sign-in action, and a scrollable/IME-aware layout for small phones.
+- Added specific guidance for inactive accounts and unsupported roles instead of returning only a generic sign-in failure.
+- Refined the main app header with a school identity mark, role-specific department badge, stronger contrast, and a compact account-change control to reduce crowding on narrow screens.
+- Reworked admin quick actions into two rows with larger touch targets and a clear section label, avoiding four cramped actions on small phones.
+
+## Validation status
+
+CI must be checked on the latest branch head before merging. Earlier CI confirmed the debug APK compiled and the Firestore rules tests passed, but unit tests still failed. The fixes above are intended to address those failures; do not treat the suite as passing until the latest Android unit-test job completes successfully.
+
+## Remaining risks / deployment requirements
+
+1. **Live Firebase setup remains external.** The actual LTC `google-services.json`, Email/Password enablement, named Firestore database, deployed rules, and trusted first-admin staff document must be configured for the real project.
+2. **Offline re-unlock is not implemented.** First sign-in requires connectivity. This is not yet a fully offline-first authentication experience.
+3. **Legacy `/users/{uid}` client access is disabled by rules.** Old clients that still use that path will fail until migrated to the school-scoped staff and data model. Keep it disabled; do not restore self-created role profiles.
+4. **Student operational records are still readable by all active LTC staff.** Guardian/emergency-contact fields are separated into `student_private` and now restricted to Admin/Head Teacher. Review the remaining operational fields for least privilege before production.
+5. **Emergency override remains a local workflow.** It is now role-gated in the app and PIN-protected, but its authorization/audit event should eventually be verified server-side when connected, with explicit policy for offline override records and reconciliation.
+6. **No real-device visual verification yet.** The layout compiles in CI, but it should be checked on a small Android phone with the keyboard open, larger font scaling, and both light/dark system settings before calling the redesign finished.
+
+## Merge recommendation
+
+Keep PR #7 open until the latest CI passes. Review the final diff and the remaining live-Firebase/offline-auth risks before considering a production release.
+
+
+## Follow-up hardening (2026-10-16)
+
+- Meal and requirements scans now call the repository's production QR verifier, so signature validity, validity dates, exact registered card identity, card lifecycle, and active student status are checked consistently before a department action.
+- Meal records are loaded from Room and written before success is reported. The insert uses the existing unique (studentId, mealType, mealDate) index with an atomic IGNORE operation to prevent duplicate servings on repeated/concurrent scans. If local persistence is unavailable, serving fails closed.
+- Exam-exception local records now carry Firebase UIDs for recommendation and approval. Database v8 migration adds UID columns; approval rejects missing requester identity and self-approval. Cloud writes include the UIDs, and Firestore rules enforce authenticated attribution and a one-way approval transition.
+- The legacy `/users` namespace is denied all client access so self-created legacy role profiles cannot be confused with trusted school staff.
+- **Student privacy migration is still a deployment blocker:** current student documents contain guardian/emergency-contact fields. Firestore rules cannot hide selected fields inside a document. Move those fields to a restricted `student_private/{studentId}` collection, migrate existing records, update sync/read paths, and verify role-based access before deploying.
+- **Firebase/device verification remains external:** the repository still references the generated AI Studio/Oakridge Firestore database ID. Do not change it blindly. Confirm the actual LTC Firebase project and database with the project owner, install its local `google-services.json`, deploy rules to that database, and run emulator plus physical-device tests for offline recovery, revocation sync, small-screen layout, and restart persistence. These steps cannot be completed from source changes alone.
+
+
+### Private student-field migration runbook
+
+Before deploying the new rules to a live database, back up the real LTC Firestore database and run `scripts/migrate-private-student-fields.mjs` in dry-run mode with confirmed `GOOGLE_CLOUD_PROJECT` and `FIRESTORE_DATABASE_ID`. Review the document count, then use `--apply` only after approval. The script moves guardian name, guardian phone, emergency contact, and notes to `schools/ltc_school_01/student_private/{studentId}` and removes them from public student documents. It is intentionally not run by CI and never chooses a Firebase project automatically.
+
+## Follow-up implementation — findings 1–5
+
+- QR lookup now requires an exact registered `cardIdentifier`; production gate and shared department verification no longer fall back to matching the database's internal card-row ID.
+- Student requirements checklists now have a Room table and a non-destructive database v8→v9 migration. Changes are loaded from Room, saved before UI success is reported, and uploaded/downloaded through the offline sync manager. Free-text requirement notes remain local and are deliberately excluded from Firestore.
+- Firestore rules now allow only active teachers/academic leadership to read or modify structured requirements. Tests cover allowed checklist updates, blocked free-text notes, and denial to gate/meal staff.
+- Private guardian/emergency-contact records are restricted to Admin/Head Teacher in both Firestore rules and the Android cloud adapter. The old database migration script remains a **pre-deployment requirement**; rules cannot retroactively move existing sensitive fields.
+- The checked-in Oakridge database ID was replaced with `unconfigured-ltc-firestore-database-id` in the app resource and Firebase CLI config. Staff sign-in and the context-based cloud backend fail closed while that placeholder is present. The actual LTC database ID is intentionally not guessed.
+- Exam-exception cloud authorization continues to use immutable requester/approver Firebase UIDs and a one-way approval transition; the server rules, not display names, are authoritative.
+
+### Remaining verification and deployment gates
+
+1. Run Android compilation and all unit tests, plus Firestore emulator rules tests, on the latest branch head. Do not merge if either job fails.
+2. Confirm the real LTC Firebase project and named database with the project owner. Replace the placeholder consistently in `app/src/main/res/values/firebase_applet_config.xml` and `firebase.json`, and update `FirestoreCloudBackend.FIRESTORE_DATABASE_ID` to the same confirmed ID.
+3. Back up the real Firestore database, run `scripts/migrate-private-student-fields.mjs` in dry-run mode, review the count, then obtain approval before `--apply`.
+4. Deploy `firestore.rules` to the confirmed database and verify role access there. Emulator tests do not deploy production rules.
+5. Test on at least two physical Android devices: restart persistence, offline scans, retry after reconnection, duplicate meal prevention, card revocation propagation, requirements sync, and staff account deactivation.
+
+**Do not treat the application as production-ready until these external configuration, data-migration, and device-verification steps are complete.**

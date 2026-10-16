@@ -9,6 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
+        StudentRequirementEntity::class,
         StudentEntity::class,
         StudentProfileEntity::class,
         CardEntity::class,
@@ -19,12 +20,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AttendanceRecordEntity::class,
         ExamExceptionEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun studentDao(): StudentDao
+    abstract fun studentRequirementDao(): StudentRequirementDao
     abstract fun studentProfileDao(): StudentProfileDao
     abstract fun cardDao(): CardDao
     abstract fun scanLogDao(): ScanLogDao
@@ -163,6 +165,47 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 7 to 8: persist immutable Firebase UIDs for exam-exception recommendation
+         * and approval attribution. Existing legacy rows have no trusted UID and must not
+         * be treated as cloud-authorized approvals until reviewed.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `recommendedByUid` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `approvedByUid` TEXT")
+            }
+        }
+
+        /**
+         * Version 8 to 9: persist student requirements checklists across process/device restarts.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `student_requirements` (
+                        `studentId` TEXT NOT NULL,
+                        `studentNumber` TEXT NOT NULL,
+                        `studentName` TEXT NOT NULL,
+                        `gradeClass` TEXT NOT NULL,
+                        `uniformComplete` INTEGER NOT NULL,
+                        `sportsKitComplete` INTEGER NOT NULL,
+                        `textbooksSubmitted` INTEGER NOT NULL,
+                        `medicalFormSigned` INTEGER NOT NULL,
+                        `schoolIdIssued` INTEGER NOT NULL,
+                        `rulesAgreementSigned` INTEGER NOT NULL,
+                        `busPassCleared` INTEGER NOT NULL,
+                        `notes` TEXT NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `isSyncedToCloud` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`studentId`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -170,7 +213,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "oakridge_student_access.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build()
                 INSTANCE = instance
                 instance
@@ -182,7 +225,7 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java
             )
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
         }
