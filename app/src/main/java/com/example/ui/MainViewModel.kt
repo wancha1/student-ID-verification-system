@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.StudentRepository
 import com.example.data.local.MealRecordEntity
+import com.example.data.local.StudentRequirementEntity
 import com.example.model.AuthUser
 import com.example.model.Card
 import com.example.model.CardStatus
@@ -207,6 +208,11 @@ class MainViewModel(
             viewModelScope.launch {
                 db.mealRecordDao().observeAll().collect { entities ->
                     _mealRecords.value = entities.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.studentRequirementDao().observeAll().collect { entities ->
+                    _requirementsOverrides.value = entities.associate { it.studentId to it.toDomain() }
                 }
             }
         }
@@ -992,7 +998,7 @@ class MainViewModel(
             "busPass" -> current.copy(busPassCleared = !current.busPassCleared, updatedAt = System.currentTimeMillis())
             else -> current
         }
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        persistRequirement(updated)
     }
 
     fun markAllRequirementsCleared(studentId: String) {
@@ -1008,7 +1014,7 @@ class MainViewModel(
             busPassCleared = true,
             updatedAt = System.currentTimeMillis()
         )
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        persistRequirement(updated)
         _userFeedbackMessage.value = "All items marked CLEARED for ${current.studentName}!"
     }
 
@@ -1016,7 +1022,24 @@ class MainViewModel(
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Updating requirement notes")) return
         val current = requirementsList.value.find { it.studentId == studentId } ?: return
         val updated = current.copy(notes = notes, updatedAt = System.currentTimeMillis())
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
+        persistRequirement(updated)
+    }
+
+    private fun persistRequirement(requirement: StudentRequirement) {
+        val db = repository.database
+        if (db == null) {
+            _userFeedbackMessage.value = "Requirements storage is unavailable. No checklist change was saved."
+            return
+        }
+        viewModelScope.launch {
+            try {
+                db.studentRequirementDao().upsert(StudentRequirementEntity.fromDomain(requirement))
+                _requirementsOverrides.value = _requirementsOverrides.value + (requirement.studentId to requirement)
+                _userFeedbackMessage.value = "Requirements checklist saved on this device."
+            } catch (error: Exception) {
+                _userFeedbackMessage.value = "Requirements change was not saved: ${error.localizedMessage ?: "local storage error"}"
+            }
+        }
     }
 
     // ==========================================
