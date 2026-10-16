@@ -1232,33 +1232,37 @@ class MainViewModel(
                         _currentScannedCard.value = result.card
                         _scanError.value = null
                         if (result.department == ScanDepartment.MEALS) {
-                            val newMeal = MealRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                mealType = result.mealType ?: MealType.LUNCH,
-                                timestamp = System.currentTimeMillis(),
-                                serverName = user.name,
-                                status = result.mealStatus ?: MealServingStatus.SERVED
-                            )
-                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            if (result.isAllowed) {
+                                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                val persisted = db.mealRecordDao().findServing(
+                                    result.student.id,
+                                    (result.mealType ?: MealType.LUNCH).name,
+                                    today
+                                )?.toDomain()
+                                if (persisted != null) {
+                                    _mealScanOutcome.value = MealVerificationResult.Success(persisted)
+                                }
+                            } else {
+                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                    result.student,
+                                    result.statusDetail
+                                )
+                            }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
-                            val newAtt = AttendanceRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                subject = result.attendanceSubject ?: "Mathematics",
-                                sessionName = result.attendanceSession ?: "Session",
-                                lessonDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()),
-                                teacherName = user.name
-                            )
+                            // Attendance is persisted by QrUnifiedVerifier and reloaded from Room below.
                         }
                         context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
+                        if (result.department == ScanDepartment.MEALS) {
+                            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val meal = _activeMealType.value
+                            val previous = db.mealRecordDao().findServing(result.student.id, meal.name, today)?.toDomain()
+                            if (previous != null) {
+                                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(result.student, meal, previous)
+                            }
+                        }
                         context?.let { FeedbackHelper.playWarningSoundAndHaptic(it) }
                     }
                     is DepartmentVerificationResult.PermissionDenied -> {
@@ -1267,14 +1271,23 @@ class MainViewModel(
                     }
                     is DepartmentVerificationResult.CardInactive -> {
                         _scanError.value = result.reason
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                        }
                         context?.let { FeedbackHelper.playFeedback(it, false) }
                     }
                     is DepartmentVerificationResult.InvalidCredential -> {
                         _scanError.value = result.errorReason
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                        }
                         context?.let { FeedbackHelper.playFeedback(it, false) }
                     }
                     is DepartmentVerificationResult.StudentNotFound -> {
                         _scanError.value = result.reason
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                        }
                         context?.let { FeedbackHelper.playFeedback(it, false) }
                     }
                 }
