@@ -581,9 +581,54 @@ test("Exam exception: identical retry by Bursar is idempotent", async () => {
     id: "EX-RETRY-01",
     studentId: "STU-01",
     examCode: "UACE-MATH",
-    recommendedBy: BURSAR_UID,
-    isApproved: false
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
+    isApproved: false,
+    approvedByUid: "",
+    approvedAt: 0
   };
   await assertSucceeds(ref.set(payload));
   await assertSucceeds(ref.set(payload));
+});
+
+
+test("Student privacy: only authorized leadership/finance can read private contact records", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("STU-PRIVATE-01").set({
+        studentId: "STU-PRIVATE-01",
+        guardianName: "Private Guardian",
+        guardianPhone: "+256700000000",
+        emergencyContact: "+256770000000",
+        notes: "Sensitive note",
+        updatedAt: Date.now()
+      });
+  });
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-01").get());
+  const privateRecord = await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-01").get());
+  assert.strictEqual(privateRecord.data().guardianPhone, "+256700000000");
+});
+
+test("Student privacy: public student documents reject guardian and emergency-contact fields", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("students").doc("STU-PRIVATE-FIELD-01").set({
+      id: "STU-PRIVATE-FIELD-01",
+      studentNumber: "LTC-2026-9911",
+      firstName: "Student",
+      lastName: "Privacy",
+      name: "Student Privacy",
+      gradeClass: "Senior 4",
+      isDayScholar: true,
+      feesStatus: "CLEARED",
+      outstandingAmount: 0,
+      guardianPhone: "+256700000000",
+      updatedAt: Date.now()
+    }));
 });
