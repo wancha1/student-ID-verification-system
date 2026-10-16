@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -50,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,6 +74,7 @@ fun FirebaseStaffLoginScreen(
     val authenticator = remember { FirebaseStaffAuthenticator() }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -224,7 +228,19 @@ fun FirebaseStaffLoginScreen(
                         label = { Text("Password") },
                         singleLine = true,
                         enabled = !isLoading,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { passwordVisible = !passwordVisible },
+                                enabled = !isLoading
+                            ) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = Color(0xFF627286)
+                                )
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
                             imeAction = ImeAction.Done
