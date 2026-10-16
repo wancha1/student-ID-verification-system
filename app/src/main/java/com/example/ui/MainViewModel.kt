@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.StudentRepository
+import com.example.data.local.MealRecordEntity
 import com.example.model.AuthUser
 import com.example.model.Card
 import com.example.model.CardStatus
@@ -54,11 +55,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
 
@@ -197,8 +198,19 @@ class MainViewModel(
     private val _activeMealType = MutableStateFlow(MealType.LUNCH)
     val activeMealType: StateFlow<MealType> = _activeMealType.asStateFlow()
 
-    private val _mealRecords = MutableStateFlow<List<MealRecord>>(createInitialSampleMeals())
+    // Meal records are sourced from Room, not demo-only in-memory state.
+    private val _mealRecords = MutableStateFlow<List<MealRecord>>(emptyList())
     val mealRecords: StateFlow<List<MealRecord>> = _mealRecords.asStateFlow()
+
+    init {
+        repository.database?.let { db ->
+            viewModelScope.launch {
+                db.mealRecordDao().observeAll().collect { entities ->
+                    _mealRecords.value = entities.map { it.toDomain() }
+                }
+            }
+        }
+    }
 
     private val _mealScanOutcome = MutableStateFlow<MealVerificationResult?>(null)
     val mealScanOutcome: StateFlow<MealVerificationResult?> = _mealScanOutcome.asStateFlow()
@@ -860,57 +872,65 @@ class MainViewModel(
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
+        viewModelScope.launch {
+            val db = repository.database
+            if (db == null) {
+                _userFeedbackMessage.value = "Meal storage is unavailable. No serving was recorded."
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
             }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
+
+            // Reuse the full production verifier: signature, validity dates, exact card,
+            // active card lifecycle and active student are checked before any department acts.
+            val student = resolveStudentFromActiveSignedCard(rawCode)
+            if (student == null) {
+                _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val activeMeal = _activeMealType.value
+            val mealDao = db.mealRecordDao()
+            val previousEntity = mealDao.findServing(student.id, activeMeal.name, todayStr)
+            if (previousEntity != null && previousEntity.status == MealServingStatus.SERVED.name) {
+                val previousRecord = previousEntity.toDomain()
+                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
+                FeedbackHelper.playWarningSoundAndHaptic(context)
+                return@launch
+            }
+
+            val newRecord = MealRecord(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                gradeClass = student.gradeClass,
+                mealType = activeMeal,
+                mealDate = todayStr,
+                timestamp = System.currentTimeMillis(),
+                serverName = _currentUser.value?.name ?: "Authenticated staff",
+                status = MealServingStatus.SERVED
+            )
+
+            // The unique (studentId, mealType, mealDate) index plus IGNORE insert
+            // makes the double-serving guard safe against concurrent/repeated scans.
+            val insertedRowId = mealDao.insertIfAbsent(MealRecordEntity.fromDomain(newRecord))
+            if (insertedRowId == -1L) {
+                val existing = mealDao.findServing(student.id, activeMeal.name, todayStr)
+                if (existing != null) {
+                    _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, existing.toDomain())
+                    FeedbackHelper.playWarningSoundAndHaptic(context)
+                } else {
+                    _userFeedbackMessage.value = "Meal record was not saved. Please retry after checking sync status."
+                    FeedbackHelper.playDeniedSoundAndHaptic(context)
+                }
+                return@launch
+            }
+
+            _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
+            repository.syncManagerInstance?.notifyLocalLogAdded()
+            FeedbackHelper.playApprovedSoundAndHaptic(context)
         }
-
-        if (student == null) {
-            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
-            FeedbackHelper.playDeniedSoundAndHaptic(context)
-            return
-        }
-
-        val activeMeal = _activeMealType.value
-
-        // Check for double-serving on same date and same meal session
-        val previousRecord = _mealRecords.value.find {
-            it.studentId == student.id &&
-            it.mealType == activeMeal &&
-            it.mealDate == todayStr &&
-            it.status == MealServingStatus.SERVED
-        }
-
-        if (previousRecord != null) {
-            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
-            FeedbackHelper.playWarningSoundAndHaptic(context)
-            return
-        }
-
-        // Meal Approved & Served
-        val newRecord = MealRecord(
-            studentId = student.id,
-            studentNumber = student.studentNumber,
-            studentName = student.fullName,
-            gradeClass = student.gradeClass,
-            mealType = activeMeal,
-            mealDate = todayStr,
-            timestamp = System.currentTimeMillis(),
-            serverName = _currentUser.value?.name ?: "Chef Jackson Omondi",
-            status = MealServingStatus.SERVED
-        )
-
-        _mealRecords.value = listOf(newRecord) + _mealRecords.value
-        _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
-        FeedbackHelper.playApprovedSoundAndHaptic(context)
     }
 
     // ==========================================
@@ -935,22 +955,27 @@ class MainViewModel(
     fun handleRequirementBarcodeScan(rawCode: String) {
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
+        viewModelScope.launch {
+            val student = resolveStudentFromActiveSignedCard(rawCode)
+            if (student != null) {
+                _scannedRequirementStudentId.value = student.id
+                _requirementsSearchQuery.value = student.studentNumber
+                _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
+            } else {
+                _userFeedbackMessage.value = "No active registered student card was verified for this QR."
             }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
         }
-        if (student != null) {
-            _scannedRequirementStudentId.value = student.id
-            _requirementsSearchQuery.value = student.studentNumber
-            _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
-        } else {
-            _userFeedbackMessage.value = "Student not found for scanned QR: $rawCode"
+    }
+
+    /**
+     * Department scans must use the same production verifier as gate scans.
+     * A valid signature alone is insufficient: a signed card can be lost, replaced,
+     * deactivated, expired, or associated with a deleted student.
+     */
+    private suspend fun resolveStudentFromActiveSignedCard(rawCode: String): Student? {
+        return when (val result = repository.verifyStudentByQr(rawCode)) {
+            is StudentScanResult.Success -> result.student
+            else -> null
         }
     }
 
