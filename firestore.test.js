@@ -44,21 +44,20 @@ test("Unauthenticated user: cannot read staff profile", async () => {
   await assertFails(unauthDb.collection("users").doc(ALICE_UID).get());
 });
 
-test("Authenticated user: can create and read their own staff profile", async () => {
+test("Authenticated users cannot self-create legacy staff profiles", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
-      email: "alice@oakridge.ac.ug",
+      email: "alice@ltc.example",
       displayName: "Alice Staff",
       role: "STAFF",
       createdAt: now,
       updatedAt: now,
     })
   );
-
-  const doc = await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).get());
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).get());
 });
 
 test("Cross-user isolation: Bob cannot read Alice's student records", async () => {
@@ -83,10 +82,10 @@ test("Cross-user isolation: Bob cannot read Alice's student records", async () =
   await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("students").get());
 });
 
-test("Authenticated user: can create and list their own student records", async () => {
+test("Authenticated users cannot create or list legacy student records", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
+  await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).collection("students").doc("stu_001").set({
       userId: ALICE_UID,
       studentNumber: "LTC-2026-0001",
@@ -100,33 +99,23 @@ test("Authenticated user: can create and list their own student records", async 
       updatedAt: now,
     })
   );
-
-  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("students").get());
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).collection("students").get());
 });
 
-test("Scan logs: append-only, cannot be deleted or updated", async () => {
+test("Legacy scan logs are disabled in favor of school-scoped append-only logs", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").set({
-      userId: ALICE_UID,
-      studentNumber: "LTC-2026-0001",
-      studentName: "Michael Kasule",
-      decision: "APPROVED",
-      gatePoint: "Main Gate",
-      scannedAt: now,
-    })
-  );
-
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").update({
-      decision: "DENIED",
-    })
-  );
-
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").delete()
-  );
+  const ref = aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001");
+  await assertFails(ref.set({
+    userId: ALICE_UID,
+    studentNumber: "LTC-2026-0001",
+    studentName: "Michael Kasule",
+    decision: "APPROVED",
+    gatePoint: "Main Gate",
+    scannedAt: now,
+  }));
+  await assertFails(ref.update({ decision: "DENIED" }));
+  await assertFails(ref.delete());
 });
 
 // -------------------------------------------------------------------
