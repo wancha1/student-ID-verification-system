@@ -674,7 +674,12 @@ class MainViewModel(
         // reused to approve Student B.
         val scannedStudent = when (currentScan) {
             is StudentScanResult.Success -> currentScan.student
-            is StudentScanResult.CardInactive -> currentScan.student
+            is StudentScanResult.CardInactive -> {
+                val err = "Security restriction: Inactive, revoked, or replaced cards cannot be overridden."
+                _userFeedbackMessage.value = err
+                onResult(false, err)
+                return
+            }
             else -> null
         }
         if (scannedStudent == null) {
@@ -692,11 +697,7 @@ class MainViewModel(
             return
         }
 
-        val scannedCard = when (currentScan) {
-            is StudentScanResult.Success -> currentScan.card
-            is StudentScanResult.CardInactive -> currentScan.card
-            else -> null
-        } ?: run {
+        val scannedCard = (currentScan as? StudentScanResult.Success)?.card ?: run {
             val err = "Security restriction: A verified student card is required for an emergency override."
             _userFeedbackMessage.value = err
             onResult(false, err)
