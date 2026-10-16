@@ -669,16 +669,43 @@ class MainViewModel(
         }
 
         val currentScan = _activeScanResult.value
-        // Critical: Unknown or invalid cards never become authorized through a bypass
-        if (currentScan !is StudentScanResult.Success && currentScan !is StudentScanResult.CardInactive) {
+        // A supervisor may override a decision only for the exact student whose
+        // valid card was just scanned. Never let a valid scan for Student A be
+        // reused to approve Student B.
+        val scannedStudent = when (currentScan) {
+            is StudentScanResult.Success -> currentScan.student
+            is StudentScanResult.CardInactive -> currentScan.student
+            else -> null
+        }
+        if (scannedStudent == null) {
             val err = "Security restriction: Emergency override cannot authorize unknown or invalid QR cards."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+        if (!scannedStudent.id.equals(studentId, ignoreCase = true) &&
+            !scannedStudent.studentNumber.equals(studentId, ignoreCase = true)
+        ) {
+            val err = "Security restriction: Override target must match the student identified by the current scan."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+
+        val scannedCard = when (currentScan) {
+            is StudentScanResult.Success -> currentScan.card
+            is StudentScanResult.CardInactive -> currentScan.card
+            else -> null
+        } ?: run {
+            val err = "Security restriction: A verified student card is required for an emergency override."
             _userFeedbackMessage.value = err
             onResult(false, err)
             return
         }
 
         viewModelScope.launch {
-            val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
+            val student = repository.getStudentById(scannedStudent.id)
+                ?: repository.getStudentByStudentNumber(scannedStudent.studentNumber)
             if (student == null) {
                 val err = "Student not found in school registry."
                 _userFeedbackMessage.value = err
@@ -686,7 +713,10 @@ class MainViewModel(
                 return@launch
             }
 
-            val overrideReason = "EMERGENCY SUPERVISOR OVERRIDE: $reason (Authorized by $supervisorName)"
+            // The displayed name is not an authority source. Attribute the action
+            // to the authenticated session identity so a caller cannot forge the audit trail.
+            val authenticatedName = authenticatedSupervisor.name
+            val overrideReason = "EMERGENCY SUPERVISOR OVERRIDE: $reason (Authorized by $authenticatedName)"
 
             // Record this explicit emergency override in the persistent audit log
             repository.logVerificationScan(
@@ -695,17 +725,17 @@ class MainViewModel(
                     studentNumber = student.studentNumber,
                     studentName = student.fullName,
                     gradeClass = student.gradeClass,
-                    cardId = _currentScannedCard.value?.id,
-                    cardIdentifier = _currentScannedCard.value?.cardIdentifier ?: "CRD-OVERRIDE",
-                    qrPayload = _currentScannedCard.value?.qrPayload ?: "OVERRIDE:${student.studentNumber}",
+                    cardId = scannedCard.id,
+                    cardIdentifier = scannedCard.cardIdentifier,
+                    qrPayload = scannedCard.qrPayload,
                     decision = GateVerificationDecision.APPROVED,
                     feeStatus = student.feesStatus,
-                    cardStatus = _currentScannedCard.value?.status ?: CardStatus.ACTIVE,
+                    cardStatus = scannedCard.status,
                     isDayScholar = student.isDayScholar,
                     isApproved = true,
                     reason = overrideReason,
                     isOfflineDecision = true,
-                    guardName = "$supervisorName (Supervisor Override)",
+                    guardName = "$authenticatedName (Supervisor Override)",
                     deviceIdentifier = "GateTerminal-01",
                     gateLocation = "Gate 1 (Main Entrance)"
                 )
@@ -714,7 +744,7 @@ class MainViewModel(
             // Update active scan result to Approved with supervisor override attribution
             _activeScanResult.value = StudentScanResult.Success(
                 student = student,
-                card = _currentScannedCard.value,
+                card = scannedCard,
                 isApproved = true,
                 reason = overrideReason,
                 isOfflineData = true,
@@ -722,7 +752,7 @@ class MainViewModel(
             )
 
             com.example.util.FeedbackHelper.playFeedback(context, true)
-            _userFeedbackMessage.value = "Emergency gate access authorized by supervisor $supervisorName."
+            _userFeedbackMessage.value = "Emergency gate access authorized by supervisor $authenticatedName."
             onResult(true, "Emergency override authorized.")
         }
     }
