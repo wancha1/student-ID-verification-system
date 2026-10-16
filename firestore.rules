@@ -64,54 +64,10 @@ service cloud.firestore {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'DIRECTOR_OF_STUDIES', 'EXAM_STAFF'];
     }
 
-    // -------------------------------------------------------------
-    // LEGACY / COMPATIBILITY USER SPACE (/users/{userId})
-    // -------------------------------------------------------------
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) &&
-                       isValidId(userId) &&
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.keys().hasAll(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.role in ['STAFF', 'GATE_OFFICER'];
-      allow update: if isOwner(userId) &&
-                       isValidId(userId) &&
-                       request.resource.data.userId == resource.data.userId &&
-                       request.resource.data.createdAt == resource.data.createdAt &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
-      allow delete: if false;
-
-      match /students/{studentId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-                         isValidId(studentId) &&
-                         request.resource.data.userId == request.auth.uid;
-        allow update: if isOwner(userId) &&
-                         isValidId(studentId) &&
-                         request.resource.data.userId == resource.data.userId;
-        allow delete: if isOwner(userId) && isValidId(studentId);
-      }
-
-      match /cards/{cardId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-                         isValidId(cardId) &&
-                         request.resource.data.userId == request.auth.uid;
-        allow update: if isOwner(userId) &&
-                         isValidId(cardId) &&
-                         request.resource.data.userId == resource.data.userId;
-        allow delete: if isOwner(userId) && isValidId(cardId);
-      }
-
-      match /scan_logs/{logId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-                         isValidId(logId) &&
-                         request.resource.data.userId == request.auth.uid;
-        allow update, delete: if false;
-      }
+    // Legacy self-managed user records are disabled. Authentication and authorization
+    // must use the trusted school-scoped staff roster; no client-created role profiles.
+    match /users/{document=**} {
+      allow read, write: if false;
     }
 
     // -------------------------------------------------------------
@@ -198,16 +154,36 @@ service cloud.firestore {
       // Departmental records: Exam Exceptions
       match /exam_exceptions/{exceptionId} {
         allow get, list: if isExamStaff(schoolId) || isFinanceStaff(schoolId);
-        // Finance recommends exception
+        // Human-readable names are audit labels only; Firebase UIDs are authoritative.
         allow create: if isFinanceStaff(schoolId) &&
                          isValidId(exceptionId) &&
-                         request.resource.data.keys().hasAll(['id', 'studentId', 'examCode', 'recommendedBy', 'isApproved']) &&
-                         request.resource.data.isApproved == false;
-        // Head Teacher or Admin approves exception
-        allow update: if ((isFinanceStaff(schoolId) || isExamStaff(schoolId)) &&
-                           request.resource.data == resource.data) ||
-                         (isSchoolAdmin(schoolId) &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isApproved', 'approvedBy', 'approvalNote', 'updatedAt']));
+                         request.resource.data.keys().hasAll([
+                           'id', 'studentId', 'examCode', 'recommendedBy', 'recommendedByUid',
+                           'isApproved', 'approvedByUid', 'approvedAt'
+                         ]) &&
+                         request.resource.data.recommendedByUid == request.auth.uid &&
+                         request.resource.data.isApproved == false &&
+                         request.resource.data.approvedByUid == '' &&
+                         request.resource.data.approvedAt == 0;
+        // Approval is a one-way transition by a distinct active Admin/Head Teacher.
+        allow update: if (
+                           (isFinanceStaff(schoolId) || isExamStaff(schoolId)) &&
+                           request.resource.data == resource.data
+                         ) ||
+                         (
+                           isSchoolAdmin(schoolId) &&
+                           resource.data.isApproved == false &&
+                           request.resource.data.isApproved == true &&
+                           resource.data.recommendedByUid is string &&
+                           resource.data.recommendedByUid != request.auth.uid &&
+                           request.resource.data.recommendedByUid == resource.data.recommendedByUid &&
+                           request.resource.data.approvedByUid == request.auth.uid &&
+                           request.resource.data.approvedAt is int &&
+                           request.resource.data.approvedAt > 0 &&
+                           request.resource.data.approvedAt <= request.time.toMillis() &&
+                           request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['isApproved', 'approvedBy', 'approvedByUid', 'approvedAt', 'approvalNote', 'updatedAt'])
+                         );
         allow delete: if isSchoolAdmin(schoolId);
       }
     }
