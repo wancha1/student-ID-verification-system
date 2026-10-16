@@ -272,6 +272,10 @@ fun FirebaseStaffLoginScreen(
                                     errorMessage = when {
                                         error.message?.contains("not provisioned", ignoreCase = true) == true ->
                                             "This account is not registered as LTC staff. Contact the school system administrator."
+                                        error.message?.contains("inactive", ignoreCase = true) == true ->
+                                            "This staff account is inactive. Contact the school system administrator."
+                                        error.message?.contains("unsupported role", ignoreCase = true) == true ->
+                                            "This account has no supported LTC duty role. Ask the administrator to review your staff profile."
                                         error.message?.contains("Default FirebaseApp", ignoreCase = true) == true ||
                                             error.message?.contains("FirebaseApp", ignoreCase = true) == true ->
                                             "Firebase is not configured for this build. Add the correct school Firebase app configuration before signing in."
