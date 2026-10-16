@@ -648,6 +648,19 @@ class MainViewModel(
         context: Context,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
+        val authenticatedSupervisor = _currentUser.value
+        if (authenticatedSupervisor == null ||
+            authenticatedSupervisor.role !in setOf(
+                UserRole.ADMINISTRATOR,
+                UserRole.HEAD_TEACHER_MANAGEMENT
+            )
+        ) {
+            val err = "Emergency override requires an authenticated Administrator or Head Teacher session."
+            _userFeedbackMessage.value = err
+            onResult(false, err)
+            return
+        }
+
         if (!com.example.util.SecurityManager.verifySupervisorOverridePin(context, overridePin)) {
             val err = "Invalid supervisor PIN. Emergency override denied."
             _userFeedbackMessage.value = err
