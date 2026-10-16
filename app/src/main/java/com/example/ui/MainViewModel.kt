@@ -883,7 +883,7 @@ class MainViewModel(
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         val user = _currentUser.value
         if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
-            _userFeedbackMessage.value = "Access Denied: authenticated Meal Staff authorization is required."
+            _userFeedbackMessage.value = "Access Denied: Unauthenticated session. Meal Staff authorization is required."
             _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
             FeedbackHelper.playDeniedSoundAndHaptic(context)
             return
