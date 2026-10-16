@@ -149,7 +149,9 @@ data class ExamExceptionEntity(
     val approvedByHeadTeacher: String? = null,
     val requestedAt: Long,
     val approvedAt: Long? = null,
-    val isSyncedToCloud: Boolean = false
+    val isSyncedToCloud: Boolean = false,
+    val recommendedByUid: String? = null,
+    val approvedByUid: String? = null
 ) {
     fun toDomain(): ExamException = ExamException(
         id = id,
@@ -162,7 +164,9 @@ data class ExamExceptionEntity(
         isApproved = isApproved,
         approvedByHeadTeacher = approvedByHeadTeacher,
         requestedAt = requestedAt,
-        approvedAt = approvedAt
+        approvedAt = approvedAt,
+        recommendedByUid = recommendedByUid,
+        approvedByUid = approvedByUid
     )
 
     companion object {
@@ -178,7 +182,9 @@ data class ExamExceptionEntity(
             approvedByHeadTeacher = e.approvedByHeadTeacher,
             requestedAt = e.requestedAt,
             approvedAt = e.approvedAt,
-            isSyncedToCloud = isSynced
+            isSyncedToCloud = isSynced,
+            recommendedByUid = e.recommendedByUid,
+            approvedByUid = e.approvedByUid
         )
     }
 }
