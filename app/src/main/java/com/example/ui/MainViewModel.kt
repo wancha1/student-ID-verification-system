@@ -1034,6 +1034,7 @@ class MainViewModel(
         viewModelScope.launch {
             try {
                 db.studentRequirementDao().upsert(StudentRequirementEntity.fromDomain(requirement))
+                repository.syncManagerInstance?.notifyLocalLogAdded()
                 _requirementsOverrides.value = _requirementsOverrides.value + (requirement.studentId to requirement)
                 _userFeedbackMessage.value = "Requirements checklist saved on this device."
             } catch (error: Exception) {
