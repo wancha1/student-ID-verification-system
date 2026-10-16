@@ -1053,7 +1053,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1163,7 +1163,7 @@ class LtcSystemVerificationTest {
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1341,7 +1341,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open with Room specifying MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1384,7 +1384,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1555,7 +1555,7 @@ class LtcSystemVerificationTest {
 
         // 2. Perform Room migration to Version 6
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
             .allowMainThreadQueries()
             .build()
 
@@ -1655,6 +1655,15 @@ class LtcSystemVerificationTest {
         examColumnCursor.close()
         assertTrue("Exam exceptions must persist the authenticated recommender UID", examColumns.contains("recommendedByUid"))
         assertTrue("Exam exceptions must persist the authenticated approver UID", examColumns.contains("approvedByUid"))
+
+        val requirementColumns = mutableSetOf<String>()
+        val requirementCursor = db.query("PRAGMA table_info(`student_requirements`)")
+        while (requirementCursor.moveToNext()) {
+            requirementColumns.add(requirementCursor.getString(1))
+        }
+        requirementCursor.close()
+        assertTrue("Requirements table must be created by migration 8 to 9", requirementColumns.contains("studentId"))
+        assertTrue("Requirements table must track cloud sync state", requirementColumns.contains("isSyncedToCloud"))
 
         // 7. Test idempotent execution of MIGRATION DDL
         roomDb.openHelper.writableDatabase.execSQL("CREATE TABLE IF NOT EXISTS `pending_changes` (`changeId` TEXT PRIMARY KEY)")
