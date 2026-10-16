@@ -44,6 +44,7 @@ import com.example.util.FeedbackHelper
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import com.example.util.SecurityManager
+import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -256,28 +257,6 @@ class MainViewModel(
         dismissScanResult()
     }
 
-    /**
-     * Authenticates credentials against local salted SHA-256 store before granting duty mode.
-     */
-    fun authenticateAndLogin(
-        context: Context,
-        role: UserRole,
-        pin: String,
-        customName: String? = null,
-        requestFinanceAccess: Boolean = false
-    ): Boolean {
-        if (!SecurityManager.isProvisioned(context)) {
-            _userFeedbackMessage.value = "Terminal is not provisioned. Master Administrator setup required."
-            return false
-        }
-        if (!SecurityManager.verifyRolePin(context, role, pin)) {
-            _userFeedbackMessage.value = "Invalid credentials. Authentication failed for ${role.title}."
-            return false
-        }
-        val hasFinance = if (role == UserRole.BURSAR_FINANCE) true else requestFinanceAccess
-        loginAs(role, customName, hasFinance)
-        return true
-    }
 
     /**
      * Locks terminal session. Unlocks only after entering valid staff credentials.
@@ -297,6 +276,8 @@ class MainViewModel(
 
     fun logout() {
         lockSession()
+        // Explicit logout revokes the client session; background locking only clears the UI session.
+        runCatching { FirebaseAuth.getInstance().signOut() }
     }
 
     fun openScanner() {

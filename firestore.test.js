@@ -148,17 +148,18 @@ async function setupSchoolStaff() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     const ltcRef = db.collection("schools").doc(SCHOOL_LTC).collection("staff");
-    await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin" });
-    await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello" });
-    await ltcRef.doc(BURSAR_UID).set({ role: "BURSAR", name: "Bursar Florence" });
-    await ltcRef.doc(TEACHER_UID).set({ role: "TEACHER", name: "Teacher Akello" });
-    await ltcRef.doc(MEAL_UID).set({ role: "MEAL_STAFF", name: "Dining Hall Staff" });
-    await ltcRef.doc(EXAM_UID).set({ role: "EXAM_STAFF", name: "Examiner Charles" });
+    await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin", active: true });
+    await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello", active: true });
+    await ltcRef.doc(BURSAR_UID).set({ role: "BURSAR", name: "Bursar Florence", active: true });
+    await ltcRef.doc(TEACHER_UID).set({ role: "TEACHER", name: "Teacher Akello", active: true });
+    await ltcRef.doc(MEAL_UID).set({ role: "MEAL_STAFF", name: "Dining Hall Staff", active: true });
+    await ltcRef.doc(EXAM_UID).set({ role: "EXAM_STAFF", name: "Examiner Charles", active: true });
 
     // Other school staff
     await db.collection("schools").doc(OTHER_SCHOOL).collection("staff").doc(UNRELATED_UID).set({
       role: "ADMIN",
-      name: "Other School Admin"
+      name: "Other School Admin",
+      active: true
     });
   });
 }
@@ -373,4 +374,187 @@ test("Card security: revoked cards cannot be reactivated by stale clients", asyn
       .collection("cards").doc("CRD-REVOKED-01")
       .update({ status: "ACTIVE", updatedAt: Date.now() })
   );
+});
+
+
+test("Exam exception: finance staff cannot create a pre-approved exception", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  await assertFails(
+    bursarDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("exam_exceptions").doc("EX-PREAPPROVED-01")
+      .set({
+        id: "EX-PREAPPROVED-01",
+        studentId: "STU-01",
+        examCode: "UACE-MATH",
+        recommendedBy: BURSAR_UID,
+        isApproved: true
+      })
+  );
+});
+
+test("Exam exception: finance staff can create a pending recommendation", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  await assertSucceeds(
+    bursarDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("exam_exceptions").doc("EX-PENDING-01")
+      .set({
+        id: "EX-PENDING-01",
+        studentId: "STU-01",
+        examCode: "UACE-MATH",
+        recommendedBy: BURSAR_UID,
+        isApproved: false
+      })
+  );
+});
+
+test("Idempotent retry: identical gate-log upload is accepted without changing the record", async () => {
+  await setupSchoolStaff();
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const ref = gateDb.collection("schools").doc(SCHOOL_LTC).collection("gate_logs").doc("GATE-RETRY-01");
+  const payload = {
+    id: "GATE-RETRY-01",
+    studentNumber: "LTC-2026-0001",
+    decision: "APPROVED",
+    gateLocation: "Main Gate",
+    timestamp: 1760000000000
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.set(payload));
+  const snapshot = await assertSucceeds(ref.get());
+  assert.deepStrictEqual(snapshot.data(), payload);
+});
+
+test("Idempotent retry: identical meal upload is accepted without changing the record", async () => {
+  await setupSchoolStaff();
+  const mealDb = testEnv.authenticatedContext(MEAL_UID).firestore();
+  const ref = mealDb.collection("schools").doc(SCHOOL_LTC).collection("meals").doc("MEAL-RETRY-01");
+  const payload = {
+    id: "MEAL-RETRY-01",
+    studentId: "STU-01",
+    mealType: "LUNCH",
+    servingStation: "Main Hall",
+    timestamp: 1760000000000
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.set(payload));
+  const snapshot = await assertSucceeds(ref.get());
+  assert.deepStrictEqual(snapshot.data(), payload);
+});
+
+test("Card lifecycle: administrator cannot set an unsupported status", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-STATUS-01")
+      .set({ id: "CRD-STATUS-01", status: "ACTIVE", isDeleted: false, updatedAt: Date.now() });
+  });
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("cards").doc("CRD-STATUS-01")
+      .update({ status: "MYSTERY_STATUS", updatedAt: Date.now() })
+  );
+});
+
+
+test("Inactive staff membership cannot access school records", async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("staff").doc("inactive_staff_01")
+      .set({ role: "GATE_OFFICER", name: "Former staff", active: false });
+  });
+  const inactiveDb = testEnv.authenticatedContext("inactive_staff_01").firestore();
+  await assertFails(
+    inactiveDb.collection("schools").doc(SCHOOL_LTC).collection("students").get()
+  );
+});
+
+test("Card lifecycle: administrator cannot create a card with unsupported status", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("cards").doc("CRD-INVALID-CREATE")
+      .set({
+        id: "CRD-INVALID-CREATE",
+        cardIdentifier: "CRD-INVALID-CREATE",
+        studentId: "STU-01",
+        studentNumber: "LTC-2026-0001",
+        qrPayload: "LTC:V2:test",
+        status: "MYSTERY_STATUS",
+        isDeleted: false,
+        updatedAt: Date.now()
+      })
+  );
+});
+
+
+test("Least privilege: administrator without explicit finance access cannot change fees", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("students").doc("STU-ADMIN-FEE-01")
+      .set({
+        id: "STU-ADMIN-FEE-01",
+        studentNumber: "LTC-2026-0001",
+        firstName: "Student",
+        lastName: "One",
+        name: "Student One",
+        gradeClass: "Senior 4",
+        isDayScholar: true,
+        feesStatus: "CLEARED",
+        outstandingAmount: 0,
+        updatedAt: Date.now()
+      });
+  });
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-ADMIN-FEE-01")
+      .update({ feesStatus: "OUTSTANDING", outstandingAmount: 100000, updatedAt: Date.now() })
+  );
+});
+
+test("Least privilege: explicitly finance-enabled administrator can change fees", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("schools").doc(SCHOOL_LTC).collection("staff").doc(ADMIN_UID)
+      .update({ hasExplicitFinanceAccess: true });
+    await db.collection("schools").doc(SCHOOL_LTC)
+      .collection("students").doc("STU-ADMIN-FEE-02")
+      .set({
+        id: "STU-ADMIN-FEE-02",
+        studentNumber: "LTC-2026-0002",
+        firstName: "Student",
+        lastName: "Two",
+        name: "Student Two",
+        gradeClass: "Senior 4",
+        isDayScholar: true,
+        feesStatus: "CLEARED",
+        outstandingAmount: 0,
+        updatedAt: Date.now()
+      });
+  });
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertSucceeds(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-ADMIN-FEE-02")
+      .update({ feesStatus: "OUTSTANDING", outstandingAmount: 100000, updatedAt: Date.now() })
+  );
+});
+
+test("Exam exception: identical retry by Bursar is idempotent", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("exam_exceptions").doc("EX-RETRY-01");
+  const payload = {
+    id: "EX-RETRY-01",
+    studentId: "STU-01",
+    examCode: "UACE-MATH",
+    recommendedBy: BURSAR_UID,
+    isApproved: false
+  };
+  await assertSucceeds(ref.set(payload));
+  await assertSucceeds(ref.set(payload));
 });

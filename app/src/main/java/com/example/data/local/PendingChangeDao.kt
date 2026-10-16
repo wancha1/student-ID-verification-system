@@ -15,7 +15,7 @@ interface PendingChangeDao {
     @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') ORDER BY createdAt ASC")
     fun getPendingChangesFlow(): Flow<List<PendingChangeEntity>>
 
-    @Query("SELECT * FROM pending_changes WHERE status = 'PENDING' ORDER BY createdAt ASC")
+    @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') ORDER BY createdAt ASC")
     suspend fun getPendingChanges(): List<PendingChangeEntity>
 
     @Query("SELECT * FROM pending_changes WHERE status = 'FAILED' ORDER BY createdAt ASC")
@@ -48,6 +48,6 @@ interface PendingChangeDao {
     @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED')")
     fun getPendingCountFlow(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM pending_changes WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED')")
     suspend fun getPendingCount(): Int
 }

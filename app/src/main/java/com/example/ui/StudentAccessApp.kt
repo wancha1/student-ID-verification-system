@@ -66,7 +66,7 @@ import com.example.ui.admin.AdminDashboardScreen
 import com.example.ui.admin.AdminScanLogsScreen
 import com.example.ui.admin.BatchPrintIdCardsDialog
 import com.example.ui.admin.StudentDetailScreen
-import com.example.ui.auth.LoginScreen
+import com.example.ui.auth.FirebaseStaffLoginScreen
 import com.example.ui.exeat.ExeatPassScreen
 import com.example.ui.guard.GuardDashboardScreen
 import com.example.ui.guard.GuardScannerScreen
@@ -191,8 +191,8 @@ fun StudentAccessApp(
     RoleThemeWrapper(role = currentUser?.role) {
         val user = currentUser
         if (user == null) {
-            LoginScreen(
-                onSelectRole = { role, name, hasFinance -> viewModel.loginAs(role, name, hasFinance) },
+            FirebaseStaffLoginScreen(
+                onAuthenticated = { role, name, hasFinance -> viewModel.loginAs(role, name, hasFinance) },
                 modifier = modifier
             )
         } else {
@@ -1095,76 +1095,26 @@ fun StudentAccessApp(
                             }
                         },
                         text = {
-                            Column {
-                                Text(
-                                    text = "Role switching requires staff PIN authentication for ${targetRole.title} duty mode.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                OutlinedTextField(
-                                    value = switchRolePin,
-                                    onValueChange = {
-                                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
-                                            switchRolePin = it
-                                            switchRolePinError = null
-                                        }
-                                    },
-                                    label = { Text("Enter Staff PIN") },
-                                    singleLine = true,
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                    isError = switchRolePinError != null,
-                                    supportingText = switchRolePinError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("input_role_switch_pin")
-                                )
-
-                                if (targetRole == UserRole.ADMINISTRATOR) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { switchRoleRequestFinance = !switchRoleRequestFinance }
-                                            .padding(vertical = 4.dp)
-                                    ) {
-                                        Checkbox(
-                                            checked = switchRoleRequestFinance,
-                                            onCheckedChange = { switchRoleRequestFinance = it },
-                                            modifier = Modifier.testTag("checkbox_switch_role_finance")
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "Explicit Finance / Bursar Clearance Mode",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
+                            Text(
+                                "Duty roles are assigned by the school administrator. To use a different role, sign out and sign in with the staff account provisioned for that role."
+                            )
                         },
                         confirmButton = {
                             Button(
                                 onClick = {
-                                    if (SecurityManager.verifyRolePin(context, targetRole, switchRolePin)) {
-                                        val hasFinance = if (targetRole == UserRole.BURSAR_FINANCE) true else switchRoleRequestFinance
-                                        viewModel.loginAs(targetRole, null, hasFinance)
-                                        showLogsScreen = false
-                                        showGuardianAlertsScreen = false
-                                        showExeatScreen = false
-                                        showAuthDialogForRole = null
-                                        switchRolePin = ""
-                                        switchRolePinError = null
-                                    } else {
-                                        switchRolePinError = "Incorrect PIN. Role switch authorization denied."
-                                    }
+                                    viewModel.logout()
+                                    showLogsScreen = false
+                                    showGuardianAlertsScreen = false
+                                    showExeatScreen = false
+                                    showAuthDialogForRole = null
+                                    showRoleSwitchMenu = false
+                                    switchRolePin = ""
+                                    switchRolePinError = null
+                                    switchRoleRequestFinance = false
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = targetTheme.primaryColor),
                                 modifier = Modifier.testTag("button_confirm_role_switch")
                             ) {
-                                Text("Authorize")
+                                Text("Sign out")
                             }
                         },
                         dismissButton = {

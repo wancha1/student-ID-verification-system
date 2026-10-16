@@ -1,5 +1,7 @@
 package com.example.data.sync
 
+import android.content.Context
+import com.example.R
 import com.example.data.FirestoreStudentRepository
 import com.example.data.local.AttendanceRecordEntity
 import com.example.data.local.CardEntity
@@ -8,9 +10,8 @@ import com.example.data.local.MealRecordEntity
 import com.example.data.local.ScanLogEntity
 import com.example.data.local.StudentEntity
 import com.example.model.FeeStatus
-import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
@@ -20,18 +21,35 @@ import kotlinx.coroutines.tasks.await
  * Supports school-scoped multi-device synchronization for Lira Town College.
  */
 class FirestoreCloudBackend(
-    private val db: FirebaseFirestore = Firebase.firestore,
-    private val auth: FirebaseAuth = Firebase.auth,
+    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(
+        FirebaseApp.getInstance(),
+        FIRESTORE_DATABASE_ID
+    ),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance(FirebaseApp.getInstance()),
     private val schoolId: String = "ltc_school_01"
 ) : RemoteCloudDataSource {
 
+    constructor(context: Context) : this(
+        FirebaseFirestore.getInstance(
+            FirebaseApp.getInstance(),
+            context.getString(R.string.firestore_database_id)
+        ),
+        FirebaseAuth.getInstance(FirebaseApp.getInstance()),
+        "ltc_school_01"
+    )
+
     constructor(firestoreRepo: FirestoreStudentRepository) : this(
-        Firebase.firestore,
-        Firebase.auth,
+        FirebaseFirestore.getInstance(FirebaseApp.getInstance(), FIRESTORE_DATABASE_ID),
+        FirebaseAuth.getInstance(FirebaseApp.getInstance()),
         "ltc_school_01"
     )
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
+
+    companion object {
+        // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
+        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
+    }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = try {
         val snapshot = getSchoolRef()
