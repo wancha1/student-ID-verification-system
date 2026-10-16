@@ -84,9 +84,7 @@ fun FirebaseStaffLoginScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(midnight, deepBlue, Color(0xFFF2F5F9)),
-                    startY = 0f,
-                    endY = 1500f
+                    colors = listOf(midnight, deepBlue, Color(0xFF091522))
                 )
             )
             .imePadding()
