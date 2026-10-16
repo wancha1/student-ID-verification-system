@@ -285,19 +285,52 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (ex in exceptions) {
-            val docRef = getSchoolRef().collection("exam_exceptions").document(ex.id)
-            val data = hashMapOf(
-                "id" to ex.id,
-                "studentId" to ex.studentId,
-                "examCode" to ex.examCode,
-                "recommendedBy" to ex.requestedByBursar,
-                "isApproved" to ex.isApproved
-            )
-            batch.set(docRef, data)
+        val uid = auth.currentUser?.uid
+            ?: throw SecurityException("A signed-in staff identity is required to sync exam exceptions.")
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        if (staff.getBoolean("active") != true) {
+            throw SecurityException("Inactive or unprovisioned staff cannot sync exam exceptions.")
         }
-        batch.commit().await()
+        val authenticatedName = staff.getString("name")
+            ?: staff.getString("displayName")
+            ?: uid
+
+        for (exception in exceptions) {
+            val docRef = getSchoolRef().collection("exam_exceptions").document(exception.id)
+            val existing = docRef.get().await()
+            if (!existing.exists()) {
+                // Do not fabricate an approval or attribute an offline recommendation to
+                // whichever device happens to sync it. The original recommendation must
+                // first be created by the authenticated Bursar/Finance account.
+                if (exception.isApproved) {
+                    throw IllegalStateException(
+                        "Cannot sync approved exam exception ${exception.id}: its authenticated recommendation is missing. Sync the Bursar recommendation first."
+                    )
+                }
+                docRef.set(
+                    mapOf(
+                        "id" to exception.id,
+                        "studentId" to exception.studentId,
+                        "examCode" to exception.examCode,
+                        "recommendedBy" to authenticatedName,
+                        "recommendedByUid" to uid,
+                        "isApproved" to false
+                    )
+                ).await()
+            } else if (exception.isApproved && existing.getBoolean("isApproved") != true) {
+                // Only the current authenticated leadership account can complete this transition;
+                // Firestore rules independently enforce the allowed role and immutable identity.
+                docRef.update(
+                    mapOf(
+                        "isApproved" to true,
+                        "approvedBy" to authenticatedName,
+                        "approvedByUid" to uid,
+                        "approvedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            // Existing pending records are left unchanged on retry; approved records cannot be downgraded.
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
