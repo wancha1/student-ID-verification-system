@@ -6,6 +6,7 @@ import com.example.model.UserRole
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -37,7 +38,7 @@ class FirebaseStaffAuthenticator {
                 .document(SCHOOL_ID)
                 .collection("staff")
                 .document(signedInUser.uid)
-                .get()
+                .get(Source.SERVER)
                 .await()
 
             if (!staffSnapshot.exists()) {
@@ -66,7 +67,7 @@ class FirebaseStaffAuthenticator {
                 displayName = name,
                 role = role,
                 hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
-                    (role == UserRole.ADMINISTRATOR &&
+                    (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
                         staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
             )
         } catch (error: Exception) {
