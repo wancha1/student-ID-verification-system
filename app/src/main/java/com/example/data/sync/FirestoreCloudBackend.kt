@@ -354,6 +354,8 @@ class FirestoreCloudBackend(
                         "examCode" to exception.examCode,
                         "recommendedBy" to authenticatedName,
                         "recommendedByUid" to uid,
+                        "recommendationReason" to exception.recommendationReason,
+                        "requestedAt" to exception.requestedAt,
                         "isApproved" to false
                     )
                 ).await()
