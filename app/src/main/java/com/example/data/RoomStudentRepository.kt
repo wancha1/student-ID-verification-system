@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.BuildConfig
+
 import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.CardEntity
@@ -73,7 +75,9 @@ class RoomStudentRepository(
 
     suspend fun initialize() = withContext(ioDispatcher) {
         syncManager.initialize()
-        seedInitialDataIfEmpty()
+        // Fictional fixtures are strictly for debug builds. Never create sample
+        // student records or cards automatically in a release installation.
+        if (BuildConfig.DEBUG) seedInitialDataIfEmpty()
     }
 
     override suspend fun getStudentById(id: String): Student? = withContext(ioDispatcher) {
@@ -903,6 +907,11 @@ class RoomStudentRepository(
     }
 
     override suspend fun resetToSampleData() = withContext(ioDispatcher) {
+        // This operation deletes local records, so it must never be reachable
+        // as a destructive reset in a production/release build.
+        check(BuildConfig.DEBUG) {
+            "Resetting to sample data is only available in debug builds."
+        }
         clearAllData()
         seedInitialDataIfEmpty()
     }
