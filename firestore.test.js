@@ -78,6 +78,7 @@ const UNRELATED_UID = "unrelated_user_99";
 async function setupSchoolStaff() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
+    await db.collection("schools").doc(SCHOOL_LTC).set({ studentPrivacyMigrationComplete: true });
     const ltcRef = db.collection("schools").doc(SCHOOL_LTC).collection("staff");
     await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin", active: true });
     await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello", active: true });
@@ -127,6 +128,8 @@ test("Cross-device sync: Admin on Device A registers student, Gate on Device B r
 test("Student privacy: gate staff cannot read legacy shared records containing guardian details", async () => {
   await setupSchoolStaff();
   await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .set({ studentPrivacyMigrationComplete: false }, { merge: true });
     await context.firestore().collection("schools").doc(SCHOOL_LTC)
       .collection("students").doc("STU-PRIVATE-LEGACY")
       .set({
