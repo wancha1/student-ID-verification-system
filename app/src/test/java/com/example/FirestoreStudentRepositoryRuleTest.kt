@@ -2,44 +2,40 @@ package com.example
 
 import com.example.base.FirestoreEmulatorTestBase
 import com.example.data.FirestoreStudentRepository
-import com.example.data.model.FirestoreCard
 import com.example.data.model.FirestoreScanLog
 import com.example.data.model.FirestoreStudent
 import com.google.firebase.firestore.FirebaseFirestoreException
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeout
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
 
+/**
+ * Regression tests for the retired /users/{uid} Firestore schema.
+ * Production data is school-scoped under /schools/{schoolId}; authenticated users
+ * must not be able to keep using the old per-user path.
+ */
 class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
 
   @Test
-  fun saveUserProfile_authenticatedUser_success() = runBlocking {
-    val uid = signInTestUser("staff_" + UUID.randomUUID().toString().take(8) + "@oakridge.ac.ug")
+  fun saveUserProfile_legacySchemaRejectedForAuthenticatedUser() = runBlocking {
+    signInTestUser("staff_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
-
-    val res = repo.saveUserProfile(displayName = "Staff Officer", email = "staff@oakridge.ac.ug", role = "GATE_OFFICER")
-    assertTrue(res.isSuccess)
-
-    val doc = firestore.collection("users").document(uid).get().await()
-    assertTrue(doc.exists())
-    assertEquals(uid, doc.getString("userId"))
-    assertEquals("GATE_OFFICER", doc.getString("role"))
+    val result = repo.saveUserProfile(
+      displayName = "Staff Officer",
+      email = "staff@ltc.ac.ug",
+      role = "GATE_OFFICER"
+    )
+    assertTrue("Legacy user-profile writes must be denied", result.isFailure)
   }
 
   @Test
-  fun addStudentAndObserve_authenticatedOwner_success() = runBlocking {
-    val uid = signInTestUser("alice@oakridge.ac.ug")
+  fun addStudent_legacySchemaRejectedForAuthenticatedUser() = runBlocking {
+    val uid = signInTestUser("alice_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
-
-    val studentId = UUID.randomUUID().toString()
     val student = FirestoreStudent(
-      id = studentId,
+      id = UUID.randomUUID().toString(),
       userId = uid,
       studentNumber = "LTC-2026-0001",
       firstName = "Michael",
@@ -49,49 +45,30 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
       feesStatus = "CLEARED",
       outstandingAmount = 0.0
     )
-
-    val addRes = repo.addStudent(student)
-    assertTrue(addRes.isSuccess)
-
-    val observed = withTimeout(5000L) {
-      repo.observeStudents().first { list -> list.any { it.studentNumber == "LTC-2026-0001" } }
-    }
-    assertNotNull(observed)
-    assertTrue(observed.any { it.firstName == "Michael" })
+    assertTrue("Legacy student writes must be denied", repo.addStudent(student).isFailure)
   }
 
   @Test
-  fun recordScanLog_appendOnly_success() = runBlocking {
-    val uid = signInTestUser("guard@oakridge.ac.ug")
+  fun recordScanLog_legacySchemaRejectedForAuthenticatedUser() = runBlocking {
+    val uid = signInTestUser("guard_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
-
-    val logId = UUID.randomUUID().toString()
     val log = FirestoreScanLog(
-      id = logId,
+      id = UUID.randomUUID().toString(),
       userId = uid,
       studentNumber = "LTC-2026-0001",
       studentName = "Michael Kasule",
       decision = "APPROVED",
       gatePoint = "Main Gate"
     )
-
-    val logRes = repo.recordScanLog(log)
-    assertTrue(logRes.isSuccess)
-
-    val observed = withTimeout(5000L) {
-      repo.observeScanLogs().first { list -> list.any { it.id == logId } }
-    }
-    assertTrue(observed.any { it.studentNumber == "LTC-2026-0001" })
+    assertTrue("Legacy scan-log writes must be denied", repo.recordScanLog(log).isFailure)
   }
 
   @Test
-  fun crossUserAccess_bobCannotReadAliceStudents() = runBlocking {
-    val aliceUid = signInTestUser("alice_owner@oakridge.ac.ug")
-    val aliceRepo = FirestoreStudentRepository(firestore, auth)
-
-    val studentId = UUID.randomUUID().toString()
+  fun legacyStudentPathsAreDeniedAcrossUsers() = runBlocking {
+    val aliceUid = signInTestUser("alice_owner_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
+    val repo = FirestoreStudentRepository(firestore, auth)
     val student = FirestoreStudent(
-      id = studentId,
+      id = UUID.randomUUID().toString(),
       userId = aliceUid,
       studentNumber = "LTC-2026-0099",
       firstName = "Secret",
@@ -101,35 +78,32 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
       feesStatus = "CLEARED",
       outstandingAmount = 0.0
     )
-    val addRes = aliceRepo.addStudent(student)
-    assertTrue(addRes.isSuccess)
+    assertTrue(repo.addStudent(student).isFailure)
 
-    // Bob signs in and attempts direct access to Alice's student document
-    signInTestUser("bob_attacker@oakridge.ac.ug")
-    var failedWithPermissionDenied = false
+    signInTestUser("bob_attacker_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
+    var denied = false
     try {
-      firestore.collection("users").document(aliceUid).collection("students").document(studentId).get().await()
-    } catch (e: Exception) {
-      val cause = e.cause as? FirebaseFirestoreException ?: e as? FirebaseFirestoreException
-      if (cause?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED || e.message?.contains("PERMISSION_DENIED") == true) {
-        failedWithPermissionDenied = true
-      }
+      firestore.collection("users").document(aliceUid)
+        .collection("students").document(student.id).get().await()
+    } catch (error: Exception) {
+      val cause = error.cause as? FirebaseFirestoreException ?: error as? FirebaseFirestoreException
+      denied = cause?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ||
+        error.message?.contains("PERMISSION_DENIED") == true
     }
-    assertTrue("Cross-user access must be rejected with PERMISSION_DENIED", failedWithPermissionDenied)
+    assertTrue("Legacy student paths must be denied to every client", denied)
   }
 
   @Test
   fun unauthenticatedUser_accessIsRejected() = runBlocking {
     auth.signOut()
-    var failedUnauth = false
+    var denied = false
     try {
       firestore.collection("users").document("someone").collection("students").get().await()
-    } catch (e: Exception) {
-      val cause = e.cause as? FirebaseFirestoreException ?: e as? FirebaseFirestoreException
-      if (cause?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED || e.message?.contains("PERMISSION_DENIED") == true) {
-        failedUnauth = true
-      }
+    } catch (error: Exception) {
+      val cause = error.cause as? FirebaseFirestoreException ?: error as? FirebaseFirestoreException
+      denied = cause?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ||
+        error.message?.contains("PERMISSION_DENIED") == true
     }
-    assertTrue("Unauthenticated access must be rejected with PERMISSION_DENIED", failedUnauth)
+    assertTrue("Unauthenticated legacy access must be rejected", denied)
   }
 }
