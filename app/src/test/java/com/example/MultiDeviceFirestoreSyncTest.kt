@@ -201,6 +201,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
                 mapOf(
                     "id" to malformedCardId,
                     "cardIdentifier" to 42,
+                    "status" to "ACTIVE",
                     "updatedAt" to -1L,
                     "isDeleted" to false
                 )
