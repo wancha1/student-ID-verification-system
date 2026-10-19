@@ -83,6 +83,24 @@ async function main() {
     }
 
     if (applyChanges && writes > 0) await batch.commit();
+    if (applyChanges) {
+      // The flag is the release gate used by Firestore rules to allow school-wide
+      // roster queries. Set it only after verifying no shared record retains private data.
+      const verification = await studentsRef.get();
+      const remainingPrivateRecords = verification.docs.filter((doc) =>
+        PRIVATE_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(doc.data(), field))
+      );
+      if (remainingPrivateRecords.length > 0) {
+        throw new Error(
+          `Migration verification failed: ${remainingPrivateRecords.length} shared student record(s) still contain private fields. Roster access remains blocked.`
+        );
+      }
+      await db.collection("schools").doc(SCHOOL_ID).set({
+        studentPrivacyMigrationComplete: true,
+        privacyMigrationCompletedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
     console.log(JSON.stringify({
       mode: applyChanges ? "APPLIED" : "DRY_RUN",
       projectId,
