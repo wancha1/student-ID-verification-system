@@ -154,6 +154,38 @@ test("Student privacy: gate staff cannot read legacy shared records containing g
     .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
 });
 
+test("Student privacy: new shared records reject private fields and private writes are leadership-only", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-PRIVATE-NEW")
+      .set({
+        id: "STU-PRIVATE-NEW",
+        studentNumber: "LTC-PRIVATE-NEW",
+        firstName: "Test",
+        lastName: "Student",
+        gradeClass: "Senior 4",
+        guardianPhone: "+256700000001",
+        updatedAt: Date.now()
+      })
+  );
+
+  const privateRef = adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-NEW");
+  await assertSucceeds(privateRef.set({
+    studentId: "STU-PRIVATE-NEW",
+    guardianPhone: "+256700000001",
+    updatedAt: Date.now()
+  }));
+  await assertFails(privateRef.get());
+  await assertFails(
+    gateDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("STU-PRIVATE-NEW").get()
+  );
+});
+
 test("Exam exception: only the authenticated Bursar UID can be recorded as recommender", async () => {
   await setupSchoolStaff();
   const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
