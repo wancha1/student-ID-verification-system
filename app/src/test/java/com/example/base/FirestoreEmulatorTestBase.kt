@@ -110,12 +110,19 @@ abstract class FirestoreEmulatorTestBase {
 
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
     withTimeout(AUTH_TIMEOUT_MS) {
-      val result = try {
-        auth.signInWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
-      } catch (unused: FirebaseAuthInvalidUserException) {
-        auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+      try {
+        val result = try {
+          auth.signInWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+        } catch (missingUser: FirebaseAuthInvalidUserException) {
+          auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+        }
+        checkNotNull(result.user?.uid) { "User auth failed for test account $email" }
+      } catch (error: Throwable) {
+        System.err.println(
+          "Firebase emulator test sign-in failed for $email: ${error.stackTraceToString()}"
+        )
+        throw error
       }
-      checkNotNull(result.user?.uid) { "User auth failed" }
     }
   }
 
