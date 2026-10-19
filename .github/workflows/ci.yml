@@ -42,7 +42,15 @@ jobs:
       - name: Compile debug APK
         run: gradle --no-daemon assembleDebug
       - name: Run unit tests with Firebase Auth and Firestore emulators
-        run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest"
+        run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
+      - name: Upload Android unit-test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
 
   firestore-rules:
     name: Firestore security rules tests

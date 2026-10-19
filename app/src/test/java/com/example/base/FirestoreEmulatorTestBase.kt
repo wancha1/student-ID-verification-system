@@ -30,6 +30,7 @@ abstract class FirestoreEmulatorTestBase {
   protected lateinit var firestore: FirebaseFirestore
   protected lateinit var auth: FirebaseAuth
   protected lateinit var databaseId: String
+  private lateinit var testFirebaseApp: FirebaseApp
 
   @Before
   open fun setUpFirebase() {
@@ -37,35 +38,47 @@ abstract class FirestoreEmulatorTestBase {
     val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
     databaseId = if (resId != 0) context.getString(resId) else "demo-database"
 
-    val app = if (FirebaseApp.getApps(context).isEmpty()) {
-      val newApp = FirebaseApp.initializeApp(
-        context,
-        FirebaseOptions.Builder()
-          .setApplicationId("com.aistudio.studentaccess.xpkz")
-          .setProjectId(PROJECT_ID)
-          .setApiKey("fake-api-key-for-emulator")
-          .build()
-      )
-      val newFirestore = FirebaseFirestore.getInstance(newApp, databaseId)
-      newFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
-      newFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
-        .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
-        .build()
+    // Give every test its own FirebaseApp. Reusing a previously initialized app meant
+    // the emulator endpoints were configured only for the first test, causing later
+    // tests to contact the real Firebase endpoints and fail before exercising rules.
+    val appName = "ltc-test-${java.util.UUID.randomUUID()}"
+    try {
+      testFirebaseApp = FirebaseApp.initializeApp(
+      context,
+      FirebaseOptions.Builder()
+        .setApplicationId("1:1234567890:android:abcdef0123456789")
+        .setProjectId(PROJECT_ID)
+        .setApiKey("fake-api-key-for-emulator")
+        .build(),
+      appName
+    ) ?: throw IllegalStateException("Unable to initialize isolated Firebase test app.")
 
-      val newAuth = FirebaseAuth.getInstance(newApp)
-      newAuth.useEmulator(EMULATOR_HOST, AUTH_PORT)
-      newApp
-    } else {
-      FirebaseApp.getInstance()
+    firestore = FirebaseFirestore.getInstance(testFirebaseApp, databaseId)
+    // Configure settings before connecting the client to the emulator; Firestore
+    // locks its settings once the client starts.
+    firestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
+      .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
+      .build()
+    firestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
+
+      auth = FirebaseAuth.getInstance(testFirebaseApp)
+      auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
+    } catch (error: Throwable) {
+      System.err.println("Firebase emulator test setup failed: ${error.stackTraceToString()}")
+      throw error
     }
-
-    firestore = FirebaseFirestore.getInstance(app, databaseId)
-    auth = FirebaseAuth.getInstance(app)
   }
 
   @After
   open fun tearDownFirebase() {
-    auth.signOut()
+    try {
+      if (::auth.isInitialized) auth.signOut()
+    } finally {
+      // Do not delete the FirebaseApp in Robolectric tests. Firebase Auth keeps
+      // process-level client state; deleting an app leaves cached Auth instances
+      // pointing at a deleted FirebaseApp, breaking emulator setup in later tests.
+      // Each test uses a unique app name, and the JVM exits after the suite.
+    }
   }
 
   /**
@@ -76,10 +89,12 @@ abstract class FirestoreEmulatorTestBase {
     val safeRole = role.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")
-    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"}}}"""
-    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff/$uid")
+    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"},"active":{"booleanValue":true}}}"""
+    // Create the document through the collection endpoint. HttpURLConnection on
+    // the JVM does not support PATCH as a request method, so use POST + documentId.
+    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff?documentId=$uid")
     val connection = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "PATCH"
+      requestMethod = "POST"
       setRequestProperty("Authorization", "Bearer owner")
       setRequestProperty("Content-Type", "application/json")
       doOutput = true
@@ -98,12 +113,19 @@ abstract class FirestoreEmulatorTestBase {
 
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
     withTimeout(AUTH_TIMEOUT_MS) {
-      val result = try {
-        auth.signInWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
-      } catch (unused: FirebaseAuthInvalidUserException) {
-        auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+      try {
+        val result = try {
+          auth.signInWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+        } catch (missingUser: FirebaseAuthInvalidUserException) {
+          auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+        }
+        checkNotNull(result.user?.uid) { "User auth failed for test account $email" }
+      } catch (error: Throwable) {
+        System.err.println(
+          "Firebase emulator test sign-in failed for $email: ${error.stackTraceToString()}"
+        )
+        throw error
       }
-      checkNotNull(result.user?.uid) { "User auth failed" }
     }
   }
 

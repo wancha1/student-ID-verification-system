@@ -257,6 +257,43 @@ class MainViewModel(
         dismissScanResult()
     }
 
+    /**
+     * Authenticates staff against the provisioned terminal credentials before opening a duty session.
+     * Failed attempts leave the existing session unchanged.
+     */
+    fun authenticateAndLogin(
+        context: Context,
+        role: UserRole,
+        pin: String,
+        customName: String? = null
+    ): Boolean {
+        if (!SecurityManager.isProvisioned(context)) {
+            _userFeedbackMessage.value = "Login unavailable: this terminal has not been provisioned by an administrator."
+            return false
+        }
+        if (!SecurityManager.verifyRolePin(context, role, pin)) {
+            _userFeedbackMessage.value = "Login failed: incorrect PIN for ${role.subtitle}."
+            return false
+        }
+
+        val resolvedName = when {
+            !customName.isNullOrBlank() -> customName.trim()
+            role == UserRole.ADMINISTRATOR -> SecurityManager.getAdminName(context)
+            else -> role.defaultUsername
+        }
+        val user = AuthUser(
+            role = role,
+            name = resolvedName,
+            station = role.subtitle,
+            hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE
+        )
+        _currentUser.value = user
+        SecurityManager.saveActiveSession(context, user)
+        dismissScanResult()
+        _userFeedbackMessage.value = null
+        return true
+    }
+
 
     /**
      * Locks terminal session. Unlocks only after entering valid staff credentials.
