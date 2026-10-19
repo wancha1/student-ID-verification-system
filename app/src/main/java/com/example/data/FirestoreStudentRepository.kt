@@ -59,7 +59,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            runCatching { handleFirestoreError(e, OperationType.WRITE, docRef.path) }
             Result.failure(e)
         }
     }
@@ -86,7 +86,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(docId)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, colRef.path)
+            runCatching { handleFirestoreError(e, OperationType.CREATE, colRef.path) }
             Result.failure(e)
         }
     }
@@ -111,7 +111,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(docId)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, colRef.path)
+            runCatching { handleFirestoreError(e, OperationType.CREATE, colRef.path) }
             Result.failure(e)
         }
     }
@@ -134,7 +134,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(docId)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, colRef.path)
+            runCatching { handleFirestoreError(e, OperationType.CREATE, colRef.path) }
             Result.failure(e)
         }
     }
