@@ -6,6 +6,7 @@ import com.example.model.UserRole
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -31,13 +32,23 @@ class FirebaseStaffAuthenticator {
             ?: throw IllegalStateException("Firebase Authentication returned no user.")
 
         try {
-            val databaseId = context.getString(R.string.firestore_database_id)
+            val databaseId = context.getString(R.string.firestore_database_id).trim()
+            // The checked-in value is an AI Studio/Oakridge database identifier, not a
+            // verified LTC production target. Fail closed until the owner confirms it.
+            if (databaseId.isBlank() ||
+                databaseId.contains("oakridge", ignoreCase = true) ||
+                databaseId.startsWith("ai-studio-android", ignoreCase = true)
+            ) {
+                throw IllegalStateException(
+                    "LTC Firebase database is not configured. Confirm the production project and database ID with the school owner."
+                )
+            }
             val db = FirebaseFirestore.getInstance(app, databaseId)
             val staffSnapshot = db.collection("schools")
                 .document(SCHOOL_ID)
                 .collection("staff")
                 .document(signedInUser.uid)
-                .get()
+                .get(Source.SERVER)
                 .await()
 
             if (!staffSnapshot.exists()) {
@@ -66,7 +77,7 @@ class FirebaseStaffAuthenticator {
                 displayName = name,
                 role = role,
                 hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
-                    (role == UserRole.ADMINISTRATOR &&
+                    (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
                         staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
             )
         } catch (error: Exception) {
