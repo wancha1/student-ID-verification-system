@@ -192,12 +192,32 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
             )
             .await()
 
+        val malformedCardId = "CARD-MALFORMED-${UUID.randomUUID().toString().take(8)}"
+        firestore.collection("schools")
+            .document(schoolId)
+            .collection("cards")
+            .document(malformedCardId)
+            .set(
+                mapOf(
+                    "id" to malformedCardId,
+                    "cardIdentifier" to 42,
+                    "updatedAt" to System.currentTimeMillis(),
+                    "isDeleted" to false
+                )
+            )
+            .await()
+
         val backend = FirestoreCloudBackend(firestore, auth, schoolId)
-        val result = backend.fetchStudentsUpdatedSince(0L)
+        val studentsResult = backend.fetchStudentsUpdatedSince(0L)
+        val cardsResult = backend.fetchCardsUpdatedSince(0L)
 
         assertTrue(
-            "A malformed cloud record must fail the pull so the sync watermark is not advanced",
-            result.isFailure
+            "A malformed student must fail the pull so the sync watermark is not advanced",
+            studentsResult.isFailure
+        )
+        assertTrue(
+            "A malformed card must fail the pull so the sync watermark is not advanced",
+            cardsResult.isFailure
         )
     }
 
