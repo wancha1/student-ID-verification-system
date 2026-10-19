@@ -30,6 +30,7 @@ abstract class FirestoreEmulatorTestBase {
   protected lateinit var firestore: FirebaseFirestore
   protected lateinit var auth: FirebaseAuth
   protected lateinit var databaseId: String
+  private lateinit var testFirebaseApp: FirebaseApp
 
   @Before
   open fun setUpFirebase() {
@@ -37,35 +38,37 @@ abstract class FirestoreEmulatorTestBase {
     val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
     databaseId = if (resId != 0) context.getString(resId) else "demo-database"
 
-    val app = if (FirebaseApp.getApps(context).isEmpty()) {
-      val newApp = FirebaseApp.initializeApp(
-        context,
-        FirebaseOptions.Builder()
-          .setApplicationId("com.aistudio.studentaccess.xpkz")
-          .setProjectId(PROJECT_ID)
-          .setApiKey("fake-api-key-for-emulator")
-          .build()
-      )
-      val newFirestore = FirebaseFirestore.getInstance(newApp, databaseId)
-      newFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
-      newFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
-        .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
-        .build()
+    // Give every test its own FirebaseApp. Reusing a previously initialized app meant
+    // the emulator endpoints were configured only for the first test, causing later
+    // tests to contact the real Firebase endpoints and fail before exercising rules.
+    val appName = "ltc-test-${java.util.UUID.randomUUID()}"
+    testFirebaseApp = FirebaseApp.initializeApp(
+      context,
+      FirebaseOptions.Builder()
+        .setApplicationId("com.aistudio.studentaccess.xpkz")
+        .setProjectId(PROJECT_ID)
+        .setApiKey("fake-api-key-for-emulator")
+        .build(),
+      appName
+    ) ?: throw IllegalStateException("Unable to initialize isolated Firebase test app.")
 
-      val newAuth = FirebaseAuth.getInstance(newApp)
-      newAuth.useEmulator(EMULATOR_HOST, AUTH_PORT)
-      newApp
-    } else {
-      FirebaseApp.getInstance()
-    }
+    firestore = FirebaseFirestore.getInstance(testFirebaseApp, databaseId)
+    firestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
+    firestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
+      .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
+      .build()
 
-    firestore = FirebaseFirestore.getInstance(app, databaseId)
-    auth = FirebaseAuth.getInstance(app)
+    auth = FirebaseAuth.getInstance(testFirebaseApp)
+    auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
   }
 
   @After
   open fun tearDownFirebase() {
-    auth.signOut()
+    try {
+      if (::auth.isInitialized) auth.signOut()
+    } finally {
+      if (::testFirebaseApp.isInitialized) testFirebaseApp.delete()
+    }
   }
 
   /**
