@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.StudentRepository
+import com.example.data.auth.FirebaseStaffAuthenticator
 import com.example.model.AuthUser
 import com.example.model.Card
 import com.example.model.CardStatus
@@ -67,8 +68,26 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
-    // Current Authenticated User (Requires staff login on initial launch)
+    // Current authenticated user. Firebase sessions are restored only after a fresh
+    // server-side check of the staff membership document.
+    private var sessionRestoreStarted = false
     private val _currentUser = MutableStateFlow<AuthUser?>(null)
+
+    fun restoreFirebaseSession(context: Context) {
+        if (sessionRestoreStarted) return
+        sessionRestoreStarted = true
+        viewModelScope.launch {
+            try {
+                val staff = FirebaseStaffAuthenticator().restoreSession(context)
+                if (staff != null && _currentUser.value == null) {
+                    loginAs(staff.role, staff.displayName, staff.hasExplicitFinanceAccess)
+                }
+            } catch (_: Exception) {
+                // Fail closed: do not grant a role when server validation fails.
+                // Firebase network failures leave the login screen available for retry.
+            }
+        }
+    }
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
 
     // Students list from repository
