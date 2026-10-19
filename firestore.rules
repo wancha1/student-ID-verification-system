@@ -41,6 +41,15 @@ service cloud.firestore {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER'];
     }
 
+    // Guardian/emergency-contact data is restricted to the school leadership roles.
+    function isStudentPrivacyStaff(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER'];
+    }
+
+    function sharedStudentRecordHasNoPrivateFields() {
+      return !resource.data.keys().hasAny(['guardianName', 'guardianPhone', 'emergencyContact', 'notes']);
+    }
+
     function isFinanceStaff(schoolId) {
       return isSchoolStaff(schoolId) &&
         (getStaffRole(schoolId) == 'BURSAR' ||
@@ -64,55 +73,9 @@ service cloud.firestore {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'DIRECTOR_OF_STUDIES', 'EXAM_STAFF'];
     }
 
-    // -------------------------------------------------------------
-    // LEGACY / COMPATIBILITY USER SPACE (/users/{userId})
-    // -------------------------------------------------------------
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) &&
-                       isValidId(userId) &&
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.keys().hasAll(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
-                       request.resource.data.role in ['STAFF', 'GATE_OFFICER'];
-      allow update: if isOwner(userId) &&
-                       isValidId(userId) &&
-                       request.resource.data.userId == resource.data.userId &&
-                       request.resource.data.createdAt == resource.data.createdAt &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
-      allow delete: if false;
-
-      match /students/{studentId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-                         isValidId(studentId) &&
-                         request.resource.data.userId == request.auth.uid;
-        allow update: if isOwner(userId) &&
-                         isValidId(studentId) &&
-                         request.resource.data.userId == resource.data.userId;
-        allow delete: if isOwner(userId) && isValidId(studentId);
-      }
-
-      match /cards/{cardId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-                         isValidId(cardId) &&
-                         request.resource.data.userId == request.auth.uid;
-        allow update: if isOwner(userId) &&
-                         isValidId(cardId) &&
-                         request.resource.data.userId == resource.data.userId;
-        allow delete: if isOwner(userId) && isValidId(cardId);
-      }
-
-      match /scan_logs/{logId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-                         isValidId(logId) &&
-                         request.resource.data.userId == request.auth.uid;
-        allow update, delete: if false;
-      }
-    }
+    // Legacy /users data is intentionally denied. The production application uses
+    // school-scoped collections under /schools/{schoolId}; no client access is granted
+    // to the retired per-user schema.
 
     // -------------------------------------------------------------
     // SCHOOL-WIDE MULTI-TENANT ARCHITECTURE (/schools/{schoolId})
@@ -133,17 +96,30 @@ service cloud.firestore {
 
       // Shared student records
       match /students/{studentId} {
-        // Any authenticated staff belonging to this school can read students
-        allow get, list: if isSchoolStaff(schoolId);
-        // Only Admin/Registrar can create or delete students
-        allow create: if isSchoolAdmin(schoolId);
-        // Admin or Finance can update; Gate/Teachers cannot update fees
+        // Shared roster records must not contain guardian/emergency contact data.
+        // Legacy records fail closed for non-leadership staff until migrated.
+        allow get, list: if isSchoolStaff(schoolId) &&
+                            (isStudentPrivacyStaff(schoolId) || sharedStudentRecordHasNoPrivateFields());
+        allow create: if isSchoolAdmin(schoolId) &&
+                         !request.resource.data.keys().hasAny(['guardianName', 'guardianPhone', 'emergencyContact', 'notes']);
         allow update: if
+                         !request.resource.data.keys().hasAny(['guardianName', 'guardianPhone', 'emergencyContact', 'notes']) &&
                          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id']) &&
                          ((isSchoolAdmin(schoolId) &&
                            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['feesStatus', 'outstandingAmount'])) ||
                           (isFinanceStaff(schoolId) &&
                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feesStatus', 'outstandingAmount', 'accessStatus', 'updatedAt'])));
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Sensitive student information is stored separately from the shared roster.
+      match /student_private/{studentId} {
+        allow get, list: if isStudentPrivacyStaff(schoolId);
+        allow create, update: if isStudentPrivacyStaff(schoolId) &&
+          request.resource.data.studentId == studentId &&
+          request.resource.data.keys().hasOnly([
+            'studentId', 'guardianName', 'guardianPhone', 'emergencyContact', 'notes', 'updatedAt'
+          ]);
         allow delete: if isSchoolAdmin(schoolId);
       }
 
@@ -198,16 +174,33 @@ service cloud.firestore {
       // Departmental records: Exam Exceptions
       match /exam_exceptions/{exceptionId} {
         allow get, list: if isExamStaff(schoolId) || isFinanceStaff(schoolId);
-        // Finance recommends exception
+        // Recommendations are bound to the authenticated finance UID.
         allow create: if isFinanceStaff(schoolId) &&
                          isValidId(exceptionId) &&
-                         request.resource.data.keys().hasAll(['id', 'studentId', 'examCode', 'recommendedBy', 'isApproved']) &&
+                         !exists(/databases/$(database)/documents/schools/$(schoolId)/exam_exceptions/$(exceptionId)) &&
+                         request.resource.data.keys().hasAll([
+                           'id', 'studentId', 'examCode', 'recommendedBy', 'recommendedByUid', 'isApproved'
+                         ]) &&
+                         request.resource.data.id == exceptionId &&
+                         request.resource.data.recommendedByUid == request.auth.uid &&
                          request.resource.data.isApproved == false;
-        // Head Teacher or Admin approves exception
-        allow update: if ((isFinanceStaff(schoolId) || isExamStaff(schoolId)) &&
+        // Approval is a one-way transition attributed to authenticated leadership.
+        allow update: if
+                         ((isFinanceStaff(schoolId) || isExamStaff(schoolId)) &&
                            request.resource.data == resource.data) ||
                          (isSchoolAdmin(schoolId) &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isApproved', 'approvedBy', 'approvalNote', 'updatedAt']));
+                           resource.data.isApproved == false &&
+                           request.resource.data.isApproved == true &&
+                           request.resource.data.approvedByUid == request.auth.uid &&
+                           request.resource.data.approvedAt is timestamp &&
+                           request.resource.data.approvedAt <= request.time &&
+                           request.resource.data.recommendedByUid == resource.data.recommendedByUid &&
+                           request.resource.data.id == resource.data.id &&
+                           request.resource.data.studentId == resource.data.studentId &&
+                           request.resource.data.examCode == resource.data.examCode &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                             'isApproved', 'approvedByUid', 'approvedBy', 'approvalNote', 'approvedAt', 'updatedAt'
+                           ]);
         allow delete: if isSchoolAdmin(schoolId);
       }
     }
