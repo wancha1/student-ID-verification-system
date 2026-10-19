@@ -270,10 +270,18 @@ class FirestoreCloudBackend(
             val batch = db.batch()
             for (meal in chunk) {
                 val docRef = getSchoolRef().collection("meals").document(meal.id)
+                // Persist the full operational record, not only identifiers. Without
+                // date/status/class fields, the cloud audit cannot reconstruct the local meal log.
                 val data = hashMapOf(
                     "id" to meal.id,
                     "studentId" to meal.studentId,
+                    "studentNumber" to meal.studentNumber,
+                    "studentName" to meal.studentName,
+                    "gradeClass" to meal.gradeClass,
                     "mealType" to meal.mealType,
+                    "mealDate" to meal.mealDate,
+                    "status" to meal.status,
+                    "notes" to meal.notes,
                     "servingStation" to meal.serverName,
                     "timestamp" to meal.timestamp
                 )
@@ -291,12 +299,23 @@ class FirestoreCloudBackend(
             val batch = db.batch()
             for (att in chunk) {
                 val docRef = getSchoolRef().collection("attendance").document(att.id)
+                // Preserve the fields needed to audit attendance and corrections
+                // across devices, rather than uploading a lossy summary.
                 val data = hashMapOf(
                     "id" to att.id,
                     "studentId" to att.studentId,
+                    "studentNumber" to att.studentNumber,
+                    "studentName" to att.studentName,
+                    "gradeClass" to att.gradeClass,
                     "subject" to att.subject,
                     "sessionName" to att.sessionName,
+                    "lessonDate" to att.lessonDate,
                     "status" to if (att.isPresent) "PRESENT" else "ABSENT",
+                    "isPresent" to att.isPresent,
+                    "teacherName" to att.teacherName,
+                    "notes" to att.notes,
+                    "isCorrection" to att.isCorrection,
+                    "correctedBy" to (att.correctedBy ?: ""),
                     "timestamp" to att.timestamp
                 )
                 batch.set(docRef, data)
