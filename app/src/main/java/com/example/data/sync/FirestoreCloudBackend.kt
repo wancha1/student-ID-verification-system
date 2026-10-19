@@ -57,6 +57,8 @@ class FirestoreCloudBackend(
     }
 
     companion object {
+        private const val MAX_BATCH_WRITES = 400
+
         // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
         const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
     }
@@ -210,87 +212,97 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (card in cards) {
-            val docRef = getSchoolRef().collection("cards").document(card.id)
-            val data = hashMapOf(
-                "id" to card.id,
-                "cardIdentifier" to card.cardIdentifier,
-                "studentId" to card.studentId,
-                "studentNumber" to card.studentNumber,
-                "qrPayload" to card.qrPayload,
-                "status" to card.status,
-                "issueDate" to card.issueDate,
-                "activationDate" to card.activationDate,
-                "deactivationDate" to (card.deactivationDate ?: 0L),
-                "replacedByCardId" to (card.replacedByCardId ?: ""),
-                "reason" to (card.reason ?: ""),
-                "notes" to (card.notes ?: ""),
-                "updatedAt" to card.updatedAt,
-                "isDeleted" to card.isDeleted
-            )
-            batch.set(docRef, data)
+        // Firestore batches have a 500-write ceiling. Keep headroom for future
+        // metadata writes and ensure a large offline backlog cannot fail as one batch.
+        for (chunk in cards.chunked(MAX_BATCH_WRITES)) {
+            val batch = db.batch()
+            for (card in chunk) {
+                val docRef = getSchoolRef().collection("cards").document(card.id)
+                val data = hashMapOf(
+                    "id" to card.id,
+                    "cardIdentifier" to card.cardIdentifier,
+                    "studentId" to card.studentId,
+                    "studentNumber" to card.studentNumber,
+                    "qrPayload" to card.qrPayload,
+                    "status" to card.status,
+                    "issueDate" to card.issueDate,
+                    "activationDate" to card.activationDate,
+                    "deactivationDate" to (card.deactivationDate ?: 0L),
+                    "replacedByCardId" to (card.replacedByCardId ?: ""),
+                    "reason" to (card.reason ?: ""),
+                    "notes" to (card.notes ?: ""),
+                    "updatedAt" to card.updatedAt,
+                    "isDeleted" to card.isDeleted
+                )
+                batch.set(docRef, data)
+            }
+            batch.commit().await()
         }
-        batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
     }
 
     override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (log in logs) {
-            val docRef = getSchoolRef().collection("gate_logs").document(log.id)
-            val data = hashMapOf(
-                "id" to log.id,
-                "studentNumber" to (log.studentNumber ?: "UNKNOWN"),
-                "studentName" to log.studentName,
-                "decision" to log.decision,
-                "gateLocation" to log.gateLocation,
-                "timestamp" to log.timestamp
-            )
-            batch.set(docRef, data)
+        for (chunk in logs.chunked(MAX_BATCH_WRITES)) {
+            val batch = db.batch()
+            for (log in chunk) {
+                val docRef = getSchoolRef().collection("gate_logs").document(log.id)
+                val data = hashMapOf(
+                    "id" to log.id,
+                    "studentNumber" to (log.studentNumber ?: "UNKNOWN"),
+                    "studentName" to log.studentName,
+                    "decision" to log.decision,
+                    "gateLocation" to log.gateLocation,
+                    "timestamp" to log.timestamp
+                )
+                batch.set(docRef, data)
+            }
+            batch.commit().await()
         }
-        batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
     }
 
     override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (meal in meals) {
-            val docRef = getSchoolRef().collection("meals").document(meal.id)
-            val data = hashMapOf(
-                "id" to meal.id,
-                "studentId" to meal.studentId,
-                "mealType" to meal.mealType,
-                "servingStation" to meal.serverName,
-                "timestamp" to meal.timestamp
-            )
-            batch.set(docRef, data)
+        for (chunk in meals.chunked(MAX_BATCH_WRITES)) {
+            val batch = db.batch()
+            for (meal in chunk) {
+                val docRef = getSchoolRef().collection("meals").document(meal.id)
+                val data = hashMapOf(
+                    "id" to meal.id,
+                    "studentId" to meal.studentId,
+                    "mealType" to meal.mealType,
+                    "servingStation" to meal.serverName,
+                    "timestamp" to meal.timestamp
+                )
+                batch.set(docRef, data)
+            }
+            batch.commit().await()
         }
-        batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
     }
 
     override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (att in attendance) {
-            val docRef = getSchoolRef().collection("attendance").document(att.id)
-            val data = hashMapOf(
-                "id" to att.id,
-                "studentId" to att.studentId,
-                "subject" to att.subject,
-                "sessionName" to att.sessionName,
-                "status" to if (att.isPresent) "PRESENT" else "ABSENT",
-                "timestamp" to att.timestamp
-            )
-            batch.set(docRef, data)
+        for (chunk in attendance.chunked(MAX_BATCH_WRITES)) {
+            val batch = db.batch()
+            for (att in chunk) {
+                val docRef = getSchoolRef().collection("attendance").document(att.id)
+                val data = hashMapOf(
+                    "id" to att.id,
+                    "studentId" to att.studentId,
+                    "subject" to att.subject,
+                    "sessionName" to att.sessionName,
+                    "status" to if (att.isPresent) "PRESENT" else "ABSENT",
+                    "timestamp" to att.timestamp
+                )
+                batch.set(docRef, data)
+            }
+            batch.commit().await()
         }
-        batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
