@@ -85,7 +85,29 @@ abstract class FirestoreEmulatorTestBase {
    * Provisions staff records through the Firestore Emulator's owner bypass.
    * This helper is test-only; production clients must never self-provision staff roles.
    */
+  private fun markPrivacyMigrationCompleteForTest() {
+    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents:commit")
+    val payload = """{"writes":[{"update":{"name":"projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01","fields":{"studentPrivacyMigrationComplete":{"booleanValue":true}}}}]}"""
+    val connection = (url.openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      setRequestProperty("Authorization", "Bearer owner")
+      setRequestProperty("Content-Type", "application/json")
+      doOutput = true
+    }
+    try {
+      connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+      val code = connection.responseCode
+      if (code !in 200..299) {
+        val detail = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "no response body"
+        throw IllegalStateException("Test school metadata provisioning failed (HTTP $code): $detail")
+      }
+    } finally {
+      connection.disconnect()
+    }
+  }
+
   protected fun provisionStaffForTest(uid: String, role: String, name: String) {
+    markPrivacyMigrationCompleteForTest()
     val safeRole = role.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")

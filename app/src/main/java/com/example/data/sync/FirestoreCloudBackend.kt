@@ -13,6 +13,9 @@ import com.example.model.FeeStatus
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
 
@@ -46,6 +49,13 @@ class FirestoreCloudBackend(
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
 
+    private suspend fun isStudentPrivacyStaff(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        return staff.getBoolean("active") == true &&
+            staff.getString("role") in setOf("ADMIN", "HEAD_TEACHER")
+    }
+
     companion object {
         // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
         const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
@@ -58,33 +68,52 @@ class FirestoreCloudBackend(
             .get()
             .await()
 
+        // Fetch private records in bounded document-ID batches instead of issuing one
+        // network request per student. Non-leadership staff never query this collection.
+        val canReadPrivate = isStudentPrivacyStaff()
+        val privateById = if (canReadPrivate && snapshot.documents.isNotEmpty()) {
+            snapshot.documents.map { it.id }.distinct().chunked(30).flatMap { ids ->
+                getSchoolRef().collection("student_private")
+                    .whereIn(FieldPath.documentId(), ids)
+                    .get()
+                    .await()
+                    .documents
+            }.associateBy { it.id }
+        } else {
+            emptyMap()
+        }
+
+        // Do not silently skip malformed records: a failed pull must keep the sync
+        // cycle retryable instead of advancing the watermark past missing data.
         val list = snapshot.documents.map { doc ->
+            val privateDoc = privateById[doc.id]
             StudentEntity(
-                    id = doc.getString("id") ?: doc.id,
-                    studentNumber = doc.getString("studentNumber") ?: "",
-                    name = doc.getString("name") ?: "${doc.getString("firstName") ?: ""} ${doc.getString("lastName") ?: ""}".trim(),
-                    firstName = doc.getString("firstName") ?: "",
-                    lastName = doc.getString("lastName") ?: "",
-                    photoUrl = doc.getString("photoUrl"),
-                    accessStatus = doc.getString("accessStatus") ?: "APPROVED",
-                    gradeClass = doc.getString("gradeClass") ?: "",
-                    isDayScholar = doc.getBoolean("isDayScholar") ?: true,
-                    dayScholarType = doc.getString("dayScholarType") ?: "DAY_SCHOLAR_WALK",
-                    transportRoute = doc.getString("transportRoute") ?: "",
-                    feesStatus = doc.getString("feesStatus") ?: "CLEARED",
-                    outstandingAmount = (doc.getDouble("outstandingAmount") ?: (doc.getLong("outstandingAmount")?.toDouble()) ?: 0.0),
-                    gender = doc.getString("gender") ?: "Male",
-                    avatarColorSeed = doc.getLong("avatarColorSeed") ?: 42L,
-                    guardianName = doc.getString("guardianName") ?: "",
-                    guardianPhone = doc.getString("guardianPhone") ?: "",
-                    emergencyContact = doc.getString("emergencyContact") ?: "",
-                    homeroomTeacher = doc.getString("homeroomTeacher") ?: "",
-                    academicYear = doc.getString("academicYear") ?: "2026",
-                    notes = doc.getString("notes") ?: "",
-                    qrToken = doc.getString("qrToken") ?: "",
-                    updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
-                    isDeleted = doc.getBoolean("isDeleted") ?: false
-                )
+                id = doc.getString("id") ?: doc.id,
+                studentNumber = doc.getString("studentNumber") ?: "",
+                name = doc.getString("name") ?: "${doc.getString("firstName") ?: ""} ${doc.getString("lastName") ?: ""}".trim(),
+                firstName = doc.getString("firstName") ?: "",
+                lastName = doc.getString("lastName") ?: "",
+                photoUrl = doc.getString("photoUrl"),
+                accessStatus = doc.getString("accessStatus") ?: "APPROVED",
+                gradeClass = doc.getString("gradeClass") ?: "",
+                isDayScholar = doc.getBoolean("isDayScholar") ?: true,
+                dayScholarType = doc.getString("dayScholarType") ?: "DAY_SCHOLAR_WALK",
+                transportRoute = doc.getString("transportRoute") ?: "",
+                feesStatus = doc.getString("feesStatus") ?: "CLEARED",
+                outstandingAmount = doc.getDouble("outstandingAmount")
+                    ?: (doc.getLong("outstandingAmount")?.toDouble() ?: 0.0),
+                gender = doc.getString("gender") ?: "Male",
+                avatarColorSeed = doc.getLong("avatarColorSeed") ?: 42L,
+                guardianName = privateDoc?.getString("guardianName") ?: "",
+                guardianPhone = privateDoc?.getString("guardianPhone") ?: "",
+                emergencyContact = privateDoc?.getString("emergencyContact") ?: "",
+                homeroomTeacher = doc.getString("homeroomTeacher") ?: "",
+                academicYear = doc.getString("academicYear") ?: "2026",
+                notes = privateDoc?.getString("notes") ?: "",
+                qrToken = doc.getString("qrToken") ?: "",
+                updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
+                isDeleted = doc.getBoolean("isDeleted") ?: false
+            )
         }
         Result.success(list)
     } catch (e: Exception) {
@@ -122,38 +151,59 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (student in students) {
-            val docRef = getSchoolRef().collection("students").document(student.id)
-            val data = hashMapOf(
-                "id" to student.id,
-                "studentNumber" to student.studentNumber,
-                "name" to student.name,
-                "firstName" to student.firstName,
-                "lastName" to student.lastName,
-                "photoUrl" to (student.photoUrl ?: ""),
-                "accessStatus" to student.accessStatus,
-                "gradeClass" to student.gradeClass,
-                "isDayScholar" to student.isDayScholar,
-                "dayScholarType" to student.dayScholarType,
-                "transportRoute" to (student.transportRoute ?: ""),
-                "feesStatus" to student.feesStatus,
-                "outstandingAmount" to student.outstandingAmount,
-                "gender" to student.gender,
-                "avatarColorSeed" to student.avatarColorSeed,
-                "guardianName" to student.guardianName,
-                "guardianPhone" to student.guardianPhone,
-                "emergencyContact" to student.emergencyContact,
-                "homeroomTeacher" to student.homeroomTeacher,
-                "academicYear" to student.academicYear,
-                "notes" to student.notes,
-                "qrToken" to student.qrToken,
-                "updatedAt" to student.updatedAt,
-                "isDeleted" to student.isDeleted
-            )
-            batch.set(docRef, data)
+        val canWritePrivate = isStudentPrivacyStaff()
+        // Each student may require two writes (shared + private); stay well below
+        // Firestore's 500-write batch limit during bulk synchronization.
+        for (chunk in students.chunked(200)) {
+            val batch = db.batch()
+            for (student in chunk) {
+                val docRef = getSchoolRef().collection("students").document(student.id)
+                val data = hashMapOf<String, Any>(
+                    "id" to student.id,
+                    "studentNumber" to student.studentNumber,
+                    "name" to student.name,
+                    "firstName" to student.firstName,
+                    "lastName" to student.lastName,
+                    "photoUrl" to (student.photoUrl ?: ""),
+                    "accessStatus" to student.accessStatus,
+                    "gradeClass" to student.gradeClass,
+                    "isDayScholar" to student.isDayScholar,
+                    "dayScholarType" to student.dayScholarType,
+                    "transportRoute" to (student.transportRoute ?: ""),
+                    "feesStatus" to student.feesStatus,
+                    "outstandingAmount" to student.outstandingAmount,
+                    "gender" to student.gender,
+                    "avatarColorSeed" to student.avatarColorSeed,
+                    "homeroomTeacher" to student.homeroomTeacher,
+                    "academicYear" to student.academicYear,
+                    "qrToken" to student.qrToken,
+                    "updatedAt" to student.updatedAt,
+                    "isDeleted" to student.isDeleted
+                )
+                if (canWritePrivate) {
+                    // Move sensitive fields off the shared roster; never reintroduce them.
+                    data["guardianName"] = FieldValue.delete()
+                    data["guardianPhone"] = FieldValue.delete()
+                    data["emergencyContact"] = FieldValue.delete()
+                    data["notes"] = FieldValue.delete()
+                    val privateRef = getSchoolRef().collection("student_private").document(student.id)
+                    batch.set(
+                        privateRef,
+                        mapOf(
+                            "studentId" to student.id,
+                            "guardianName" to student.guardianName,
+                            "guardianPhone" to student.guardianPhone,
+                            "emergencyContact" to student.emergencyContact,
+                            "notes" to student.notes,
+                            "updatedAt" to student.updatedAt
+                        ),
+                        SetOptions.merge()
+                    )
+                }
+                batch.set(docRef, data, SetOptions.merge())
+            }
+            batch.commit().await()
         }
-        batch.commit().await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
@@ -247,19 +297,47 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> = try {
-        val batch = db.batch()
-        for (ex in exceptions) {
-            val docRef = getSchoolRef().collection("exam_exceptions").document(ex.id)
-            val data = hashMapOf(
-                "id" to ex.id,
-                "studentId" to ex.studentId,
-                "examCode" to ex.examCode,
-                "recommendedBy" to ex.requestedByBursar,
-                "isApproved" to ex.isApproved
-            )
-            batch.set(docRef, data)
+        val uid = auth.currentUser?.uid
+            ?: throw SecurityException("A signed-in staff identity is required to sync exam exceptions.")
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        if (staff.getBoolean("active") != true) {
+            throw SecurityException("Inactive or unprovisioned staff cannot sync exam exceptions.")
         }
-        batch.commit().await()
+        val authenticatedName = staff.getString("name")
+            ?: staff.getString("displayName")
+            ?: uid
+
+        for (exception in exceptions) {
+            val docRef = getSchoolRef().collection("exam_exceptions").document(exception.id)
+            val existing = docRef.get().await()
+            if (!existing.exists()) {
+                if (exception.isApproved) {
+                    throw IllegalStateException(
+                        "Cannot sync approved exam exception ${exception.id}: its authenticated recommendation is missing. Sync the Bursar recommendation first."
+                    )
+                }
+                docRef.set(
+                    mapOf(
+                        "id" to exception.id,
+                        "studentId" to exception.studentId,
+                        "examCode" to exception.examCode,
+                        "recommendedBy" to authenticatedName,
+                        "recommendedByUid" to uid,
+                        "isApproved" to false
+                    )
+                ).await()
+            } else if (exception.isApproved && existing.getBoolean("isApproved") != true) {
+                docRef.update(
+                    mapOf(
+                        "isApproved" to true,
+                        "approvedBy" to authenticatedName,
+                        "approvedByUid" to uid,
+                        "approvedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            // Existing pending records are idempotent on retry; approved records are never downgraded.
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)

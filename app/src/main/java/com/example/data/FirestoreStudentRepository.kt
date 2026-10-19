@@ -21,6 +21,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Legacy per-user Firestore repository. The /users/{uid} rules are intentionally
+ * denied; production data is school-scoped and must go through RoomStudentRepository.
+ */
+@Deprecated("The legacy /users schema is disabled; use RoomStudentRepository with FirestoreCloudBackend.")
 class FirestoreStudentRepository(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth = Firebase.auth
@@ -54,7 +59,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            runCatching { handleFirestoreError(e, OperationType.WRITE, docRef.path) }
             Result.failure(e)
         }
     }
@@ -81,7 +86,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(docId)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, colRef.path)
+            runCatching { handleFirestoreError(e, OperationType.CREATE, colRef.path) }
             Result.failure(e)
         }
     }
@@ -106,7 +111,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(docId)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, colRef.path)
+            runCatching { handleFirestoreError(e, OperationType.CREATE, colRef.path) }
             Result.failure(e)
         }
     }
@@ -129,7 +134,7 @@ class FirestoreStudentRepository(
             ).await()
             Result.success(docId)
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, colRef.path)
+            runCatching { handleFirestoreError(e, OperationType.CREATE, colRef.path) }
             Result.failure(e)
         }
     }

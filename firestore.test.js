@@ -39,94 +39,25 @@ beforeEach(async () => {
   }
 });
 
-test("Unauthenticated user: cannot read staff profile", async () => {
-  const unauthDb = testEnv.unauthenticatedContext().firestore();
-  await assertFails(unauthDb.collection("users").doc(ALICE_UID).get());
-});
-
-test("Authenticated user: can create and read their own staff profile", async () => {
+test("Legacy /users tree is denied to all client accounts", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).set({
-      userId: ALICE_UID,
-      email: "alice@oakridge.ac.ug",
-      displayName: "Alice Staff",
-      role: "STAFF",
-      createdAt: now,
-      updatedAt: now,
-    })
-  );
 
-  const doc = await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).get());
-});
-
-test("Cross-user isolation: Bob cannot read Alice's student records", async () => {
-  await testEnv.withSecurityRulesDisabled(async (context) => {
-    const now = new Date();
-    await context.firestore().collection("users").doc(ALICE_UID).collection("students").doc("stu_001").set({
-      userId: ALICE_UID,
-      studentNumber: "LTC-2026-0001",
-      firstName: "Michael",
-      lastName: "Kasule",
-      gradeClass: "Senior 4-A",
-      isDayScholar: true,
-      feesStatus: "CLEARED",
-      outstandingAmount: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-  });
-
-  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("students").doc("stu_001").get());
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("students").get());
-});
-
-test("Authenticated user: can create and list their own student records", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
-  const now = new Date();
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("students").doc("stu_001").set({
-      userId: ALICE_UID,
-      studentNumber: "LTC-2026-0001",
-      firstName: "Michael",
-      lastName: "Kasule",
-      gradeClass: "Senior 4-A",
-      isDayScholar: true,
-      feesStatus: "CLEARED",
-      outstandingAmount: 0,
-      createdAt: now,
-      updatedAt: now,
-    })
-  );
-
-  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("students").get());
-});
-
-test("Scan logs: append-only, cannot be deleted or updated", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
-  const now = new Date();
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").set({
-      userId: ALICE_UID,
-      studentNumber: "LTC-2026-0001",
-      studentName: "Michael Kasule",
-      decision: "APPROVED",
-      gatePoint: "Main Gate",
-      scannedAt: now,
-    })
-  );
-
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").update({
-      decision: "DENIED",
-    })
-  );
-
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("scan_logs").doc("log_001").delete()
-  );
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).get());
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID).set({
+    userId: ALICE_UID,
+    email: "alice@ltc.ac.ug",
+    displayName: "Alice Staff",
+    role: "STAFF",
+    createdAt: now,
+    updatedAt: now,
+  }));
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID)
+    .collection("students").doc("stu_001").set({ userId: ALICE_UID, studentNumber: "LTC-2026-0001" }));
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID)
+    .collection("cards").doc("card_001").set({ userId: ALICE_UID, cardIdentifier: "CRD-001" }));
+  await assertFails(aliceDb.collection("users").doc(ALICE_UID)
+    .collection("scan_logs").doc("log_001").set({ userId: ALICE_UID, decision: "APPROVED" }));
 });
 
 // -------------------------------------------------------------------
@@ -147,6 +78,7 @@ const UNRELATED_UID = "unrelated_user_99";
 async function setupSchoolStaff() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
+    await db.collection("schools").doc(SCHOOL_LTC).set({ studentPrivacyMigrationComplete: true });
     const ltcRef = db.collection("schools").doc(SCHOOL_LTC).collection("staff");
     await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin", active: true });
     await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello", active: true });
@@ -191,6 +123,119 @@ test("Cross-device sync: Admin on Device A registers student, Gate on Device B r
   const gateStuDoc = gateDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-CROSS-01");
   const snapshot = await assertSucceeds(gateStuDoc.get());
   assert.strictEqual(snapshot.data().studentNumber, "LTC-2026-8800");
+});
+
+test("Student privacy: gate staff cannot read legacy shared records containing guardian details", async () => {
+  await setupSchoolStaff();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .set({ studentPrivacyMigrationComplete: false }, { merge: true });
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("students").doc("STU-PRIVATE-LEGACY")
+      .set({
+        id: "STU-PRIVATE-LEGACY",
+        studentNumber: "LTC-PRIVATE-01",
+        firstName: "Test",
+        lastName: "Student",
+        gradeClass: "Senior 4",
+        guardianPhone: "+256700000001",
+        emergencyContact: "+256770000001",
+        updatedAt: Date.now()
+      });
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("STU-PRIVATE-LEGACY")
+      .set({ studentId: "STU-PRIVATE-LEGACY", guardianPhone: "+256700000001" });
+  });
+
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("students").doc("STU-PRIVATE-LEGACY").get());
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("students").get());
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
+  await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
+});
+
+test("Student privacy: new shared records reject private fields and private writes are leadership-only", async () => {
+  await setupSchoolStaff();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  const gateDb = testEnv.authenticatedContext(GATE_UID).firestore();
+
+  await assertFails(
+    adminDb.collection("schools").doc(SCHOOL_LTC).collection("students").doc("STU-PRIVATE-NEW")
+      .set({
+        id: "STU-PRIVATE-NEW",
+        studentNumber: "LTC-PRIVATE-NEW",
+        firstName: "Test",
+        lastName: "Student",
+        gradeClass: "Senior 4",
+        guardianPhone: "+256700000001",
+        updatedAt: Date.now()
+      })
+  );
+
+  const privateRef = adminDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("student_private").doc("STU-PRIVATE-NEW");
+  await assertSucceeds(privateRef.set({
+    studentId: "STU-PRIVATE-NEW",
+    guardianPhone: "+256700000001",
+    updatedAt: Date.now()
+  }));
+  await assertSucceeds(privateRef.get());
+  await assertFails(
+    gateDb.collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("STU-PRIVATE-NEW").get()
+  );
+});
+
+test("Exam exception: only the authenticated Bursar UID can be recorded as recommender", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  await assertFails(
+    bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-SPOOF-01")
+      .set({
+        id: "EX-SPOOF-01",
+        studentId: "STU-01",
+        examCode: "UACE-MATH",
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: ADMIN_UID,
+        isApproved: false
+      })
+  );
+});
+
+test("Exam exception: approval is one-way and attributed to authenticated leadership UID", async () => {
+  await setupSchoolStaff();
+  const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  const ref = bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-APPROVAL-01");
+  await assertSucceeds(ref.set({
+    id: "EX-APPROVAL-01",
+    studentId: "STU-01",
+    examCode: "UACE-MATH",
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
+    isApproved: false
+  }));
+  const adminRef = adminDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-APPROVAL-01");
+  await assertFails(adminRef.update({
+    isApproved: true,
+    approvedBy: "Someone Else",
+    approvedByUid: BURSAR_UID,
+    approvedAt: new Date()
+  }));
+  await assertSucceeds(adminRef.update({
+    isApproved: true,
+    approvedBy: "System Admin",
+    approvedByUid: ADMIN_UID,
+    approvedAt: new Date()
+  }));
+  await assertFails(adminRef.update({
+    isApproved: false
+  }));
 });
 
 test("School isolation: Unrelated school user cannot access LTC students", async () => {
@@ -306,39 +351,6 @@ test("Role permission: Gate staff can record gate logs, but cannot alter or dele
 
 
 
-test("Privilege escalation: user cannot self-assign ADMIN in legacy profile", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
-  const now = new Date();
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).set({
-      userId: ALICE_UID,
-      email: "alice@oakridge.ac.ug",
-      displayName: "Alice Staff",
-      role: "ADMIN",
-      createdAt: now,
-      updatedAt: now,
-    })
-  );
-});
-
-test("Privilege escalation: user cannot change legacy profile role after creation", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
-  const now = new Date();
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).set({
-      userId: ALICE_UID,
-      email: "alice@oakridge.ac.ug",
-      displayName: "Alice Staff",
-      role: "STAFF",
-      createdAt: now,
-      updatedAt: now,
-    })
-  );
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).update({ role: "ADMIN", updatedAt: new Date() })
-  );
-});
-
 test("Privilege escalation: user cannot self-register as school ADMIN", async () => {
   const selfDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   await assertFails(
@@ -403,7 +415,8 @@ test("Exam exception: finance staff can create a pending recommendation", async 
         id: "EX-PENDING-01",
         studentId: "STU-01",
         examCode: "UACE-MATH",
-        recommendedBy: BURSAR_UID,
+        recommendedBy: "Bursar Florence",
+        recommendedByUid: BURSAR_UID,
         isApproved: false
       })
   );
@@ -552,7 +565,8 @@ test("Exam exception: identical retry by Bursar is idempotent", async () => {
     id: "EX-RETRY-01",
     studentId: "STU-01",
     examCode: "UACE-MATH",
-    recommendedBy: BURSAR_UID,
+    recommendedBy: "Bursar Florence",
+    recommendedByUid: BURSAR_UID,
     isApproved: false
   };
   await assertSucceeds(ref.set(payload));
