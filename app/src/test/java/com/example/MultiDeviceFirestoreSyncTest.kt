@@ -174,6 +174,34 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
+    fun malformedRemoteStudentFailsSyncInsteadOfBeingSilentlyDropped() = runBlocking {
+        signInAs("admin_malformed_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
+        val studentId = "STU-MALFORMED-${UUID.randomUUID().toString().take(8)}"
+        firestore.collection("schools")
+            .document(schoolId)
+            .collection("students")
+            .document(studentId)
+            .set(
+                mapOf(
+                    "id" to studentId,
+                    "studentNumber" to "LTC-2026-9999",
+                    "name" to 42,
+                    "updatedAt" to System.currentTimeMillis(),
+                    "isDeleted" to false
+                )
+            )
+            .await()
+
+        val backend = FirestoreCloudBackend(firestore, auth, schoolId)
+        val result = backend.fetchStudentsUpdatedSince(0L)
+
+        assertTrue(
+            "A malformed cloud record must fail the pull so the sync watermark is not advanced",
+            result.isFailure
+        )
+    }
+
+    @Test
     fun testRevokedCardRejectedOnDeviceBAfterSync() = runBlocking {
         // Device A deactivates/replaces card
         val adminUid = signInAs("admin_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
