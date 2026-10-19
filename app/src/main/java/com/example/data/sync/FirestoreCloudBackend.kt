@@ -58,9 +58,8 @@ class FirestoreCloudBackend(
             .get()
             .await()
 
-        val list = snapshot.documents.mapNotNull { doc ->
-            try {
-                StudentEntity(
+        val list = snapshot.documents.map { doc ->
+            StudentEntity(
                     id = doc.getString("id") ?: doc.id,
                     studentNumber = doc.getString("studentNumber") ?: "",
                     name = doc.getString("name") ?: "${doc.getString("firstName") ?: ""} ${doc.getString("lastName") ?: ""}".trim(),
@@ -86,9 +85,6 @@ class FirestoreCloudBackend(
                     updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
                     isDeleted = doc.getBoolean("isDeleted") ?: false
                 )
-            } catch (_: Exception) {
-                null
-            }
         }
         Result.success(list)
     } catch (e: Exception) {
@@ -102,9 +98,8 @@ class FirestoreCloudBackend(
             .get()
             .await()
 
-        val list = snapshot.documents.mapNotNull { doc ->
-            try {
-                CardEntity(
+        val list = snapshot.documents.map { doc ->
+            CardEntity(
                     id = doc.getString("id") ?: doc.id,
                     cardIdentifier = doc.getString("cardIdentifier") ?: "",
                     studentId = doc.getString("studentId") ?: "",
@@ -120,9 +115,6 @@ class FirestoreCloudBackend(
                     updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
                     isDeleted = doc.getBoolean("isDeleted") ?: false
                 )
-            } catch (_: Exception) {
-                null
-            }
         }
         Result.success(list)
     } catch (e: Exception) {
