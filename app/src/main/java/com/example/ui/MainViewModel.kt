@@ -878,17 +878,11 @@ class MainViewModel(
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
-            }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
-        }
+        // Reuse the repository's full QR verification pipeline rather than
+        // checking only the signature. This also rejects expired, unknown, revoked,
+        // replaced, or deactivated cards before any department action is recorded.
+        val student = (runBlocking { repository.verifyStudentByQr(rawCode) }
+            as? StudentScanResult.Success)?.student
 
         if (student == null) {
             _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
@@ -952,16 +946,11 @@ class MainViewModel(
     fun handleRequirementBarcodeScan(rawCode: String) {
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
-        val parsed = QrCodeUtils.parseQrCode(rawCode)
-        val student = when (parsed) {
-            is QrParseResult.ValidV2Card -> {
-                if (CardCryptoManager.verifyCardSignature(parsed)) {
-                    runBlocking { repository.getStudentByCardIdentifier(parsed.cardId) }
-                } else null
-            }
-            is QrParseResult.LegacyUnsigned -> null
-            is QrParseResult.Invalid -> null
-        }
+        // Reuse the repository's full QR verification pipeline rather than
+        // checking only the signature. This also rejects expired, unknown, revoked,
+        // replaced, or deactivated cards before any department action is recorded.
+        val student = (runBlocking { repository.verifyStudentByQr(rawCode) }
+            as? StudentScanResult.Success)?.student
         if (student != null) {
             _scannedRequirementStudentId.value = student.id
             _requirementsSearchQuery.value = student.studentNumber
