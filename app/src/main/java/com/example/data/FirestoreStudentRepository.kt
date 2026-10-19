@@ -21,6 +21,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Legacy per-user Firestore repository. The /users/{uid} rules are intentionally
+ * denied; production data is school-scoped and must go through RoomStudentRepository.
+ */
+@Deprecated("The legacy /users schema is disabled; use RoomStudentRepository with FirestoreCloudBackend.")
 class FirestoreStudentRepository(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth = Firebase.auth
