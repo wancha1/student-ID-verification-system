@@ -36,8 +36,9 @@ Run from a trusted administrator workstation with Firebase Admin SDK Application
    ```sh
    node scripts/migrate-student-private-fields.cjs --apply
    ```
-7. Verify sample records with an Admin account, and verify that Gate, Meal, and Teacher accounts cannot read the private collection.
-8. Deploy `firestore.rules` to the same confirmed named database. Emulator tests do not deploy production rules.
+7. The script re-reads the shared roster and refuses to set `studentPrivacyMigrationComplete` if any private fields remain.
+8. Verify sample records with an Admin account, and verify that Gate, Meal, and Teacher accounts cannot read the private collection.
+9. Deploy `firestore.rules` to the same confirmed named database. Emulator tests do not deploy production rules.
 
 ## Release gates
 
