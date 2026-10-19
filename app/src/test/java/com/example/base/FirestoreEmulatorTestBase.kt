@@ -45,7 +45,7 @@ abstract class FirestoreEmulatorTestBase {
     testFirebaseApp = FirebaseApp.initializeApp(
       context,
       FirebaseOptions.Builder()
-        .setApplicationId("com.aistudio.studentaccess.xpkz")
+        .setApplicationId("1:1234567890:android:abcdef0123456789")
         .setProjectId(PROJECT_ID)
         .setApiKey("fake-api-key-for-emulator")
         .build(),
