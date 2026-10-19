@@ -74,7 +74,10 @@ abstract class FirestoreEmulatorTestBase {
     try {
       if (::auth.isInitialized) auth.signOut()
     } finally {
-      if (::testFirebaseApp.isInitialized) testFirebaseApp.delete()
+      // Do not delete the FirebaseApp in Robolectric tests. Firebase Auth keeps
+      // process-level client state; deleting an app leaves cached Auth instances
+      // pointing at a deleted FirebaseApp, breaking emulator setup in later tests.
+      // Each test uses a unique app name, and the JVM exits after the suite.
     }
   }
 
