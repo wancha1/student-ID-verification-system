@@ -87,6 +87,68 @@ class FirebaseStaffAuthenticator {
         }
     }
 
+    /**
+     * Restores a Firebase-persisted login only after revalidating the staff profile
+     * against the server. A cached profile is never sufficient to restore privileges.
+     * Network errors propagate so the caller can keep the login screen visible.
+     */
+    suspend fun restoreSession(context: Context): AuthenticatedStaff? {
+        val app = FirebaseApp.getInstance()
+        val auth = FirebaseAuth.getInstance(app)
+        val signedInUser = auth.currentUser ?: return null
+
+        val databaseId = context.getString(R.string.firestore_database_id).trim()
+        if (databaseId.isBlank() ||
+            databaseId.contains("oakridge", ignoreCase = true) ||
+            databaseId.startsWith("ai-studio-android", ignoreCase = true)
+        ) {
+            auth.signOut()
+            throw IllegalStateException(
+                "LTC Firebase database is not configured. Confirm the production project and database ID with the school owner."
+            )
+        }
+
+        val staffSnapshot = FirebaseFirestore.getInstance(app, databaseId)
+            .collection("schools")
+            .document(SCHOOL_ID)
+            .collection("staff")
+            .document(signedInUser.uid)
+            .get(Source.SERVER)
+            .await()
+
+        if (!staffSnapshot.exists() || staffSnapshot.getBoolean("active") != true) {
+            auth.signOut()
+            throw SecurityException("This Firebase account is not an active LTC staff account.")
+        }
+
+        val rawRole = staffSnapshot.getString("role")
+            ?.trim()
+            ?.uppercase()
+            ?: run {
+                auth.signOut()
+                throw SecurityException("The LTC staff profile has no role.")
+            }
+        val role = mapRole(rawRole) ?: run {
+            auth.signOut()
+            throw SecurityException("The LTC staff profile has an unsupported role: $rawRole.")
+        }
+        val name = staffSnapshot.getString("name")
+            ?: staffSnapshot.getString("displayName")
+            ?: signedInUser.displayName
+            ?: signedInUser.email
+            ?: signedInUser.uid
+
+        return AuthenticatedStaff(
+            uid = signedInUser.uid,
+            email = signedInUser.email.orEmpty(),
+            displayName = name,
+            role = role,
+            hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
+                (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
+                    staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
+        )
+    }
+
     private fun mapRole(role: String): UserRole? = when (role) {
         "ADMIN" -> UserRole.ADMINISTRATOR
         "HEAD_TEACHER" -> UserRole.HEAD_TEACHER_MANAGEMENT
