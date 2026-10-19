@@ -54,6 +54,7 @@ class NetworkRecoverySyncTest {
 
             withTimeout(10_000) {
                 repository.pendingCountFlow.first { it == 0 }
+                repository.syncInfoFlow.first { it.status == SyncStatus.SYNCED }
             }
             assertEquals(SyncStatus.SYNCED, repository.syncInfoFlow.first().status)
         } finally {
