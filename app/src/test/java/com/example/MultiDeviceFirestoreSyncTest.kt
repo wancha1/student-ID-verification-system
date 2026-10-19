@@ -186,7 +186,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
                     "id" to studentId,
                     "studentNumber" to "LTC-2026-9999",
                     "name" to 42,
-                    "updatedAt" to System.currentTimeMillis(),
+                    "updatedAt" to 1L,
                     "isDeleted" to false
                 )
             )
@@ -201,7 +201,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
                 mapOf(
                     "id" to malformedCardId,
                     "cardIdentifier" to 42,
-                    "updatedAt" to System.currentTimeMillis(),
+                    "updatedAt" to 1L,
                     "isDeleted" to false
                 )
             )
