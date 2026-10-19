@@ -200,7 +200,7 @@ service cloud.firestore {
                            request.resource.data.examCode == resource.data.examCode &&
                            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                              'isApproved', 'approvedByUid', 'approvedBy', 'approvalNote', 'approvedAt', 'updatedAt'
-                           ]);
+                           ]));
         allow delete: if isSchoolAdmin(schoolId);
       }
     }
