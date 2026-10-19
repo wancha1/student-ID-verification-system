@@ -136,7 +136,7 @@ class FirestoreCloudBackend(
                     studentId = doc.getString("studentId") ?: "",
                     studentNumber = doc.getString("studentNumber") ?: "",
                     qrPayload = doc.getString("qrPayload") ?: "",
-                    status = doc.getString("status") ?: "ACTIVE",
+                    status = doc.getString("status") ?: "DEACTIVATED",
                     issueDate = doc.getLong("issueDate") ?: 0L,
                     activationDate = doc.getLong("activationDate") ?: 0L,
                     deactivationDate = doc.getLong("deactivationDate"),
