@@ -8,13 +8,11 @@ import com.example.data.sync.InMemoryCloudBackend
 import com.example.model.AccessStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
-import com.example.model.SyncStatus
 import com.example.model.Student
 import com.example.ui.MainViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,7 +28,8 @@ class NetworkRecoverySyncTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = AppDatabase.createInMemory(context)
         try {
-            val repository = RoomStudentRepository(database, InMemoryCloudBackend())
+            val backend = InMemoryCloudBackend()
+            val repository = RoomStudentRepository(database, backend)
             repository.initialize()
             repository.setNetworkOnline(false)
 
@@ -54,9 +53,12 @@ class NetworkRecoverySyncTest {
 
             withTimeout(10_000) {
                 repository.pendingCountFlow.first { it == 0 }
-                repository.syncInfoFlow.first { it.status == SyncStatus.SYNCED }
             }
-            assertEquals(SyncStatus.SYNCED, repository.syncInfoFlow.first().status)
+            val remoteStudents = backend.fetchAllRemoteStudents().getOrThrow()
+            assertTrue(
+                "Reconnect must upload the queued student to the shared backend",
+                remoteStudents.any { it.id == student.id }
+            )
         } finally {
             database.close()
         }
