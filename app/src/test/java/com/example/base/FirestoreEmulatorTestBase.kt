@@ -42,7 +42,8 @@ abstract class FirestoreEmulatorTestBase {
     // the emulator endpoints were configured only for the first test, causing later
     // tests to contact the real Firebase endpoints and fail before exercising rules.
     val appName = "ltc-test-${java.util.UUID.randomUUID()}"
-    testFirebaseApp = FirebaseApp.initializeApp(
+    try {
+      testFirebaseApp = FirebaseApp.initializeApp(
       context,
       FirebaseOptions.Builder()
         .setApplicationId("1:1234567890:android:abcdef0123456789")
@@ -60,8 +61,12 @@ abstract class FirestoreEmulatorTestBase {
       .build()
     firestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
 
-    auth = FirebaseAuth.getInstance(testFirebaseApp)
-    auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
+      auth = FirebaseAuth.getInstance(testFirebaseApp)
+      auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
+    } catch (error: Throwable) {
+      System.err.println("Firebase emulator test setup failed: ${error.stackTraceToString()}")
+      throw error
+    }
   }
 
   @After
