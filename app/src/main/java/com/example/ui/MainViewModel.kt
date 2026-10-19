@@ -59,7 +59,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
 
@@ -877,51 +876,49 @@ class MainViewModel(
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        // Reuse the repository's full QR verification pipeline rather than
-        // checking only the signature. This also rejects expired, unknown, revoked,
-        // replaced, or deactivated cards before any department action is recorded.
-        val student = (runBlocking { repository.verifyStudentByQr(rawCode) }
-            as? StudentScanResult.Success)?.student
+        viewModelScope.launch {
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            // Use the full QR verification pipeline so expired, unknown, revoked,
+            // replaced, and deactivated cards cannot claim a meal.
+            val student = (repository.verifyStudentByQr(rawCode)
+                as? StudentScanResult.Success)?.student
 
-        if (student == null) {
-            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
-            FeedbackHelper.playDeniedSoundAndHaptic(context)
-            return
+            if (student == null) {
+                _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val activeMeal = _activeMealType.value
+            val previousRecord = _mealRecords.value.find {
+                it.studentId == student.id &&
+                    it.mealType == activeMeal &&
+                    it.mealDate == todayStr &&
+                    it.status == MealServingStatus.SERVED
+            }
+
+            if (previousRecord != null) {
+                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
+                FeedbackHelper.playWarningSoundAndHaptic(context)
+                return@launch
+            }
+
+            val newRecord = MealRecord(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                gradeClass = student.gradeClass,
+                mealType = activeMeal,
+                mealDate = todayStr,
+                timestamp = System.currentTimeMillis(),
+                serverName = _currentUser.value?.name ?: "Meal Staff",
+                status = MealServingStatus.SERVED
+            )
+
+            _mealRecords.value = listOf(newRecord) + _mealRecords.value
+            _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
+            FeedbackHelper.playApprovedSoundAndHaptic(context)
         }
-
-        val activeMeal = _activeMealType.value
-
-        // Check for double-serving on same date and same meal session
-        val previousRecord = _mealRecords.value.find {
-            it.studentId == student.id &&
-            it.mealType == activeMeal &&
-            it.mealDate == todayStr &&
-            it.status == MealServingStatus.SERVED
-        }
-
-        if (previousRecord != null) {
-            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
-            FeedbackHelper.playWarningSoundAndHaptic(context)
-            return
-        }
-
-        // Meal Approved & Served
-        val newRecord = MealRecord(
-            studentId = student.id,
-            studentNumber = student.studentNumber,
-            studentName = student.fullName,
-            gradeClass = student.gradeClass,
-            mealType = activeMeal,
-            mealDate = todayStr,
-            timestamp = System.currentTimeMillis(),
-            serverName = _currentUser.value?.name ?: "Chef Jackson Omondi",
-            status = MealServingStatus.SERVED
-        )
-
-        _mealRecords.value = listOf(newRecord) + _mealRecords.value
-        _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
-        FeedbackHelper.playApprovedSoundAndHaptic(context)
     }
 
     // ==========================================
@@ -946,17 +943,18 @@ class MainViewModel(
     fun handleRequirementBarcodeScan(rawCode: String) {
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Scanning requirements QR")) return
         _isRequirementScannerOpen.value = false
-        // Reuse the repository's full QR verification pipeline rather than
-        // checking only the signature. This also rejects expired, unknown, revoked,
-        // replaced, or deactivated cards before any department action is recorded.
-        val student = (runBlocking { repository.verifyStudentByQr(rawCode) }
-            as? StudentScanResult.Success)?.student
-        if (student != null) {
-            _scannedRequirementStudentId.value = student.id
-            _requirementsSearchQuery.value = student.studentNumber
-            _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
-        } else {
-            _userFeedbackMessage.value = "Student not found for scanned QR: $rawCode"
+        viewModelScope.launch {
+            // Do not block the UI thread while checking the card, and never trust
+            // a signature alone: the repository also checks dates and lifecycle state.
+            val student = (repository.verifyStudentByQr(rawCode)
+                as? StudentScanResult.Success)?.student
+            if (student != null) {
+                _scannedRequirementStudentId.value = student.id
+                _requirementsSearchQuery.value = student.studentNumber
+                _userFeedbackMessage.value = "Pulled up requirements record for ${student.fullName}."
+            } else {
+                _userFeedbackMessage.value = "Student not found for scanned QR: $rawCode"
+            }
         }
     }
 
