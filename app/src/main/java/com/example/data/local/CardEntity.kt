@@ -34,10 +34,12 @@ data class CardEntity(
     val isDeleted: Boolean = false
 ) {
     fun toDomain(): Card {
+        // Unknown lifecycle states must fail closed; malformed cloud data must
+        // never turn an unrecognized credential into an active card.
         val parsedStatus = try {
             CardStatus.valueOf(status)
         } catch (_: Exception) {
-            CardStatus.ACTIVE
+            CardStatus.DEACTIVATED
         }
 
         return Card(
