@@ -53,10 +53,12 @@ abstract class FirestoreEmulatorTestBase {
     ) ?: throw IllegalStateException("Unable to initialize isolated Firebase test app.")
 
     firestore = FirebaseFirestore.getInstance(testFirebaseApp, databaseId)
-    firestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
+    // Configure settings before connecting the client to the emulator; Firestore
+    // locks its settings once the client starts.
     firestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
       .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
       .build()
+    firestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
 
     auth = FirebaseAuth.getInstance(testFirebaseApp)
     auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
@@ -80,9 +82,11 @@ abstract class FirestoreEmulatorTestBase {
     val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")
     val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"}}}"""
-    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff/$uid")
+    // Create the document through the collection endpoint. HttpURLConnection on
+    // the JVM does not support PATCH as a request method, so use POST + documentId.
+    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff?documentId=$uid")
     val connection = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "PATCH"
+      requestMethod = "POST"
       setRequestProperty("Authorization", "Bearer owner")
       setRequestProperty("Content-Type", "application/json")
       doOutput = true
