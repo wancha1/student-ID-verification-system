@@ -152,6 +152,8 @@ test("Student privacy: gate staff cannot read legacy shared records containing g
   await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
     .collection("students").doc("STU-PRIVATE-LEGACY").get());
   await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
+    .collection("students").get());
+  await assertFails(gateDb.collection("schools").doc(SCHOOL_LTC)
     .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
   await assertSucceeds(adminDb.collection("schools").doc(SCHOOL_LTC)
     .collection("student_private").doc("STU-PRIVATE-LEGACY").get());
