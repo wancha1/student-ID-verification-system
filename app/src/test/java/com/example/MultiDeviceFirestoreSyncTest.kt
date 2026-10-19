@@ -174,6 +174,55 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
+    fun malformedRemoteStudentFailsSyncInsteadOfBeingSilentlyDropped() = runBlocking {
+        signInAs("admin_malformed_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
+        val studentId = "STU-MALFORMED-${UUID.randomUUID().toString().take(8)}"
+        firestore.collection("schools")
+            .document(schoolId)
+            .collection("students")
+            .document(studentId)
+            .set(
+                mapOf(
+                    "id" to studentId,
+                    "studentNumber" to "LTC-2026-9999",
+                    "name" to 42,
+                    "updatedAt" to -1L,
+                    "isDeleted" to false
+                )
+            )
+            .await()
+
+        val malformedCardId = "CARD-MALFORMED-${UUID.randomUUID().toString().take(8)}"
+        firestore.collection("schools")
+            .document(schoolId)
+            .collection("cards")
+            .document(malformedCardId)
+            .set(
+                mapOf(
+                    "id" to malformedCardId,
+                    "cardIdentifier" to 42,
+                    "status" to "ACTIVE",
+                    "updatedAt" to -1L,
+                    "isDeleted" to false
+                )
+            )
+            .await()
+
+        val backend = FirestoreCloudBackend(firestore, auth, schoolId)
+        val studentsResult = backend.fetchStudentsUpdatedSince(-5L)
+        val cardsResult = backend.fetchCardsUpdatedSince(-5L)
+
+        assertTrue(
+            "A malformed student must fail the pull so the sync watermark is not advanced",
+            studentsResult.isFailure
+        )
+        assertTrue(
+            "A malformed card must fail the pull so the sync watermark is not advanced",
+            cardsResult.isFailure
+        )
+    }
+
+    @Test
     fun testRevokedCardRejectedOnDeviceBAfterSync() = runBlocking {
         // Device A deactivates/replaces card
         val adminUid = signInAs("admin_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")

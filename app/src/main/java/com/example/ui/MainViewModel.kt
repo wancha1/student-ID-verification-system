@@ -502,7 +502,12 @@ class MainViewModel(
 
     fun toggleNetworkOnline(isOnline: Boolean) {
         repository.setNetworkOnline(isOnline)
-        _userFeedbackMessage.value = if (isOnline) "Network connected. Synchronized with school central database." else "Offline Mode enabled. Guard verification is 100% active from local cache."
+        if (isOnline) {
+            _userFeedbackMessage.value = "Network connected. Synchronizing with the school database…"
+            triggerCloudSync()
+        } else {
+            _userFeedbackMessage.value = "Offline mode enabled. Verification continues using the local cache."
+        }
     }
 
     fun setSearchQuery(query: String) {
