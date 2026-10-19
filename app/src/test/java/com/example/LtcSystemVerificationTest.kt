@@ -590,6 +590,8 @@ class LtcSystemVerificationTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
             val repo = RoomStudentRepository(database)
+            // These assertions verify the durable outbox before any remote acknowledgement.
+            repo.setNetworkOnline(false)
 
             val studentId = "stu-tx-success-01"
             val studentNumber = "LTC-2026-7777"
@@ -677,6 +679,8 @@ class LtcSystemVerificationTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val database = AppDatabase.createInMemory(context)
             val repo = RoomStudentRepository(database)
+            // Keep the outbox pending so rollback assertions observe local transaction state.
+            repo.setNetworkOnline(false)
 
             val studentId = "stu-tx-rollback-01"
             val studentNumber = "LTC-2026-8888"
