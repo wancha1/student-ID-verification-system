@@ -83,10 +83,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material3.Checkbox
-import androidx.compose.runtime.DisposableEffect
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Check
@@ -164,17 +160,10 @@ fun StudentAccessApp(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                viewModel.lockSessionOnBackground()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+    // Firebase Auth persists the credential; restore the app role only after
+    // MainViewModel verifies active staff membership against the Firestore server.
+    LaunchedEffect(Unit) {
+        viewModel.restoreFirebaseSession(context)
     }
 
     LaunchedEffect(userFeedbackMessage) {
