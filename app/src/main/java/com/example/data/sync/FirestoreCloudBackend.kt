@@ -50,7 +50,7 @@ class FirestoreCloudBackend(
 
     companion object {
         // Must match app/src/main/res/values/firebase_applet_config.xml and firebase.json.
-        const val FIRESTORE_DATABASE_ID = "unconfigured-ltc-firestore-database-id"
+        const val FIRESTORE_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
     }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = try {
