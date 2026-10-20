@@ -134,10 +134,13 @@ abstract class FirestoreEmulatorTestBase {
 
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
     withTimeout(AUTH_TIMEOUT_MS) {
-      // Each test has an isolated FirebaseApp, so create its test account directly.
-      // Auth emulator error types for a missing user vary; sign-in-first is brittle.
-      val result = auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
-      checkNotNull(result.user?.uid) { "User creation failed for test account $email" }
+      try {
+        val result = auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+        checkNotNull(result.user?.uid) { "User creation failed for test account $email" }
+      } catch (error: Throwable) {
+        System.err.println("Firebase emulator test account creation failed for $email: ${error.stackTraceToString()}")
+        throw error
+      }
     }
   }
 
