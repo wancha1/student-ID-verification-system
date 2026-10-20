@@ -942,49 +942,61 @@ class MainViewModel(
     }
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
-        if (!requirePermission(StaffPermission.SERVE_MEALS, "Serving dining hall meals")) return
+        val user = _currentUser.value
+        if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
+            _userFeedbackMessage.value = "Access Denied: Unauthenticated session. Meal Staff authorization is required."
+            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+            FeedbackHelper.playDeniedSoundAndHaptic(context)
+            return
+        }
+
+        // Production path uses the shared verifier, which validates the exact signed card,
+        // checks its lifecycle status, enforces meal permissions, and persists the event to Room.
+        if (repository.database != null && repository.syncManagerInstance != null) {
+            _selectedDepartment.value = ScanDepartment.MEALS
+            scanUnifiedQr(rawCode, context)
+            return
+        }
+
+        // Test/demo repositories have no Room database. Still use the repository's full
+        // credential and card-lifecycle verifier rather than trusting the QR signature alone.
         viewModelScope.launch {
-            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            // Use the full QR verification pipeline so expired, unknown, revoked,
-            // replaced, and deactivated cards cannot claim a meal.
-            val student = (repository.verifyStudentByQr(rawCode)
-                as? StudentScanResult.Success)?.student
-
-            if (student == null) {
-                _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
-                FeedbackHelper.playDeniedSoundAndHaptic(context)
-                return@launch
+            when (val verification = repository.verifyStudentByQr(rawCode)) {
+                is StudentScanResult.Success -> {
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    val meal = _activeMealType.value
+                    val previous = _mealRecords.value.find {
+                        it.studentId == verification.student.id &&
+                            it.mealType == meal && it.mealDate == today &&
+                            it.status == MealServingStatus.SERVED
+                    }
+                    if (previous != null) {
+                        _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
+                            verification.student, meal, previous
+                        )
+                        FeedbackHelper.playWarningSoundAndHaptic(context)
+                    } else {
+                        val record = MealRecord(
+                            studentId = verification.student.id,
+                            studentNumber = verification.student.studentNumber,
+                            studentName = verification.student.fullName,
+                            gradeClass = verification.student.gradeClass,
+                            mealType = meal,
+                            mealDate = today,
+                            timestamp = System.currentTimeMillis(),
+                            serverName = user.name,
+                            status = MealServingStatus.SERVED
+                        )
+                        _mealRecords.value = listOf(record) + _mealRecords.value
+                        _mealScanOutcome.value = MealVerificationResult.Success(record)
+                        FeedbackHelper.playApprovedSoundAndHaptic(context)
+                    }
+                }
+                else -> {
+                    _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
+                    FeedbackHelper.playDeniedSoundAndHaptic(context)
+                }
             }
-
-            val activeMeal = _activeMealType.value
-            val previousRecord = _mealRecords.value.find {
-                it.studentId == student.id &&
-                    it.mealType == activeMeal &&
-                    it.mealDate == todayStr &&
-                    it.status == MealServingStatus.SERVED
-            }
-
-            if (previousRecord != null) {
-                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, activeMeal, previousRecord)
-                FeedbackHelper.playWarningSoundAndHaptic(context)
-                return@launch
-            }
-
-            val newRecord = MealRecord(
-                studentId = student.id,
-                studentNumber = student.studentNumber,
-                studentName = student.fullName,
-                gradeClass = student.gradeClass,
-                mealType = activeMeal,
-                mealDate = todayStr,
-                timestamp = System.currentTimeMillis(),
-                serverName = _currentUser.value?.name ?: "Meal Staff",
-                status = MealServingStatus.SERVED
-            )
-
-            _mealRecords.value = listOf(newRecord) + _mealRecords.value
-            _mealScanOutcome.value = MealVerificationResult.Success(newRecord)
-            FeedbackHelper.playApprovedSoundAndHaptic(context)
         }
     }
 
@@ -1289,7 +1301,6 @@ class MainViewModel(
                                 serverName = user.name,
                                 status = result.mealStatus ?: MealServingStatus.SERVED
                             )
-                            _mealRecords.value = listOf(newMeal) + _mealRecords.value
                             _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
@@ -1302,7 +1313,6 @@ class MainViewModel(
                                 lessonDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()),
                                 teacherName = user.name
                             )
-                            _attendanceRecords.value = listOf(newAtt) + _attendanceRecords.value
                         }
                         context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
                     }
