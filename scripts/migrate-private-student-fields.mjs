@@ -18,10 +18,14 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 const databaseId = process.env.FIRESTORE_DATABASE_ID;
-const schoolId = process.env.LTC_SCHOOL_ID || "ltc_school_01";
+const schoolId = "ltc_school_01";
+const authorizedDatabaseId = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba";
 const apply = process.argv.includes("--apply");
 if (!projectId || !databaseId) {
   throw new Error("Set GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID after confirming the real LTC Firebase project.");
+}
+if (databaseId !== authorizedDatabaseId) {
+  throw new Error("Refusing to migrate: FIRESTORE_DATABASE_ID does not match the owner-authorized LTC database.");
 }
 
 const app = initializeApp({ credential: applicationDefault(), projectId });
