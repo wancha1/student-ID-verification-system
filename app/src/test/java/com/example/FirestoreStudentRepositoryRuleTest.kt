@@ -20,14 +20,14 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
 
   @Test
   fun legacyUserProfileCreation_isDenied() = runBlocking {
-    signInTestUser("staff_" + UUID.randomUUID().toString().take(8) + "@ltc.example")
+    signInTestUser("staff_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
-    val result = repo.saveUserProfile(displayName = "Staff Officer", email = "staff@ltc.example", role = "GATE_OFFICER")
+    val result = repo.saveUserProfile(displayName = "Staff Officer", email = "staff@ltc.ac.ug", role = "GATE_OFFICER")
     assertTrue("Legacy self-managed /users profiles must remain disabled", result.isFailure)
   }
   @Test
   fun legacyStudentCreation_isDenied() = runBlocking {
-    val uid = signInTestUser("alice@ltc.example")
+    val uid = signInTestUser("alice_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
     val student = FirestoreStudent(
       id = UUID.randomUUID().toString(), userId = uid, studentNumber = "LTC-2026-0001",
@@ -39,7 +39,7 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
   }
   @Test
   fun legacyScanLogCreation_isDenied() = runBlocking {
-    val uid = signInTestUser("guard@ltc.example")
+    val uid = signInTestUser("guard_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val repo = FirestoreStudentRepository(firestore, auth)
     val log = FirestoreScanLog(
       id = UUID.randomUUID().toString(), userId = uid, studentNumber = "LTC-2026-0001",
@@ -50,7 +50,7 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
   }
   @Test
   fun crossUserAccess_bobCannotReadAliceStudents() = runBlocking {
-    val aliceUid = signInTestUser("alice_owner@ltc.example")
+    val aliceUid = signInTestUser("alice_owner_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     val aliceRepo = FirestoreStudentRepository(firestore, auth)
     val student = FirestoreStudent(
       id = UUID.randomUUID().toString(), userId = aliceUid, studentNumber = "LTC-2026-0099",
@@ -58,7 +58,7 @@ class FirestoreStudentRepositoryRuleTest : FirestoreEmulatorTestBase() {
       isDayScholar = true, feesStatus = "CLEARED", outstandingAmount = 0.0
     )
     assertTrue("Legacy student creation must be denied", aliceRepo.addStudent(student).isFailure)
-    signInTestUser("bob_attacker@ltc.example")
+    signInTestUser("bob_attacker_" + UUID.randomUUID().toString().take(8) + "@ltc.ac.ug")
     var denied = false
     try {
       firestore.collection("users").document(aliceUid).collection("students").document(student.id).get().await()
