@@ -202,12 +202,23 @@ class RoomStudentProfileDatabaseTest {
             accessStatus = AccessStatus.RESTRICTED_FEES
         )
 
-        repo.addStudent(student)
+        // Seed an existing record: addStudent now correctly refuses to issue a card
+        // unless this device has an authorized issuer private key. This test targets
+        // the offline update outbox, not issuer provisioning/card issuance.
+        database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+
+        assertTrue("Offline student update should be accepted", repo.updateStudent(student).isSuccess)
         repo.updateFeeStatus(student.id, FeeStatus.CLEARED, 0.0)
 
         val pending = database.pendingChangeDao().getPendingChanges()
-        assertTrue("Pending changes queue must contain offline student and fee mutations", pending.size >= 3)
-        assertTrue(pending.any { it.entityType == com.example.data.local.SyncEntityType.STUDENT && it.operationType == com.example.data.local.SyncOperationType.CREATE })
-        assertTrue(pending.any { it.entityType == com.example.data.local.SyncEntityType.FEE_STATUS && it.operationType == com.example.data.local.SyncOperationType.STATUS_CHANGE })
+        assertTrue("Pending queue must contain offline student and fee mutations", pending.size >= 2)
+        assertTrue(pending.any {
+            it.entityType == com.example.data.local.SyncEntityType.STUDENT &&
+                it.operationType == com.example.data.local.SyncOperationType.UPDATE
+        })
+        assertTrue(pending.any {
+            it.entityType == com.example.data.local.SyncEntityType.FEE_STATUS &&
+                it.operationType == com.example.data.local.SyncOperationType.STATUS_CHANGE
+        })
     }
 }
