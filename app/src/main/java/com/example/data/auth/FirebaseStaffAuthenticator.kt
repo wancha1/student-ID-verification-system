@@ -33,14 +33,11 @@ class FirebaseStaffAuthenticator {
 
         try {
             val databaseId = context.getString(R.string.firestore_database_id).trim()
-            // The checked-in value is an AI Studio/Oakridge database identifier, not a
-            // verified LTC production target. Fail closed until the owner confirms it.
-            if (databaseId.isBlank() ||
-                databaseId.contains("oakridge", ignoreCase = true) ||
-                databaseId.startsWith("ai-studio-android", ignoreCase = true)
-            ) {
+            // The LTC owner confirmed this exact Firestore database as the authorized target.
+            // Fail closed if a different or blank database ID is configured.
+            if (databaseId != AUTHORIZED_FIRESTORE_DATABASE_ID) {
                 throw IllegalStateException(
-                    "LTC Firebase database is not configured. Confirm the production project and database ID with the school owner."
+                    "LTC Firebase database is not configured to the authorized database."
                 )
             }
             val db = FirebaseFirestore.getInstance(app, databaseId)
@@ -98,13 +95,12 @@ class FirebaseStaffAuthenticator {
         val signedInUser = auth.currentUser ?: return null
 
         val databaseId = context.getString(R.string.firestore_database_id).trim()
-        if (databaseId.isBlank() ||
-            databaseId.contains("oakridge", ignoreCase = true) ||
-            databaseId.startsWith("ai-studio-android", ignoreCase = true)
-        ) {
+        // The LTC owner confirmed this exact Firestore database as the authorized target.
+        // Fail closed if a different or blank database ID is configured.
+        if (databaseId != AUTHORIZED_FIRESTORE_DATABASE_ID) {
             auth.signOut()
             throw IllegalStateException(
-                "LTC Firebase database is not configured. Confirm the production project and database ID with the school owner."
+                "LTC Firebase database is not configured to the authorized database."
             )
         }
 
@@ -162,5 +158,7 @@ class FirebaseStaffAuthenticator {
 
     companion object {
         const val SCHOOL_ID = "ltc_school_01"
+        const val AUTHORIZED_FIRESTORE_DATABASE_ID =
+            "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
     }
 }
