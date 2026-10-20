@@ -128,11 +128,11 @@ fun AdminDashboardScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1726)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.5.dp, roleTheme.accentBorderColor.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                        .border(1.2.dp, GoldAccent.copy(alpha = 0.58f), RoundedCornerShape(20.dp))
                 ) {
                     Row(
                         modifier = Modifier
@@ -143,8 +143,8 @@ fun AdminDashboardScreen(
                         Surface(
                             modifier = Modifier.size(52.dp),
                             shape = RoundedCornerShape(16.dp),
-                            color = roleColor.copy(alpha = 0.12f),
-                            border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.5f))
+                            color = Color.White.copy(alpha = 0.08f),
+                            border = BorderStroke(1.2.dp, GoldAccent.copy(alpha = 0.6f))
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -153,7 +153,7 @@ fun AdminDashboardScreen(
                                 Icon(
                                     imageVector = roleTheme.icon,
                                     contentDescription = roleTheme.departmentTagline,
-                                    tint = roleColor,
+                                    tint = GoldAccent,
                                     modifier = Modifier.size(30.dp)
                                 )
                             }
@@ -165,10 +165,10 @@ fun AdminDashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = roleTheme.departmentTagline,
-                                    color = roleColor,
+                                    color = GoldAccent,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    letterSpacing = 1.sp
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.2.sp
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Surface(
@@ -194,12 +194,12 @@ fun AdminDashboardScreen(
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = Color.White
                             )
                             Text(
                                 text = "Authenticated Officer: ${user.name}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color.White.copy(alpha = 0.72f)
                             )
                         }
 
@@ -208,12 +208,12 @@ fun AdminDashboardScreen(
                             modifier = Modifier
                                 .testTag("button_admin_view_logs")
                                 .size(42.dp)
-                                .background(roleColor.copy(alpha = 0.1f), CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f), CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.History,
                                 contentDescription = "Gate Activity Logs",
-                                tint = roleColor,
+                                tint = GoldAccent,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -268,40 +268,56 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // Security Hub Action Tiles
+            // Quick access: two comfortable rows instead of four cramped
+            // touch targets, especially on narrow Android phones.
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HubButton(
-                        icon = Icons.Default.History,
-                        title = "Gate Logs",
-                        onClick = onViewScanLogs,
-                        testTag = "button_hub_gate_logs",
-                        modifier = Modifier.weight(1f)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "QUICK ACCESS",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.6.sp,
+                        modifier = Modifier.padding(start = 2.dp)
                     )
-                    HubButton(
-                        icon = Icons.Default.Notifications,
-                        title = "SMS Alerts",
-                        onClick = onViewGuardianAlerts,
-                        testTag = "button_hub_sms_alerts",
-                        modifier = Modifier.weight(1f)
-                    )
-                    HubButton(
-                        icon = Icons.Default.ConfirmationNumber,
-                        title = "Exeat Passes",
-                        onClick = onViewExeatPasses,
-                        testTag = "button_hub_exeat_passes",
-                        modifier = Modifier.weight(1f)
-                    )
-                    HubButton(
-                        icon = Icons.Default.Badge,
-                        title = "Print Badges",
-                        onClick = onViewBatchPrint,
-                        testTag = "button_hub_print_badges",
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HubButton(
+                            icon = Icons.Default.History,
+                            title = "Gate Logs",
+                            onClick = onViewScanLogs,
+                            testTag = "button_hub_gate_logs",
+                            modifier = Modifier.weight(1f)
+                        )
+                        HubButton(
+                            icon = Icons.Default.Notifications,
+                            title = "SMS Alerts",
+                            onClick = onViewGuardianAlerts,
+                            testTag = "button_hub_sms_alerts",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HubButton(
+                            icon = Icons.Default.ConfirmationNumber,
+                            title = "Exeat Passes",
+                            onClick = onViewExeatPasses,
+                            testTag = "button_hub_exeat_passes",
+                            modifier = Modifier.weight(1f)
+                        )
+                        HubButton(
+                            icon = Icons.Default.Badge,
+                            title = "Print Badges",
+                            onClick = onViewBatchPrint,
+                            testTag = "button_hub_print_badges",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
