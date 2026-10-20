@@ -35,7 +35,7 @@ class FirestoreCloudBackend(
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
             FirebaseApp.getInstance(),
-            context.getString(R.string.firestore_database_id)
+            requireAuthorizedLtcDatabaseId(context)
         ),
         FirebaseAuth.getInstance(FirebaseApp.getInstance()),
         "ltc_school_01"
@@ -433,4 +433,12 @@ class FirestoreCloudBackend(
     } catch (e: Exception) {
         Result.failure(e)
     }
+}
+
+private fun requireAuthorizedLtcDatabaseId(context: Context): String {
+    val databaseId = context.getString(R.string.firestore_database_id).trim()
+    require(databaseId == FirestoreCloudBackend.FIRESTORE_DATABASE_ID) {
+        "LTC Firebase database configuration does not match the owner-authorized school database."
+    }
+    return databaseId
 }
