@@ -18,6 +18,7 @@ const { initializeApp, applicationDefault } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 const SCHOOL_ID = "ltc_school_01";
+const AUTHORIZED_DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba";
 const PRIVATE_FIELDS = ["guardianName", "guardianPhone", "emergencyContact", "notes"];
 const applyChanges = process.argv.includes("--apply");
 
@@ -26,6 +27,9 @@ async function main() {
   const databaseId = process.env.FIRESTORE_DATABASE_ID;
   if (!projectId || !databaseId) {
     throw new Error("Set GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID to the verified LTC project/database.");
+  }
+  if (databaseId !== AUTHORIZED_DATABASE_ID) {
+    throw new Error("Refusing to migrate: FIRESTORE_DATABASE_ID does not match the owner-authorized LTC database.");
   }
 
   const app = initializeApp({ credential: applicationDefault(), projectId });
