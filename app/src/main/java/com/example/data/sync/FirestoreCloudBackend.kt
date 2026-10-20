@@ -440,10 +440,8 @@ class FirestoreCloudBackend(
 
 private fun requireConfiguredLtcDatabaseId(context: Context): String {
     val databaseId = context.getString(R.string.firestore_database_id).trim()
-    require(databaseId.isNotBlank() &&
-        !databaseId.contains("oakridge", ignoreCase = true) &&
-        !databaseId.contains("unconfigured", ignoreCase = true)) {
-        "LTC Firebase is not configured. Set firestore_database_id to the confirmed LTC Firestore database ID."
+    require(databaseId == FirestoreCloudBackend.FIRESTORE_DATABASE_ID) {
+        "LTC Firebase database configuration does not match the owner-authorized school database."
     }
     return databaseId
 }
