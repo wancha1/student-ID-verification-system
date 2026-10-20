@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.MemoryCacheSettings
@@ -101,12 +100,11 @@ abstract class FirestoreEmulatorTestBase {
 
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
     withTimeout(AUTH_TIMEOUT_MS) {
-      val result = try {
-        auth.signInWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
-      } catch (unused: FirebaseAuthInvalidUserException) {
-        auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
-      }
-      checkNotNull(result.user?.uid) { "User auth failed" }
+      // Callers use unique test email addresses. Create them directly: the Auth emulator
+      // may report a missing account as INVALID_LOGIN_CREDENTIALS rather than
+      // FirebaseAuthInvalidUserException, so sign-in-first incorrectly aborts the test.
+      val result = auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
+      checkNotNull(result.user?.uid) { "User creation failed for test account $email" }
     }
   }
 
