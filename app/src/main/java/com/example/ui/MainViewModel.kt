@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -215,7 +216,7 @@ class MainViewModel(
     private val _activeMealType = MutableStateFlow(MealType.LUNCH)
     val activeMealType: StateFlow<MealType> = _activeMealType.asStateFlow()
 
-    private val _mealRecords = MutableStateFlow<List<MealRecord>>(createInitialSampleMeals())
+    private val _mealRecords = MutableStateFlow<List<MealRecord>>(emptyList())
     val mealRecords: StateFlow<List<MealRecord>> = _mealRecords.asStateFlow()
 
     private val _mealScanOutcome = MutableStateFlow<MealVerificationResult?>(null)
@@ -223,6 +224,28 @@ class MainViewModel(
 
     private val _isMealScannerOpen = MutableStateFlow(false)
     val isMealScannerOpen: StateFlow<Boolean> = _isMealScannerOpen.asStateFlow()
+
+    init {
+        // Operational history is sourced from Room, not in-memory demo lists.
+        repository.database?.let { db ->
+            viewModelScope.launch {
+                db.mealRecordDao().observeAll().collect { rows ->
+                    _mealRecords.value = rows.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.attendanceRecordDao().observeAll().collect { rows ->
+                    _attendanceRecords.value = rows.map { it.toDomain() }
+                }
+            }
+            viewModelScope.launch {
+                db.examExceptionDao().observeAll().collect { rows ->
+                    _examExceptions.value = rows.map { it.toDomain() }
+                }
+            }
+        }
+    }
+
 
     // ==========================================
     // REQUIREMENTS MASTER STATE & CHECKLIST
