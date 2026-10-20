@@ -18,7 +18,7 @@ const { initializeApp, applicationDefault } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 const SCHOOL_ID = "ltc_school_01";
-const UNVERIFIED_DATABASE_ID =
+const AUTHORIZED_DATABASE_ID =
   "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba";
 const PRIVATE_FIELDS = ["guardianName", "guardianPhone", "emergencyContact", "notes"];
 const applyChanges = process.argv.includes("--apply");
@@ -31,9 +31,9 @@ async function main() {
       "Set GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID to the verified LTC project/database."
     );
   }
-  if (projectId === "demo-no-project" || databaseId === UNVERIFIED_DATABASE_ID) {
+  if (projectId === "demo-no-project" || databaseId !== AUTHORIZED_DATABASE_ID) {
     throw new Error(
-      "Refusing to run against a demo or currently unverified AI Studio/Oakridge target. Confirm the live LTC project/database first."
+      "Refusing to run: project must be real and FIRESTORE_DATABASE_ID must match the owner-authorized LTC database."
     );
   }
 
