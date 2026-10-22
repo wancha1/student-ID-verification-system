@@ -45,16 +45,29 @@ jobs:
         run: |
           set -euo pipefail
           GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
           test -f "$GENERATED"
           grep -q 'gen-lang-client-0207053136' "$GENERATED"
           grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          test -f "$APK"
           echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Checking APK contains its compiled Android resource table..."
+          echo "Locating the real APK (AGP may place a redirect file at the conventional output path)..."
+          find app/build -type f -name '*.apk' -print
+          APK=""
+          while IFS= read -r candidate; do
+            if unzip -t "$candidate" >/dev/null 2>&1; then
+              APK="$candidate"
+              break
+            fi
+          done < <(find app/build -type f -name '*.apk' -print)
+          if [ -z "$APK" ]; then
+            echo "No valid APK archive was found. APK-like build outputs:"
+            find app/build -type f -name '*.apk' -exec sh -c 'echo "--- $1"; file "$1"; head -c 200 "$1" || true; echo' _ {} \;
+            exit 1
+          fi
+          echo "Verified real APK archive: $APK"
           unzip -p "$APK" resources.arsc > app/build/packaged-resources.arsc
           test -s app/build/packaged-resources.arsc
-          echo "APK contains compiled resources; Firebase project and app IDs were verified in the Google Services generated resource XML above."
+          cp "$APK" app/build/verified-debug.apk
+          echo "Real APK verified and copied to app/build/verified-debug.apk."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
@@ -62,8 +75,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ltc-debug-apk-firebase-config-check
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: warn
+          path: app/build/verified-debug.apk
+          if-no-files-found: error
           retention-days: 7
       - name: Upload Android unit-test reports
         if: always()
