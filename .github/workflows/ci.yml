@@ -39,21 +39,44 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
-      - name: Compile debug APK
-        run: gradle --no-daemon assembleDebug
-      - name: Verify Firebase resources were generated and packaged
+      - name: Generate ephemeral CI-only release keystore
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-key-password
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 2 \
+            -dname "CN=CI Only,O=Non-Production,C=UG"
+      - name: Compile debug and release APK variants
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-key-password
+        run: |
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
+            STORE_PASSWORD="$STORE_PASSWORD" \
+            KEY_PASSWORD="$KEY_PASSWORD" \
+            gradle --no-daemon assembleDebug assembleRelease
+      - name: Verify Firebase resources were generated and packaged in both variants
         run: |
           set -euo pipefail
-          GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$GENERATED"
-          grep -q 'gen-lang-client-0207053136' "$GENERATED"
-          grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          test -f "$APK"
-          echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Checking APK resource table contains Firebase resource names..."
-          aapt dump --values resources "$APK" | grep -F 'google_app_id'
-          aapt dump --values resources "$APK" | grep -F 'project_id'
+          for VARIANT in debug release; do
+            GENERATED="app/build/generated/res/google-services/$VARIANT/values/values.xml"
+            APK="app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
+            test -f "$GENERATED"
+            grep -q 'gen-lang-client-0207053136' "$GENERATED"
+            grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
+            test -f "$APK"
+            echo "Checking Firebase resource values in $VARIANT APK..."
+            aapt dump --values resources "$APK" | grep -F 'google_app_id'
+            aapt dump --values resources "$APK" | grep -F 'project_id'
+          done
+          echo "Firebase resources verified in debug and CI-only signed release variants."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
