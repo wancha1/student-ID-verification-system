@@ -39,21 +39,48 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
-      - name: Compile debug APK
-        run: gradle --no-daemon assembleDebug
-      - name: Verify Firebase resources were generated and packaged
+      - name: Generate ephemeral CI-only release keystore
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-store-password
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$STORE_PASSWORD" \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 2 \
+            -dname "CN=CI Only,O=Non-Production,C=UG"
+      - name: Compile debug and release APK variants
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-store-password
+        run: |
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
+            STORE_PASSWORD="$STORE_PASSWORD" \
+            KEY_PASSWORD="$STORE_PASSWORD" \
+            gradle --no-daemon assembleDebug assembleRelease
+      - name: Verify Firebase resources were generated and packaged in both variants
         run: |
           set -euo pipefail
-          GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$GENERATED"
-          grep -q 'gen-lang-client-0207053136' "$GENERATED"
-          grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          test -f "$APK"
-          echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Checking APK resource table contains Firebase resource names..."
-          unzip -p "$APK" resources.arsc | strings | grep -F '1:863997008927:android:87c2ce91560390f176892a'
-          unzip -p "$APK" resources.arsc | strings | grep -F 'gen-lang-client-0207053136'
+          for VARIANT in debug release; do
+            GENERATED="app/build/generated/res/google-services/$VARIANT/values/values.xml"
+            APK="app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
+            test -f "$GENERATED"
+            grep -q 'gen-lang-client-0207053136' "$GENERATED"
+            grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
+            test -f "$APK"
+            unzip -l "$APK" | grep -F 'resources.arsc' >/dev/null
+            SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+            AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+            test -n "$AAPT"
+            RESOURCE_DUMP="$("$AAPT" dump --values resources "$APK")"
+            printf '%s\\n' "$RESOURCE_DUMP" | grep -F 'gen-lang-client-0207053136'
+            printf '%s\\n' "$RESOURCE_DUMP" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
+            echo "Firebase configuration generation and APK resource values verified for $VARIANT."
+          done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
