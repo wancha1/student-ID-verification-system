@@ -100,7 +100,7 @@ jobs:
           fi
           for APK in "$DEBUG_APK" "$RELEASE_APK"; do
             RESOURCE_DUMP="$(mktemp)"
-            if ! "$AAPT2" dump resources --values "$APK" > "$RESOURCE_DUMP"; then
+            if ! "$AAPT2" dump resources -v "$APK" > "$RESOURCE_DUMP"; then
               echo "::error::Could not inspect packaged resources for $APK."
               rm -f "$RESOURCE_DUMP"
               exit 1
