@@ -132,7 +132,16 @@ jobs:
           echo "Authorized Firebase app ID is generated and packaged in both APKs."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         if: ${{ always() && steps.build.outcome == 'success' }}
-        run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
+        run: |
+          set +e
+          npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
+          TEST_EXIT=$?
+          if [[ "$TEST_EXIT" -ne 0 ]]; then
+            echo "::group::Android unit-test failure details"
+            grep -R -n -E '<failure|<error' app/build/test-results/testDebugUnitTest --include='*.xml' || true
+            echo "::endgroup::"
+          fi
+          exit "$TEST_EXIT"
       - name: Upload debug APK
         if: always()
         uses: actions/upload-artifact@v4
