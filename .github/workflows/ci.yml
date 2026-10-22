@@ -56,7 +56,7 @@ jobs:
       - name: Compile debug and release APK variants
         env:
           STORE_PASSWORD: ci-only-store-password
-          KEY_PASSWORD: ci-only-key-password
+          KEY_PASSWORD: ci-only-store-password
         run: |
           KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
             STORE_PASSWORD="$STORE_PASSWORD" \
@@ -73,8 +73,8 @@ jobs:
             grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
             test -f "$APK"
             echo "Checking Firebase resource values in $VARIANT APK..."
-            aapt dump --values resources "$APK" | grep -F 'google_app_id'
-            aapt dump --values resources "$APK" | grep -F 'project_id'
+            apkanalyzer resources value --config default --type string --name google_app_id "$APK" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
+            apkanalyzer resources value --config default --type string --name project_id "$APK" | grep -F 'gen-lang-client-0207053136'
           done
           echo "Firebase resources verified in debug and CI-only signed release variants."
       - name: Run unit tests with Firebase Auth and Firestore emulators
