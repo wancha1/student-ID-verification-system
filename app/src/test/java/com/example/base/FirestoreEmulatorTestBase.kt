@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -142,7 +143,7 @@ abstract class FirestoreEmulatorTestBase {
         // preserve the original sign-in failure rather than masking it.
         val result = try {
           auth.signInWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
-        } catch (signInError: Exception) {
+        } catch (signInError: FirebaseAuthException) {
           try {
             auth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD).await()
           } catch (createError: FirebaseAuthUserCollisionException) {
