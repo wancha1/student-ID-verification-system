@@ -44,11 +44,18 @@ jobs:
       - name: Verify Firebase resources were generated and packaged
         run: |
           set -euo pipefail
-          GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
-          test -f "$GENERATED"
-          grep -q 'gen-lang-client-0207053136' "$GENERATED"
-          grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          echo "Firebase generated resources verified for project gen-lang-client-0207053136."
+          echo "Locating Google Services generated resources..."
+          find -L app/build/generated -type f -name values.xml -print
+          GENERATED="$(find -L app/build/generated/res/google-services -type f -name values.xml -print -quit)"
+          if [ -z "$GENERATED" ]; then
+            echo "Google Services plugin did not generate values.xml."
+            find -L app/build/generated/res/google-services -maxdepth 6 -print || true
+            exit 1
+          fi
+          echo "Checking generated resource file: $GENERATED"
+          cat "$GENERATED"
+          grep -F 'gen-lang-client-0207053136' "$GENERATED"
+          grep -F '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
           echo "Firebase-generated values verified. The assembleDebug task completed successfully."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
