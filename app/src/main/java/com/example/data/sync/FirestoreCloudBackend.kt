@@ -382,7 +382,8 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
-    override suspend fun fetchAllRemoteMealRecords(): Result<List<MealRecordEntity>> = try {
+    override suspend fun fetchAllRemoteMealRecords(): Result<List<MealRecordEntity>> {
+        return try {
         val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync meal records.")
         if (role !in setOf("ADMIN", "HEAD_TEACHER", "MATRON_PATRON", "MEAL_STAFF")) return Result.success(emptyList())
         val snapshot = getSchoolRef().collection("meals").get().await()
@@ -402,11 +403,13 @@ class FirestoreCloudBackend(
                 isSyncedToCloud = true
             )
         })
-    } catch (e: Exception) {
-        Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    override suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>> = try {
+    override suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>> {
+        return try {
         val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync attendance records.")
         if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "TEACHER")) return Result.success(emptyList())
         val snapshot = getSchoolRef().collection("attendance").get().await()
@@ -431,11 +434,13 @@ class FirestoreCloudBackend(
                 isSyncedToCloud = true
             )
         })
-    } catch (e: Exception) {
-        Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> = try {
+    override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> {
+        return try {
         val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync exam exceptions.")
         if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "EXAM_STAFF", "BURSAR")) return Result.success(emptyList())
         val snapshot = getSchoolRef().collection("exam_exceptions").get().await()
@@ -461,8 +466,9 @@ class FirestoreCloudBackend(
                 isSyncedToCloud = true
             )
         })
-    } catch (e: Exception) {
-        Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> {
