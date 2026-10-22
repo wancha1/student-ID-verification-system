@@ -52,8 +52,8 @@ jobs:
           test -f "$APK"
           echo "Firebase generated resources verified for project gen-lang-client-0207053136."
           echo "Checking APK resource table contains Firebase resource names..."
-          aapt dump --values resources "$APK" | grep -F 'google_app_id'
-          aapt dump --values resources "$APK" | grep -F 'project_id'
+          apkanalyzer resources value --config default --type string --name google_app_id "$APK" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
+          apkanalyzer resources value --config default --type string --name project_id "$APK" | grep -F 'gen-lang-client-0207053136'
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
