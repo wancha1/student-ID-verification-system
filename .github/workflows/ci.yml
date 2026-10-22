@@ -50,17 +50,17 @@ jobs:
           grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
           echo "Firebase generated resources verified for project gen-lang-client-0207053136."
           echo "Locating the real APK (AGP may place a redirect file at the conventional output path)..."
-          find app/build -type f -name '*.apk' -print
+          find app/build -name '*.apk' -print
           APK=""
           while IFS= read -r candidate; do
             if unzip -t "$candidate" >/dev/null 2>&1; then
               APK="$candidate"
               break
             fi
-          done < <(find app/build -type f -name '*.apk' -print)
+          done < <(find app/build -name '*.apk' -print)
           if [ -z "$APK" ]; then
             echo "No valid APK archive was found. APK-like build outputs:"
-            find app/build -type f -name '*.apk' -exec sh -c 'echo "--- $1"; file "$1"; head -c 200 "$1" || true; echo' _ {} \;
+            find app/build -name '*.apk' -exec sh -c 'echo "--- $1"; file "$1"; head -c 200 "$1" || true; echo' _ {} \;
             exit 1
           fi
           echo "Verified real APK archive: $APK"
