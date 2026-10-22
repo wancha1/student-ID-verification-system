@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "release/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   android:
-    name: Android compile and unit tests
+    name: Android debug/release builds and unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +26,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+      - name: Restore Firebase Android configuration from repository secret
+        env:
+          FIREBASE_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${FIREBASE_GOOGLE_SERVICES_JSON}" ]]; then
+            echo "::error::Configure the FIREBASE_GOOGLE_SERVICES_JSON Actions secret with the LTC app's google-services.json contents."
+            exit 1
+          fi
+          printf '%s' "${FIREBASE_GOOGLE_SERVICES_JSON}" > app/google-services.json
+          node -e '
+            const c = require("./app/google-services.json");
+            const client = (c.client || []).find(x => x.client_info?.android_client_info?.package_name === "com.aistudio.studentaccess.xpkz");
+            if (c.project_info?.project_id !== "gen-lang-client-0207053136" ||
+                client?.client_info?.mobilesdk_app_id !== "1:863997008927:android:87c2ce91560390f176892a") {
+              throw new Error("Firebase config does not match the authorized LTC Android app.");
+            }
+          '
       - name: Install Firebase emulator tooling
         run: npm install --no-save firebase-tools
-      - name: Generate ephemeral debug keystore
+      - name: Generate ephemeral debug and release signing keys for CI only
         run: |
+          set -euo pipefail
           keytool -genkeypair -v \
             -keystore debug.keystore \
             -storepass android \
@@ -39,28 +58,42 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
-      - name: Compile debug APK
-        run: gradle --no-daemon assembleDebug
+          keytool -genkeypair -v \
+            -keystore ci-release.keystore \
+            -storepass android \
+            -keypass android \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=CI Release Validation,O=Android,C=US"
+      - name: Compile debug and release APKs
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/ci-release.keystore
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
+        run: gradle --no-daemon assembleDebug assembleRelease
       - name: Verify Firebase resources were generated and packaged
         run: |
           set -euo pipefail
           GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
           test -f "$GENERATED"
           grep -q 'gen-lang-client-0207053136' "$GENERATED"
           grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          test -f "$APK"
-          echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Checking APK resource table contains Firebase resource names..."
-          aapt dump resources "$APK" | grep -F 'google_app_id'
-          aapt dump resources "$APK" | grep -F 'project_id'
+          test -f "$DEBUG_APK"
+          test -f "$RELEASE_APK"
+          echo "Firebase resources and both build variants verified."
+          aapt dump resources "$DEBUG_APK" | grep -F 'google_app_id'
+          aapt dump resources "$RELEASE_APK" | grep -F 'google_app_id'
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ltc-debug-apk-firebase-config-check
+          name: ltc-debug-apk-ci-validation-only
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 7
