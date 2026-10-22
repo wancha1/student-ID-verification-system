@@ -7,6 +7,9 @@ import com.example.crypto.SoftwareCardSigner
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.RoomStudentRepository
 import com.example.data.local.AppDatabase
+import com.example.data.local.MealRecordEntity
+import com.example.data.local.AttendanceRecordEntity
+import com.example.data.local.ExamExceptionEntity
 import com.example.data.local.CardEntity
 import com.example.data.sync.FirestoreCloudBackend
 import com.example.data.sync.SyncManager
@@ -25,6 +28,7 @@ import com.example.testutil.TestCardCryptoHelper
 import com.example.util.CardCryptoManager
 import com.example.util.QrUnifiedVerifier
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -171,6 +175,62 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         )
 
         assertTrue("Gate verification on Device B must be approved", verification is DepartmentVerificationResult.Success)
+    }
+
+    @Test
+    fun operationalRecordsUploadedOnOneDeviceArePulledToAnother() = runBlocking {
+        signInAs("admin_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
+        val backend = FirestoreCloudBackend(firestore, auth, schoolId)
+
+        val meal = MealRecordEntity(
+            id = "MEAL-SYNC-${UUID.randomUUID().toString().take(8)}",
+            studentId = "STU-OPS-01",
+            studentNumber = "LTC-OPS-01",
+            studentName = "Test Student",
+            gradeClass = "Senior 4",
+            mealType = "LUNCH",
+            mealDate = "2026-10-22",
+            timestamp = System.currentTimeMillis(),
+            serverName = "Kitchen",
+            status = "SERVED",
+            isSyncedToCloud = false
+        )
+        val attendance = AttendanceRecordEntity(
+            id = "ATT-SYNC-${UUID.randomUUID().toString().take(8)}",
+            studentId = "STU-OPS-01",
+            studentNumber = "LTC-OPS-01",
+            studentName = "Test Student",
+            gradeClass = "Senior 4",
+            subject = "Mathematics",
+            sessionName = "Period 1",
+            lessonDate = "2026-10-22",
+            timestamp = System.currentTimeMillis(),
+            teacherName = "Test Teacher",
+            isPresent = true
+        )
+        val exception = ExamExceptionEntity(
+            id = "EXAM-SYNC-${UUID.randomUUID().toString().take(8)}",
+            studentId = "STU-OPS-01",
+            studentNumber = "LTC-OPS-01",
+            studentName = "Test Student",
+            examCode = "UACE-MATH-01",
+            requestedByBursar = "Test Bursar",
+            recommendationReason = "Test synchronization record",
+            isApproved = false,
+            requestedAt = System.currentTimeMillis()
+        )
+
+        assertTrue(backend.pushMealRecords(listOf(meal)).isSuccess)
+        assertTrue(backend.pushAttendanceRecords(listOf(attendance)).isSuccess)
+        assertTrue(backend.pushExamExceptions(listOf(exception)).isSuccess)
+
+        val managerOnDeviceB = SyncManager(deviceBDatabase, backend)
+        val syncResult = managerOnDeviceB.syncNow()
+        assertTrue("Operational records should sync without failure: ${syncResult.exceptionOrNull()}", syncResult.isSuccess)
+
+        assertEquals(meal.id, deviceBDatabase.mealRecordDao().observeAll().first().single().id)
+        assertEquals(attendance.id, deviceBDatabase.attendanceRecordDao().observeAll().first().single().id)
+        assertEquals(exception.id, deviceBDatabase.examExceptionDao().observeAll().first().single().id)
     }
 
     @Test
