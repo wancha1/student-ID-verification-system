@@ -437,7 +437,7 @@ class FirestoreCloudBackend(
 
     override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> = try {
         val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync exam exceptions.")
-        if (role !in setOf("ADMIN", "HEAD_TEACHER", "EXAM_OFFICER", "BURSAR")) return Result.success(emptyList())
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "EXAM_STAFF", "BURSAR")) return Result.success(emptyList())
         val snapshot = getSchoolRef().collection("exam_exceptions").get().await()
         Result.success(snapshot.documents.map { doc ->
             val approvedAtValue = doc.get("approvedAt")
