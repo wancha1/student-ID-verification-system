@@ -74,6 +74,7 @@ jobs:
             -validity 10000 \
             -dname "CN=CI Release Validation,O=Android,C=US"
       - name: Compile debug and release APKs
+        id: build
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/ci-release.keystore
           STORE_PASSWORD: android
@@ -92,17 +93,18 @@ jobs:
           grep -F "$EXPECTED_APP_ID" "$GENERATED" >/dev/null
           test -f "$DEBUG_APK"
           test -f "$RELEASE_APK"
-          # Confirm the resource table contains the Firebase resource name, then
-          # search its compiled string pool for the exact authorized app ID.
-          # aapt's human-readable dump formats string values inconsistently across
-          # build-tools versions, so do not use it as the value-integrity check.
+          # Ask Android's resource analyzer for the resolved packaged string value.
+          # This avoids depending on aapt's human-readable dump or string-pool encoding.
           for APK in "$DEBUG_APK" "$RELEASE_APK"; do
-            aapt dump resources "$APK" > /tmp/ltc-resources.txt
-            grep -F 'google_app_id' /tmp/ltc-resources.txt >/dev/null
-            unzip -p "$APK" resources.arsc | strings | grep -F "$EXPECTED_APP_ID" >/dev/null
+            PACKAGED_APP_ID="$(apkanalyzer resources value --type string --name google_app_id "$APK")"
+            if [[ "$PACKAGED_APP_ID" != "$EXPECTED_APP_ID" ]]; then
+              echo "::error::Unexpected google_app_id in $APK: $PACKAGED_APP_ID"
+              exit 1
+            fi
           done
           echo "Authorized Firebase app ID is generated and packaged in both APKs."
       - name: Run unit tests with Firebase Auth and Firestore emulators
+        if: ${{ always() && steps.build.outcome == 'success' }}
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
         if: always()
