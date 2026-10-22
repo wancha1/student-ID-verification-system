@@ -20,6 +20,7 @@ jobs:
   android:
     name: Android debug/release builds and unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -74,6 +75,7 @@ jobs:
             -validity 10000 \
             -dname "CN=CI Release Validation,O=Android,C=US"
       - name: Compile debug and release APKs
+        timeout-minutes: 20
         id: build
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/ci-release.keystore
@@ -131,6 +133,7 @@ jobs:
           done
           echo "Authorized Firebase app ID is generated and packaged in both APKs."
       - name: Run unit tests with Firebase Auth and Firestore emulators
+        timeout-minutes: 20
         if: ${{ always() && steps.build.outcome == 'success' }}
         run: |
           set +e
