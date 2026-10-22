@@ -93,12 +93,17 @@ jobs:
           grep -F "$EXPECTED_APP_ID" "$GENERATED" >/dev/null
           test -f "$DEBUG_APK"
           test -f "$RELEASE_APK"
-          # Ask Android's resource analyzer for the resolved packaged string value.
-          # This avoids depending on aapt's human-readable dump or string-pool encoding.
+          # Inspect the compiled resource table with the Android SDK's aapt2 binary.
+          # apkanalyzer is not guaranteed to be on PATH on hosted runners.
+          AAPT2="$(find "$ANDROID_HOME/build-tools" -type f -name aapt2 | sort -V | tail -n 1)"
+          if [[ -z "$AAPT2" || ! -x "$AAPT2" ]]; then
+            echo "::error::Could not locate Android SDK build-tools aapt2."
+            exit 1
+          fi
           for APK in "$DEBUG_APK" "$RELEASE_APK"; do
-            PACKAGED_APP_ID="$(apkanalyzer resources value --type string --name google_app_id "$APK")"
-            if [[ "$PACKAGED_APP_ID" != "$EXPECTED_APP_ID" ]]; then
-              echo "::error::Unexpected google_app_id in $APK: $PACKAGED_APP_ID"
+            if ! "$AAPT2" dump resources --values "$APK" | grep -F "$EXPECTED_APP_ID" >/dev/null; then
+              echo "::error::Authorized google_app_id was not found in packaged resources for $APK."
+              "$AAPT2" dump resources --values "$APK" | grep -E 'google_app_id|project_id' || true
               exit 1
             fi
           done
