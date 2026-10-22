@@ -88,8 +88,8 @@ jobs:
           test -f "$RELEASE_APK"
           # Write full aapt output to files first: grep -q on a pipe can exit early,
           # causing aapt to receive SIGPIPE under pipefail despite a valid match.
-          aapt dump resources "$DEBUG_APK" > /tmp/ltc-debug-resources.txt
-          aapt dump resources "$RELEASE_APK" > /tmp/ltc-release-resources.txt
+          aapt dump resources --values "$DEBUG_APK" > /tmp/ltc-debug-resources.txt
+          aapt dump resources --values "$RELEASE_APK" > /tmp/ltc-release-resources.txt
           grep -F 'google_app_id' /tmp/ltc-debug-resources.txt >/dev/null
           grep -F 'google_app_id' /tmp/ltc-release-resources.txt >/dev/null
           grep -F "$EXPECTED_APP_ID" /tmp/ltc-debug-resources.txt >/dev/null
