@@ -76,13 +76,11 @@ jobs:
             SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
             AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
             test -n "$AAPT"
-            RESOURCE_DUMP="$("$AAPT" dump --values resources "$APK")"
-            # The Google Services plugin always generates google_app_id for Firebase SDKs.
-            # Check the actual app ID value in the APK, not optional resources such as
-            # firebase_database_url (unused by this Firestore-only app) that may not exist.
-            printf '%s\n' "$RESOURCE_DUMP" | grep -F 'google_app_id'
-            printf '%s\n' "$RESOURCE_DUMP" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
-            echo "Expected Firebase project/app IDs are in generated resources and the app ID is packaged for $VARIANT."
+            # Inspect the compiled resource table's string pool; aapt's human-readable
+            # dump format varies across build-tools versions.
+            unzip -p "$APK" resources.arsc | strings | grep -F 'gen-lang-client-0207053136'
+            unzip -p "$APK" resources.arsc | strings | grep -F '1:863997008927:android:87c2ce91560390f176892a'
+            echo "Expected Firebase project/app IDs are packaged for $VARIANT." 
           done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
