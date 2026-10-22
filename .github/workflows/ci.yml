@@ -41,6 +41,27 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US"
       - name: Compile debug APK
         run: gradle --no-daemon assembleDebug
+      # Compile the release variant with a throwaway CI-only key. This validates
+      # release-specific Gradle configuration without creating a distributable APK.
+      - name: Validate release build configuration
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/ci-release-validation.jks
+          STORE_PASSWORD: ci-validation-only
+          KEY_PASSWORD: ci-validation-only
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v \\
+            -keystore "$KEYSTORE_PATH" \\
+            -storepass "$STORE_PASSWORD" \\
+            -keypass "$KEY_PASSWORD" \\
+            -alias upload \\
+            -keyalg RSA \\
+            -keysize 2048 \\
+            -validity 2 \\
+            -dname "CN=CI Validation Only,O=OpenAI,C=US"
+          gradle --no-daemon assembleRelease
+          rm -f "$KEYSTORE_PATH" app/build/outputs/apk/release/app-release.apk
+
       - name: Verify Firebase resources were generated and packaged
         run: |
           set -euo pipefail
