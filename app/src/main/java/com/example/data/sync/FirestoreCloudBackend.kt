@@ -49,6 +49,12 @@ class FirestoreCloudBackend(
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
 
+    private suspend fun currentActiveStaffRole(): String? {
+        val uid = auth.currentUser?.uid ?: return null
+        val staff = getSchoolRef().collection("staff").document(uid).get().await()
+        return if (staff.getBoolean("active") == true) staff.getString("role") else null
+    }
+
     private suspend fun isStudentPrivacyStaff(): Boolean {
         val uid = auth.currentUser?.uid ?: return false
         val staff = getSchoolRef().collection("staff").document(uid).get().await()
@@ -374,6 +380,95 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+    }
+
+    override suspend fun fetchAllRemoteMealRecords(): Result<List<MealRecordEntity>> {
+        return try {
+        val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync meal records.")
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "MATRON_PATRON", "MEAL_STAFF")) return Result.success(emptyList())
+        val snapshot = getSchoolRef().collection("meals").get().await()
+        Result.success(snapshot.documents.map { doc ->
+            MealRecordEntity(
+                id = doc.getString("id") ?: doc.id,
+                studentId = doc.getString("studentId") ?: "",
+                studentNumber = doc.getString("studentNumber") ?: "",
+                studentName = doc.getString("studentName") ?: "",
+                gradeClass = doc.getString("gradeClass") ?: "",
+                mealType = doc.getString("mealType") ?: "LUNCH",
+                mealDate = doc.getString("mealDate") ?: "",
+                timestamp = doc.getLong("timestamp") ?: 0L,
+                serverName = doc.getString("servingStation") ?: "",
+                status = doc.getString("status") ?: "SERVED",
+                notes = doc.getString("notes") ?: "",
+                isSyncedToCloud = true
+            )
+        })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>> {
+        return try {
+        val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync attendance records.")
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "TEACHER")) return Result.success(emptyList())
+        val snapshot = getSchoolRef().collection("attendance").get().await()
+        Result.success(snapshot.documents.map { doc ->
+            val present = doc.getBoolean("isPresent")
+                ?: (doc.getString("status") == "PRESENT")
+            AttendanceRecordEntity(
+                id = doc.getString("id") ?: doc.id,
+                studentId = doc.getString("studentId") ?: "",
+                studentNumber = doc.getString("studentNumber") ?: "",
+                studentName = doc.getString("studentName") ?: "",
+                gradeClass = doc.getString("gradeClass") ?: "",
+                subject = doc.getString("subject") ?: "",
+                sessionName = doc.getString("sessionName") ?: "",
+                lessonDate = doc.getString("lessonDate") ?: "",
+                timestamp = doc.getLong("timestamp") ?: 0L,
+                teacherName = doc.getString("teacherName") ?: "",
+                isPresent = present,
+                notes = doc.getString("notes") ?: "",
+                isCorrection = doc.getBoolean("isCorrection") ?: false,
+                correctedBy = doc.getString("correctedBy")?.takeIf { it.isNotBlank() },
+                isSyncedToCloud = true
+            )
+        })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> {
+        return try {
+        val role = currentActiveStaffRole() ?: throw SecurityException("Active staff sign-in is required to sync exam exceptions.")
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "EXAM_STAFF", "BURSAR")) return Result.success(emptyList())
+        val snapshot = getSchoolRef().collection("exam_exceptions").get().await()
+        Result.success(snapshot.documents.map { doc ->
+            val approvedAtValue = doc.get("approvedAt")
+            val approvedAt = when (approvedAtValue) {
+                is Long -> approvedAtValue
+                is com.google.firebase.Timestamp -> approvedAtValue.toDate().time
+                else -> null
+            }
+            ExamExceptionEntity(
+                id = doc.getString("id") ?: doc.id,
+                studentId = doc.getString("studentId") ?: "",
+                studentNumber = doc.getString("studentNumber") ?: "",
+                studentName = doc.getString("studentName") ?: "",
+                examCode = doc.getString("examCode") ?: "",
+                requestedByBursar = doc.getString("recommendedBy") ?: "",
+                recommendationReason = doc.getString("recommendationReason") ?: "",
+                isApproved = doc.getBoolean("isApproved") ?: false,
+                approvedByHeadTeacher = doc.getString("approvedBy"),
+                requestedAt = doc.getLong("requestedAt") ?: 0L,
+                approvedAt = approvedAt,
+                isSyncedToCloud = true
+            )
+        })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> {
