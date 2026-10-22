@@ -92,14 +92,15 @@ jobs:
           grep -F "$EXPECTED_APP_ID" "$GENERATED" >/dev/null
           test -f "$DEBUG_APK"
           test -f "$RELEASE_APK"
-          # Write full aapt output to files first: grep -q on a pipe can exit early,
-          # causing aapt to receive SIGPIPE under pipefail despite a valid match.
-          aapt dump resources --values "$DEBUG_APK" > /tmp/ltc-debug-resources.txt
-          aapt dump resources --values "$RELEASE_APK" > /tmp/ltc-release-resources.txt
-          grep -F 'google_app_id' /tmp/ltc-debug-resources.txt >/dev/null
-          grep -F 'google_app_id' /tmp/ltc-release-resources.txt >/dev/null
-          grep -F "$EXPECTED_APP_ID" /tmp/ltc-debug-resources.txt >/dev/null
-          grep -F "$EXPECTED_APP_ID" /tmp/ltc-release-resources.txt >/dev/null
+          # Confirm the resource table contains the Firebase resource name, then
+          # search its compiled string pool for the exact authorized app ID.
+          # aapt's human-readable dump formats string values inconsistently across
+          # build-tools versions, so do not use it as the value-integrity check.
+          for APK in "$DEBUG_APK" "$RELEASE_APK"; do
+            aapt dump resources "$APK" > /tmp/ltc-resources.txt
+            grep -F 'google_app_id' /tmp/ltc-resources.txt >/dev/null
+            unzip -p "$APK" resources.arsc | strings | grep -F "$EXPECTED_APP_ID" >/dev/null
+          done
           echo "Authorized Firebase app ID is generated and packaged in both APKs."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
