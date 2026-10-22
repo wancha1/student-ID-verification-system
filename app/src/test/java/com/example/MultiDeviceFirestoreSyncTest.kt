@@ -179,7 +179,8 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
 
     @Test
     fun operationalRecordsUploadedOnOneDeviceArePulledToAnother() = runBlocking {
-        signInAs("admin_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
+        val adminEmail = "admin_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
+        signInAs(adminEmail, "ADMIN")
         val backend = FirestoreCloudBackend(firestore, auth, schoolId)
 
         val meal = MealRecordEntity(
@@ -222,7 +223,9 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
 
         assertTrue(backend.pushMealRecords(listOf(meal)).isSuccess)
         assertTrue(backend.pushAttendanceRecords(listOf(attendance)).isSuccess)
+        signInAs("bursar_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "BURSAR")
         assertTrue(backend.pushExamExceptions(listOf(exception)).isSuccess)
+        signInAs(adminEmail, "ADMIN")
 
         val managerOnDeviceB = SyncManager(deviceBDatabase, backend)
         val syncResult = managerOnDeviceB.syncNow()
