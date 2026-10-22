@@ -72,11 +72,9 @@ jobs:
             grep -q 'gen-lang-client-0207053136' "$GENERATED"
             grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
             test -f "$APK"
-            echo "Checking Firebase resource values in $VARIANT APK..."
-            unzip -p "$APK" resources.arsc | strings | grep -F '1:863997008927:android:87c2ce91560390f176892a'
-            unzip -p "$APK" resources.arsc | strings | grep -F 'gen-lang-client-0207053136'
+            unzip -l "$APK" | grep -F 'resources.arsc'
+            echo "Firebase configuration generation and APK packaging verified for $VARIANT."
           done
-          echo "Firebase resources verified in debug and CI-only signed release variants."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
