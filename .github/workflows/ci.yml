@@ -42,12 +42,12 @@ jobs:
       - name: Generate ephemeral CI-only release keystore
         env:
           STORE_PASSWORD: ci-only-store-password
-          KEY_PASSWORD: ci-only-key-password
+          KEY_PASSWORD: ci-only-store-password
         run: |
           keytool -genkeypair -v \
             -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \
             -storepass "$STORE_PASSWORD" \
-            -keypass "$KEY_PASSWORD" \
+            -keypass "$STORE_PASSWORD" \
             -alias upload \
             -keyalg RSA \
             -keysize 2048 \
@@ -60,7 +60,7 @@ jobs:
         run: |
           KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
             STORE_PASSWORD="$STORE_PASSWORD" \
-            KEY_PASSWORD="$KEY_PASSWORD" \
+            KEY_PASSWORD="$STORE_PASSWORD" \
             gradle --no-daemon assembleDebug assembleRelease
       - name: Verify Firebase resources were generated and packaged in both variants
         run: |
