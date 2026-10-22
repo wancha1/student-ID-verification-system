@@ -111,10 +111,11 @@ abstract class FirestoreEmulatorTestBase {
     val safeRole = role.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeName = name.replace("\\", "\\\\").replace("\"", "\\\"")
     val safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"")
-    val payload = """{"fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"},"active":{"booleanValue":true}}}"""
-    // Create the document through the collection endpoint. HttpURLConnection on
-    // the JVM does not support PATCH as a request method, so use POST + documentId.
-    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff?documentId=$uid")
+    val payload = """{"writes":[{"update":{"name":"projects/demo-no-project/databases/$databaseId/documents/schools/ltc_school_01/staff/$safeUid","fields":{"role":{"stringValue":"$safeRole"},"name":{"stringValue":"$safeName"},"userId":{"stringValue":"$safeUid"},"active":{"booleanValue":true}}}}]}"""
+    // Use a Firestore commit update (upsert) rather than collection POST/create.
+    // Tests can sign in as the same account more than once, so staff provisioning
+    // must be idempotent instead of failing with HTTP 409 ALREADY_EXISTS.
+    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents:commit")
     val connection = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "POST"
       setRequestProperty("Authorization", "Bearer owner")
