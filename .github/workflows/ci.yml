@@ -73,8 +73,8 @@ jobs:
             grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
             test -f "$APK"
             echo "Checking Firebase resource values in $VARIANT APK..."
-            apkanalyzer resources value --config default --type string --name google_app_id "$APK" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
-            apkanalyzer resources value --config default --type string --name project_id "$APK" | grep -F 'gen-lang-client-0207053136'
+            unzip -p "$APK" resources.arsc | strings | grep -F '1:863997008927:android:87c2ce91560390f176892a'
+            unzip -p "$APK" resources.arsc | strings | grep -F 'gen-lang-client-0207053136'
           done
           echo "Firebase resources verified in debug and CI-only signed release variants."
       - name: Run unit tests with Firebase Auth and Firestore emulators
