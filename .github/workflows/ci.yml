@@ -72,8 +72,14 @@ jobs:
             grep -q 'gen-lang-client-0207053136' "$GENERATED"
             grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
             test -f "$APK"
-            unzip -l "$APK" | grep -F 'resources.arsc'
-            echo "Firebase configuration generation and APK packaging verified for $VARIANT."
+            unzip -l "$APK" | grep -F 'resources.arsc' >/dev/null
+            SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+            AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+            test -n "$AAPT"
+            RESOURCE_DUMP="$("$AAPT" dump --values resources "$APK")"
+            printf '%s\\n' "$RESOURCE_DUMP" | grep -F 'gen-lang-client-0207053136'
+            printf '%s\\n' "$RESOURCE_DUMP" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
+            echo "Firebase configuration generation and APK resource values verified for $VARIANT."
           done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
