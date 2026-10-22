@@ -71,7 +71,10 @@ secrets {
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
+// A Firebase-backed production APK must never be built without the default app
+// resources. WARN permits an APK that compiles but crashes when FirebaseApp.getInstance()
+// is called at launch; fail the build instead so configuration errors are caught early.
+googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.ERROR }
 
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
