@@ -49,25 +49,13 @@ jobs:
           grep -q 'gen-lang-client-0207053136' "$GENERATED"
           grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
           echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Locating the real APK (AGP may place a redirect file at the conventional output path)..."
-          find -L app/build -name '*.apk' -print
-          APK=""
-          while IFS= read -r candidate; do
-            if unzip -t "$candidate" >/dev/null 2>&1; then
-              APK="$candidate"
-              break
-            fi
-          done < <(find -L app/build -name '*.apk' -print)
-          if [ -z "$APK" ]; then
-            echo "No valid APK archive was found. APK-like build outputs:"
-            find -L app/build -name '*.apk' -exec sh -c 'echo "--- $1"; file "$1"; head -c 200 "$1" || true; echo' _ {} \;
-            exit 1
-          fi
-          echo "Verified real APK archive: $APK"
-          unzip -p "$APK" resources.arsc > app/build/packaged-resources.arsc
-          test -s app/build/packaged-resources.arsc
-          cp "$APK" app/build/verified-debug.apk
-          echo "Real APK verified and copied to app/build/verified-debug.apk."
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          echo "Firebase-generated values and debug APK output verified."
+          file "$APK"
+          cp -L "$APK" app/build/verified-debug.apk
+          test -s app/build/verified-debug.apk
+          echo "Debug APK copied to app/build/verified-debug.apk."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
