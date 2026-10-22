@@ -40,7 +40,7 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
       - name: Compile debug APK
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon clean assembleDebug
       - name: Verify Firebase resources were generated and packaged
         run: |
           set -euo pipefail
