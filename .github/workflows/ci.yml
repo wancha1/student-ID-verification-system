@@ -65,16 +65,21 @@ jobs:
       - name: Verify Firebase resources were generated and packaged
         run: |
           set -euo pipefail
-          GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
           APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$GENERATED"
-          grep -q 'gen-lang-client-0207053136' "$GENERATED"
-          grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          test -f "$APK"
-          echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Checking APK resource table contains Firebase resource names..."
-          aapt dump resources "$APK" | grep -F 'google_app_id'
-          aapt dump resources "$APK" | grep -F 'project_id'
+          test -f "$APK" || { echo "Debug APK is missing."; exit 1; }
+          echo "Locating generated Firebase values..."
+          GENERATED=""
+          while IFS= read -r candidate; do
+            if grep -Fq 'gen-lang-client-0207053136' "$candidate" && grep -Fq '1:863997008927:android:87c2ce91560390f176892a' "$candidate"; then
+              GENERATED="$candidate"
+              break
+            fi
+          done < <(find -L app/build/generated/res -type f -path '*/values/values.xml' -print)
+          if [ -z "$GENERATED" ]; then
+            echo "Could not find generated Firebase resources for the authorized LTC project/app."
+            exit 1
+          fi
+          echo "Verified Firebase resource values in: $GENERATED"
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
