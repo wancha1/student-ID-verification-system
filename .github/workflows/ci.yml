@@ -50,14 +50,14 @@ jobs:
           KEY_PASSWORD: ci-validation-only
         run: |
           set -euo pipefail
-          keytool -genkeypair -v \\
-            -keystore "$KEYSTORE_PATH" \\
-            -storepass "$STORE_PASSWORD" \\
-            -keypass "$KEY_PASSWORD" \\
-            -alias upload \\
-            -keyalg RSA \\
-            -keysize 2048 \\
-            -validity 2 \\
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 2 \
             -dname "CN=CI Validation Only,O=OpenAI,C=US"
           gradle --no-daemon assembleRelease
           rm -f "$KEYSTORE_PATH" app/build/outputs/apk/release/app-release.apk
