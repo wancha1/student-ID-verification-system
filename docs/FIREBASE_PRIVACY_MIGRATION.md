@@ -10,11 +10,13 @@
 
 ## Before deployment
 
-The repository currently references this unverified database ID:
+The configured LTC target is:
 
-`ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba`
+- Firebase project ID: `gen-lang-client-0207053136`
+- Android application ID: `com.aistudio.studentaccess.xpkz`
+- Named Firestore database ID: `ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba`
 
-Do not migrate data or deploy rules to it merely because it is checked in. An authorized LTC owner must confirm the exact Firebase project ID, Android app registration, and named Firestore database from the Firebase Console. The authenticator deliberately fails closed while the checked-in AI Studio/Oakridge identifier remains.
+These are the project/database identifiers designated for LTC. Before any live migration or production rules deployment, the operator must still verify that the Firebase Console is open to this exact project and named database, confirm a recoverable backup, and obtain explicit school-owner approval for the data-changing operation. The migration script refuses to run unless both the project ID and database ID exactly match this target.
 
 ## Migration procedure
 
