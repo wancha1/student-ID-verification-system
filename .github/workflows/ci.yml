@@ -79,14 +79,22 @@ jobs:
           GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
           DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
           RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
+          EXPECTED_PROJECT_ID='gen-lang-client-0207053136'
+          EXPECTED_APP_ID='1:863997008927:android:87c2ce91560390f176892a'
           test -f "$GENERATED"
-          grep -q 'gen-lang-client-0207053136' "$GENERATED"
-          grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
+          grep -F "$EXPECTED_PROJECT_ID" "$GENERATED" >/dev/null
+          grep -F "$EXPECTED_APP_ID" "$GENERATED" >/dev/null
           test -f "$DEBUG_APK"
           test -f "$RELEASE_APK"
-          echo "Firebase resources and both build variants verified."
-          aapt dump resources "$DEBUG_APK" | grep -F 'google_app_id'
-          aapt dump resources "$RELEASE_APK" | grep -F 'google_app_id'
+          # Write full aapt output to files first: grep -q on a pipe can exit early,
+          # causing aapt to receive SIGPIPE under pipefail despite a valid match.
+          aapt dump resources "$DEBUG_APK" > /tmp/ltc-debug-resources.txt
+          aapt dump resources "$RELEASE_APK" > /tmp/ltc-release-resources.txt
+          grep -F 'google_app_id' /tmp/ltc-debug-resources.txt >/dev/null
+          grep -F 'google_app_id' /tmp/ltc-release-resources.txt >/dev/null
+          grep -F "$EXPECTED_APP_ID" /tmp/ltc-debug-resources.txt >/dev/null
+          grep -F "$EXPECTED_APP_ID" /tmp/ltc-release-resources.txt >/dev/null
+          echo "Authorized Firebase app ID is generated and packaged in both APKs."
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
