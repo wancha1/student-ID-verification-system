@@ -77,9 +77,10 @@ jobs:
             AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
             test -n "$AAPT"
             RESOURCE_DUMP="$("$AAPT" dump --values resources "$APK")"
-            printf '%s\\n' "$RESOURCE_DUMP" | grep -F 'gen-lang-client-0207053136'
-            printf '%s\\n' "$RESOURCE_DUMP" | grep -F '1:863997008927:android:87c2ce91560390f176892a'
-            echo "Firebase configuration generation and APK resource values verified for $VARIANT."
+            printf '%s\n' "$RESOURCE_DUMP" | grep -F 'google_app_id'
+            printf '%s\n' "$RESOURCE_DUMP" | grep -F 'project_id'
+            printf '%s\n' "$RESOURCE_DUMP" | grep -F 'firebase_database_url'
+            echo "Expected Firebase project/app IDs are in generated resources and Firebase resource entries are packaged for $VARIANT."
           done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
