@@ -52,9 +52,18 @@ jobs:
           test -f "$APK"
           echo "Firebase generated resources verified for project gen-lang-client-0207053136."
           echo "Checking compiled APK resource values..."
-          aapt dump --values resources "$APK" > app/build/apk-resources.txt
-          grep -F '1:863997008927:android:87c2ce91560390f176892a' app/build/apk-resources.txt
-          grep -F 'gen-lang-client-0207053136' app/build/apk-resources.txt
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_ROOT"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          echo "Using Android resource tool: $AAPT"
+          "$AAPT" dump --values resources "$APK" > app/build/apk-resources.txt
+          if ! grep -Fq '1:863997008927:android:87c2ce91560390f176892a' app/build/apk-resources.txt; then
+            echo "Firebase app ID not found in compiled resource dump. Relevant resource entries:"
+            grep -E 'google_app_id|project_id|google_api_key' app/build/apk-resources.txt | head -n 40 || true
+            exit 1
+          fi
+          grep -Fq 'gen-lang-client-0207053136' app/build/apk-resources.txt
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
       - name: Upload debug APK
