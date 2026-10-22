@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Keep only the newest verification run for each branch/PR ref so stale builds
+# do not hold runners while newer fixes wait in the queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
