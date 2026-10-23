@@ -1,22 +1,38 @@
 package com.example
 
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.*
+import com.google.firebase.FirebaseApp
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Instrumented test, which will execute on an Android device.
- *
- * See [testing documentation](http://d.android.com/tools/testing).
- */
+/** Device-level smoke checks for the installed LTC application configuration. */
 @RunWith(AndroidJUnit4::class)
 class ExampleInstrumentedTest {
   @Test
-  fun useAppContext() {
-    // Context of the app under test.
+  fun applicationIdAndFirebaseConfigurationAreCorrect() {
     val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-    assertEquals("com.example", appContext.packageName)
+    assertEquals(BuildConfig.APPLICATION_ID, appContext.packageName)
+
+    // FirebaseInitProvider must initialize the default app from packaged resources.
+    val firebaseApp = FirebaseApp.getInstance()
+    assertNotNull(firebaseApp.options)
+    assertEquals("gen-lang-client-0207053136", firebaseApp.options.projectId)
+    assertEquals(
+      "1:863997008927:android:87c2ce91560390f176892a",
+      firebaseApp.options.applicationId
+    )
+  }
+
+  @Test
+  fun mainActivityLaunchesWithoutCrashing() {
+    ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+      scenario.onActivity { activity ->
+        assertNotNull(activity.window)
+      }
+    }
   }
 }

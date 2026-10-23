@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -39,25 +43,72 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
-      - name: Compile debug APK
-        run: gradle --no-daemon assembleDebug
-      - name: Verify Firebase resources were generated and packaged
+      - name: Generate ephemeral CI-only release keystore
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-store-password
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$STORE_PASSWORD" \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 2 \
+            -dname "CN=CI Only,O=Non-Production,C=UG"
+      - name: Compile debug and release APK variants
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-store-password
+        run: |
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
+            STORE_PASSWORD="$STORE_PASSWORD" \
+            KEY_PASSWORD="$STORE_PASSWORD" \
+            gradle --no-daemon --no-build-cache processDebugGoogleServices processReleaseGoogleServices assembleDebug assembleRelease
+      - name: Verify Firebase resources are packaged in both APK variants
         run: |
           set -euo pipefail
-          GENERATED="app/build/generated/res/google-services/debug/values/values.xml"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$GENERATED"
-          grep -q 'gen-lang-client-0207053136' "$GENERATED"
-          grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-          test -f "$APK"
-          echo "Firebase generated resources verified for project gen-lang-client-0207053136."
-          echo "Checking APK resource table contains Firebase resource names..."
-          aapt dump resources "$APK" | grep -F 'google_app_id'
-          aapt dump resources "$APK" | grep -F 'project_id'
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT" || { echo "Android aapt tool not found under $SDK_ROOT/build-tools" >&2; exit 1; }
+
+          for VARIANT in debug release; do
+            APK="app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
+            test -f "$APK" || { echo "Missing APK: $APK" >&2; exit 1; }
+            RESOURCE_DUMP="$(mktemp)"
+            "$AAPT" dump --values resources "$APK" > "$RESOURCE_DUMP"
+
+            for EXPECTED in 'gen-lang-client-0207053136' '1:863997008927:android:87c2ce91560390f176892a'; do
+              if ! grep -Fq "$EXPECTED" "$RESOURCE_DUMP"; then
+                echo "Expected Firebase value missing from compiled $VARIANT APK resources: $EXPECTED" >&2
+                grep -n -E 'google_app_id|project_id|google_api_key|Firebase' "$RESOURCE_DUMP" | head -80 >&2 || true
+                rm -f "$RESOURCE_DUMP"
+                exit 1
+              fi
+            done
+
+            for RESOURCE_NAME in google_app_id project_id; do
+              if ! grep -Fq "$RESOURCE_NAME" "$RESOURCE_DUMP"; then
+                echo "Firebase resource name missing from compiled $VARIANT APK: $RESOURCE_NAME" >&2
+                rm -f "$RESOURCE_DUMP"
+                exit 1
+              fi
+            done
+            rm -f "$RESOURCE_DUMP"
+            echo "Verified Firebase project/app IDs and resource names in compiled $VARIANT APK."
+          done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
+      - name: Run device smoke tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: gradle --no-daemon connectedDebugAndroidTest
       - name: Upload debug APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ltc-debug-apk-firebase-config-check
