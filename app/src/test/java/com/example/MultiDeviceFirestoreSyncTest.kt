@@ -269,8 +269,19 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         val initialUpload = cloudBackendA.pushCardChanges(listOf(CardEntity.fromDomain(activeCard)))
         assertTrue("Initial ACTIVE card must be created in Firestore", initialUpload.isSuccess)
 
+        // Device B first downloads and caches the ACTIVE card. This is essential:
+        // syncing only after revocation would not test propagation to an existing cache.
+        signInAs("gate_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "GATE_OFFICER")
+        val cloudBackendB = FirestoreCloudBackend(firestore, auth, schoolId)
+        val syncManagerB = SyncManager(deviceBDatabase, cloudBackendB)
+        syncManagerB.syncNow()
+
+        val initiallySyncedCard = deviceBDatabase.cardDao().getCardByIdentifier(cardId)
+        assertNotNull("Device B must initially receive the active card", initiallySyncedCard)
+        assertEquals("Device B must cache the card as ACTIVE before revocation", CardStatus.ACTIVE, initiallySyncedCard?.status)
+
         // Device A then revokes the already-existing card. Assert the cloud write,
-        // otherwise this test could pass merely because Device B never received it.
+        // otherwise this test could pass merely because Firestore rejected it.
         val lostCard = activeCard.copy(
             status = CardStatus.LOST,
             deactivationDate = System.currentTimeMillis(),
@@ -281,10 +292,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         val revocationUpload = cloudBackendA.pushCardChanges(listOf(CardEntity.fromDomain(lostCard)))
         assertTrue("LOST status update must be accepted by Firestore", revocationUpload.isSuccess)
 
-        // Device B syncs
-        val gateUid = signInAs("gate_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "GATE_OFFICER")
-        val cloudBackendB = FirestoreCloudBackend(firestore, auth, schoolId)
-        val syncManagerB = SyncManager(deviceBDatabase, cloudBackendB)
+        // Device B pulls the revocation after it already cached the ACTIVE card.
         syncManagerB.syncNow()
 
         val gateUser = AuthUser(
