@@ -225,7 +225,8 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
     @Test
     fun testRevokedCardRejectedOnDeviceBAfterSync() = runBlocking {
         // Device A deactivates/replaces card
-        val adminUid = signInAs("admin_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
+        val adminEmail = "admin_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
+        val adminUid = signInAs(adminEmail, "ADMIN")
         val cloudBackendA = FirestoreCloudBackend(firestore, auth, schoolId)
         val repoA = RoomStudentRepository(deviceADatabase, remoteCloudDataSource = cloudBackendA)
 
@@ -271,7 +272,8 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
 
         // Device B first downloads and caches the ACTIVE card. This is essential:
         // syncing only after revocation would not test propagation to an existing cache.
-        signInAs("gate_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "GATE_OFFICER")
+        val gateEmail = "gate_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
+        signInAs(gateEmail, "GATE_OFFICER")
         val cloudBackendB = FirestoreCloudBackend(firestore, auth, schoolId)
         val syncManagerB = SyncManager(deviceBDatabase, cloudBackendB)
         syncManagerB.syncNow()
@@ -282,6 +284,9 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
 
         // Device A then revokes the already-existing card. Assert the cloud write,
         // otherwise this test could pass merely because Firestore rejected it.
+        // The emulator test shares one FirebaseAuth instance between the simulated
+        // devices, so restore the administrator identity before Device A writes.
+        signInTestUser(adminEmail)
         val lostCard = activeCard.copy(
             status = CardStatus.LOST,
             deactivationDate = System.currentTimeMillis(),
@@ -292,6 +297,8 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         val revocationUpload = cloudBackendA.pushCardChanges(listOf(CardEntity.fromDomain(lostCard)))
         assertTrue("LOST status update must be accepted by Firestore", revocationUpload.isSuccess)
 
+        // Restore Device B's gate identity before it pulls the revocation.
+        signInTestUser(gateEmail)
         // Device B pulls the revocation after it already cached the ACTIVE card.
         syncManagerB.syncNow()
 
