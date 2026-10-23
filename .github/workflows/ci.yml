@@ -62,7 +62,7 @@ jobs:
             STORE_PASSWORD="$STORE_PASSWORD" \
             KEY_PASSWORD="$STORE_PASSWORD" \
             gradle --no-daemon --no-build-cache processDebugGoogleServices processReleaseGoogleServices assembleDebug assembleRelease
-      - name: Verify Firebase resources were generated and packaged in both variants
+      - name: Verify Firebase resources are packaged in both APK variants
         run: |
           set -euo pipefail
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
@@ -70,21 +70,11 @@ jobs:
           test -n "$AAPT" || { echo "Android aapt tool not found under $SDK_ROOT/build-tools" >&2; exit 1; }
 
           for VARIANT in debug release; do
-            GENERATED="app/build/generated/res/google-services/$VARIANT/values/values.xml"
             APK="app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
-            test -f "$GENERATED" || { echo "Missing generated Firebase resources: $GENERATED" >&2; find app/build/generated/res/google-services -maxdepth 5 -type f -print 2>/dev/null || true; exit 1; }
             test -f "$APK" || { echo "Missing APK: $APK" >&2; exit 1; }
-
-            for EXPECTED in 'gen-lang-client-0207053136' '1:863997008927:android:87c2ce91560390f176892a'; do
-              if ! grep -Fq "$EXPECTED" "$GENERATED"; then
-                echo "Expected Firebase value missing from generated $VARIANT resources: $EXPECTED" >&2
-                cat "$GENERATED" >&2
-                exit 1
-              fi
-            done
-
             RESOURCE_DUMP="$(mktemp)"
             "$AAPT" dump --values resources "$APK" > "$RESOURCE_DUMP"
+
             for EXPECTED in 'gen-lang-client-0207053136' '1:863997008927:android:87c2ce91560390f176892a'; do
               if ! grep -Fq "$EXPECTED" "$RESOURCE_DUMP"; then
                 echo "Expected Firebase value missing from compiled $VARIANT APK resources: $EXPECTED" >&2
@@ -93,8 +83,16 @@ jobs:
                 exit 1
               fi
             done
+
+            for RESOURCE_NAME in google_app_id project_id; do
+              if ! grep -Fq "$RESOURCE_NAME" "$RESOURCE_DUMP"; then
+                echo "Firebase resource name missing from compiled $VARIANT APK: $RESOURCE_NAME" >&2
+                rm -f "$RESOURCE_DUMP"
+                exit 1
+              fi
+            done
             rm -f "$RESOURCE_DUMP"
-            echo "Verified expected Firebase project/app IDs in generated resources and compiled $VARIANT APK."
+            echo "Verified Firebase project/app IDs and resource names in compiled $VARIANT APK."
           done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
