@@ -1,52 +1,91 @@
-# LTC Firestore privacy and migration runbook
+# LTC Firestore privacy and deployment runbook
 
-## What changes
+## Current authorized Firebase resources
 
-- The retired `/users/{uid}` schema is denied to all client accounts. The application must use the school-scoped `/schools/ltc_school_01` data model.
+The LTC owner-authorized configuration is:
+
+- Firebase project: `gen-lang-client-0207053136`
+- Firestore database: `ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba`
+- School document ID: `ltc_school_01`
+
+The repository's `firebase.json` must continue to target exactly this named database. These repository settings do not prove that the same rules have been deployed to the live database.
+
+## Security model
+
+- The retired `/users/{uid}` schema is denied to all client accounts. The application uses the school-scoped `/schools/ltc_school_01` data model.
 - The shared `students` collection must not contain `guardianName`, `guardianPhone`, `emergencyContact`, or `notes`.
-- Those fields live in `schools/ltc_school_01/student_private/{studentId}`, readable/writable only by active Admin and Head Teacher accounts.
+- Those fields live in `schools/ltc_school_01/student_private/{studentId}`, restricted to active Admin and Head Teacher accounts.
 - Exam recommendations must be created by active finance staff with `recommendedByUid == request.auth.uid`. Approval is a one-way transition attributed to the authenticated Admin/Head Teacher UID.
 - Staff role lookup uses a server read so cached membership cannot authorize a disabled account.
+- The initial administrator must be provisioned through a trusted Firebase Admin SDK environment, never from the Android client.
 
-## Before deployment
+## Deploy the repository rules
 
-The repository currently references this unverified database ID:
+Run from the repository root on a trusted workstation with the Firebase CLI installed and an authorized operator signed in. The guarded script verifies that `firebase.json` contains exactly one Firestore target and that it is the authorized LTC database.
 
-`ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba`
+```sh
+firebase login
+bash scripts/deploy-ltc-firestore-rules.sh
+```
 
-Do not migrate data or deploy rules to it merely because it is checked in. An authorized LTC owner must confirm the exact Firebase project ID, Android app registration, and named Firestore database from the Firebase Console. The authenticator deliberately fails closed while the checked-in AI Studio/Oakridge identifier remains.
+Read the project/database confirmation carefully. The script requires typing `DEPLOY-LTC-RULES` before it calls `firebase deploy --only firestore:rules --project gen-lang-client-0207053136`. It refuses to run if the configured Firestore target is missing, duplicated, or points elsewhere.
 
-## Migration procedure
+After deployment, inspect the live Rules page and run the Firestore rules tests. Emulator tests alone do not deploy production rules.
 
-Run from a trusted administrator workstation with Firebase Admin SDK Application Default Credentials. Never commit service-account keys to Git or embed them in the APK.
+## Provision the first administrator
 
-1. Confirm the exact production project/database with the school owner.
-2. Set the environment to those verified values:
-   ```sh
-   export GOOGLE_CLOUD_PROJECT="<verified-ltc-project-id>"
-   export FIRESTORE_DATABASE_ID="<verified-ltc-firestore-database-id>"
-   ```
-3. Install `firebase-admin` in the trusted workstation environment.
-4. Run the dry run first:
+Create the intended administrator's account in Firebase Authentication first. Confirm the account belongs to the authorized school administrator and copy its actual UID from Authentication → Users. Then, from a trusted workstation/server using Application Default Credentials, install `firebase-admin` and set:
+
+```sh
+export GOOGLE_CLOUD_PROJECT="gen-lang-client-0207053136"
+export FIRESTORE_DATABASE_ID="ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
+```
+
+Run the provisioning script with the real UID, email and name:
+
+```sh
+node scripts/provision-ltc-staff.cjs \
+  --uid "<actual-auth-uid>" \
+  --email "<actual-auth-email>" \
+  --name "LTC System Administrator" \
+  --role ADMIN \
+  --confirm-authorization
+```
+
+The script checks the exact project and database, confirms the Firebase Authentication UID exists and its email matches, refuses disabled accounts, and creates the staff document only if it does not already exist. It does not create an Authentication user or overwrite an existing staff profile. Obtain explicit school-owner authorization before using `--confirm-authorization`. Do not commit service-account keys or embed credentials in the APK.
+
+Provision subsequent staff with the least-privilege role needed, using the same script and an explicitly approved role: `HEAD_TEACHER`, `BURSAR`, `GATE_OFFICER`, `SECURITY_HEAD`, `MATRON_PATRON`, `MEAL_STAFF`, `DIRECTOR_OF_STUDIES`, `TEACHER`, or `EXAM_STAFF`.
+
+## Student privacy migration
+
+This is separate from first-admin provisioning. Do not run a data migration simply to make the first administrator sign in.
+
+Run from a trusted workstation with Firebase Admin SDK Application Default Credentials:
+
+1. Set the exact project and database environment variables shown above.
+2. Install `firebase-admin` in the trusted workstation environment.
+3. Run the dry run:
    ```sh
    node scripts/migrate-student-private-fields.cjs
    ```
-5. Review the project ID, database ID, scanned student count, and number of records containing private fields. The script refuses the current unverified database ID and makes no changes without `--apply`.
-6. Only after explicit owner approval, apply the migration:
+4. Review the reported project, database, scanned student count, and records containing private fields. The script now refuses to run unless both the project ID and database ID match the authorized LTC resources.
+5. Only after explicit owner approval, apply the migration:
    ```sh
    node scripts/migrate-student-private-fields.cjs --apply
    ```
-7. The script re-reads the shared roster and refuses to set `studentPrivacyMigrationComplete` if any private fields remain.
-8. Verify sample records with an Admin account, and verify that Gate, Meal, and Teacher accounts cannot read the private collection.
-9. Deploy `firestore.rules` to the same confirmed named database. Emulator tests do not deploy production rules.
+6. The script re-reads the shared roster and refuses to set `studentPrivacyMigrationComplete` if any shared student record still contains private fields.
+7. Verify sample records with an Admin account and verify that Gate, Meal, and Teacher accounts cannot read the private collection.
+
+If the database is empty, do not run a migration with the intention of inventing records. Verify the empty state and follow the repository's intended privacy-migration release gate before enabling non-leadership roster access.
 
 ## Release gates
 
 Do not call the app production-ready until all are complete:
 
 - Android and Firestore rules CI pass on the release commit.
-- The private-field migration has been reviewed and applied to the verified production database.
+- The intended staff profiles are provisioned in the verified production database.
 - Production rules have been deployed to that same database.
+- Student privacy migration is completed and verified if existing shared student records contain private fields.
 - Cross-device student/card sync and exam recommendation/approval are verified with real staff accounts.
 - The complete role-permission matrix and inactive-staff denial are tested.
 - Physical devices confirm offline queue recovery, card revocation propagation, and no loss of records.
