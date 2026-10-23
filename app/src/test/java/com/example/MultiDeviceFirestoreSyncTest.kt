@@ -301,6 +301,9 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         signInTestUser(gateEmail)
         // Device B pulls the revocation after it already cached the ACTIVE card.
         syncManagerB.syncNow()
+        val revokedSyncedCard = deviceBDatabase.cardDao().getCardByIdentifier(cardId)
+        assertNotNull("Device B must retain the card record after revocation", revokedSyncedCard)
+        assertEquals("Device B must update its cached card to LOST", CardStatus.LOST, revokedSyncedCard?.status)
 
         val gateUser = AuthUser(
             role = UserRole.GATE_STAFF,
