@@ -59,6 +59,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.auth.FirebaseStaffAuthenticator
 import com.example.model.UserRole
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.launch
 
 /**
@@ -284,17 +287,46 @@ fun FirebaseStaffLoginScreen(
                                         staff.hasExplicitFinanceAccess
                                     )
                                 } catch (error: Exception) {
+                                    val authErrorCode = (error as? FirebaseAuthException)?.errorCode.orEmpty()
+                                    val firestoreErrorCode = (error as? FirebaseFirestoreException)?.code
                                     errorMessage = when {
                                         error.message?.contains("not provisioned", ignoreCase = true) == true ->
-                                            "This account is not registered as LTC staff. Contact the school system administrator."
+                                            "Your email and password were accepted, but this account is not registered as LTC staff. Ask the system administrator to activate your staff profile."
                                         error.message?.contains("inactive", ignoreCase = true) == true ->
-                                            "This staff account is inactive. Contact the school system administrator."
-                                        error.message?.contains("unsupported role", ignoreCase = true) == true ->
-                                            "This account has no supported LTC duty role. Ask the administrator to review your staff profile."
+                                            "Your email and password were accepted, but this LTC staff account is inactive. Ask the system administrator to review it."
+                                        error.message?.contains("unsupported role", ignoreCase = true) == true ||
+                                            error.message?.contains("has no role", ignoreCase = true) == true ->
+                                            "Your account is recognised, but its LTC duty role is missing or unsupported. Ask the system administrator to review your staff profile."
+                                        error.message?.contains("authorized school database", ignoreCase = true) == true ->
+                                            "This app is configured for the wrong school database. Contact the app administrator; do not create another account."
                                         error.message?.contains("Default FirebaseApp", ignoreCase = true) == true ||
                                             error.message?.contains("FirebaseApp", ignoreCase = true) == true ->
-                                            "Firebase is not configured for this build. Add the correct school Firebase app configuration before signing in."
-                                        else -> "Sign-in failed. Check your credentials and connection, then try again."
+                                            "Firebase is not configured for this build. Install the latest verified LTC test build."
+                                        error is FirebaseNetworkException ->
+                                            "Couldn't reach Firebase. Check your internet connection and try again."
+                                        authErrorCode.contains("TOO_MANY_REQUESTS", ignoreCase = true) ||
+                                            authErrorCode.contains("too-many-requests", ignoreCase = true) ->
+                                            "Too many sign-in attempts. Wait a while before trying again."
+                                        authErrorCode.contains("NETWORK", ignoreCase = true) ->
+                                            "Couldn't reach Firebase. Check your internet connection and try again."
+                                        authErrorCode.contains("INVALID_EMAIL", ignoreCase = true) ||
+                                            authErrorCode.contains("INVALID_CREDENTIAL", ignoreCase = true) ||
+                                            authErrorCode.contains("WRONG_PASSWORD", ignoreCase = true) ||
+                                            authErrorCode.contains("USER_NOT_FOUND", ignoreCase = true) ||
+                                            authErrorCode.contains("invalid-credential", ignoreCase = true) ||
+                                            authErrorCode.contains("wrong-password", ignoreCase = true) ||
+                                            authErrorCode.contains("user-not-found", ignoreCase = true) ->
+                                            "Email or password isn't correct. Check both and try again. If you're sure they're correct, the account may not exist in this Firebase project."
+                                        firestoreErrorCode == FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                                            "Your login was accepted, but LTC staff access couldn't be verified. Ask the administrator to check your staff profile and Firestore permissions."
+                                        firestoreErrorCode == FirebaseFirestoreException.Code.UNAVAILABLE ->
+                                            "Couldn't verify your LTC staff profile because the service is unavailable. Check your connection and try again."
+                                        error.message?.contains("Enter your staff email", ignoreCase = true) == true ->
+                                            "Enter your staff email address."
+                                        error.message?.contains("Enter your password", ignoreCase = true) == true ->
+                                            "Enter your password."
+                                        else ->
+                                            "Sign-in couldn't be completed. Check your connection and credentials, then try again."
                                     }
                                 } finally {
                                     isLoading = false
