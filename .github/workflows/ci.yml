@@ -106,7 +106,7 @@ jobs:
           disable-animations: true
           script: gradle --no-daemon connectedDebugAndroidTest
       - name: Upload debug APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ltc-debug-apk-firebase-config-check
