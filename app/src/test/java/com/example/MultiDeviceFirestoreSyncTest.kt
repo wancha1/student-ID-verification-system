@@ -252,21 +252,34 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         )
 
         repoA.addStudent(student)
-        val card = Card(
+        // Create the card in its valid initial state before testing a revocation.
+        // Production Firestore rules intentionally reject creation of a LOST card.
+        val activeCard = Card(
             id = "crd-rev-entity",
             cardIdentifier = cardId,
             studentId = studentId,
             studentNumber = "LTC-2026-6600",
             qrPayload = qrPayload,
-            status = CardStatus.LOST, // Marked LOST
+            status = CardStatus.ACTIVE,
             issueDate = System.currentTimeMillis(),
             activationDate = System.currentTimeMillis(),
-            deactivationDate = System.currentTimeMillis(),
-            reason = "Reported lost by student",
             updatedAt = System.currentTimeMillis()
         )
-        deviceADatabase.cardDao().insertOrUpdateCard(CardEntity.fromDomain(card))
-        cloudBackendA.pushCardChanges(listOf(CardEntity.fromDomain(card)))
+        deviceADatabase.cardDao().insertOrUpdateCard(CardEntity.fromDomain(activeCard))
+        val initialUpload = cloudBackendA.pushCardChanges(listOf(CardEntity.fromDomain(activeCard)))
+        assertTrue("Initial ACTIVE card must be created in Firestore", initialUpload.isSuccess)
+
+        // Device A then revokes the already-existing card. Assert the cloud write,
+        // otherwise this test could pass merely because Device B never received it.
+        val lostCard = activeCard.copy(
+            status = CardStatus.LOST,
+            deactivationDate = System.currentTimeMillis(),
+            reason = "Reported lost by student",
+            updatedAt = System.currentTimeMillis() + 1L
+        )
+        deviceADatabase.cardDao().insertOrUpdateCard(CardEntity.fromDomain(lostCard))
+        val revocationUpload = cloudBackendA.pushCardChanges(listOf(CardEntity.fromDomain(lostCard)))
+        assertTrue("LOST status update must be accepted by Firestore", revocationUpload.isSuccess)
 
         // Device B syncs
         val gateUid = signInAs("gate_rev_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "GATE_OFFICER")
