@@ -2,5 +2,4 @@
     <string name="app_name">LTC Student Access</string>
     <string name="school_full_name">Lira Town College</string>
     <string name="app_full_title">LTC Student Access</string>
-    <string name="firestore_database_id" translatable="false">ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba</string>
 </resources>
