@@ -34,7 +34,7 @@ async function main() {
   }
   if (projectId !== AUTHORIZED_PROJECT_ID || databaseId !== AUTHORIZED_DATABASE_ID) {
     throw new Error(
-      "Refusing to run: GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID must both match the owner-authorized LTC resources."
+      "Refusing to run: GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID must exactly match the owner-authorized LTC Firebase project and named database."
     );
   }
 
