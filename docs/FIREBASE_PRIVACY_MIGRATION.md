@@ -18,6 +18,35 @@ The configured LTC target is:
 
 These are the project/database identifiers designated for LTC. Before any live migration or production rules deployment, the operator must still verify that the Firebase Console is open to this exact project and named database, confirm a recoverable backup, and obtain explicit school-owner approval for the data-changing operation. The migration script refuses to run unless both the project ID and database ID exactly match this target.
 
+## Deploy Firestore rules
+
+From the repository root on a trusted workstation, install the Firebase CLI if needed, sign in with an account authorized to deploy rules, and run the guarded deployment script:
+
+```sh
+npm install -g firebase-tools
+firebase login
+bash scripts/deploy-ltc-firestore-rules.sh
+```
+
+The script validates that `firebase.json` points to the single designated LTC named database and requires typing `DEPLOY-LTC-RULES`. Confirm the target in Firebase Console and obtain school-owner approval before proceeding. After deployment, inspect the live Rules page and run the rules tests; CI/emulator tests alone do not deploy production rules.
+
+## Provision the first administrator
+
+First create or identify the intended administrator in Firebase Authentication. Verify the person's identity and copy the actual Auth UID and email. On a trusted workstation with Node.js, `firebase-admin`, and Application Default Credentials configured, set the exact project/database environment:
+
+```sh
+export GOOGLE_CLOUD_PROJECT="gen-lang-client-0207053136"
+export FIRESTORE_DATABASE_ID="ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba"
+node scripts/provision-ltc-staff.cjs \
+  --uid "<actual-auth-uid>" \
+  --email "<actual-auth-email>" \
+  --name "LTC System Administrator" \
+  --role ADMIN \
+  --confirm-authorization
+```
+
+Use this only with explicit school-owner authorization. The script verifies the existing Auth UID/email, refuses disabled users and existing staff documents, and does not create Auth users or overwrite staff profiles. Provision later staff with the least-privilege supported role. Never place service-account credentials in the repository or APK.
+
 ## Migration procedure
 
 Run from a trusted administrator workstation with Firebase Admin SDK Application Default Credentials. Never commit service-account keys to Git or embed them in the APK.
