@@ -280,7 +280,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
 
         val initiallySyncedCard = deviceBDatabase.cardDao().getCardByIdentifier(cardId)
         assertNotNull("Device B must initially receive the active card", initiallySyncedCard)
-        assertEquals("Device B must cache the card as ACTIVE before revocation", CardStatus.ACTIVE, initiallySyncedCard?.status)
+        assertEquals("Device B must cache the card as ACTIVE before revocation", "ACTIVE", initiallySyncedCard?.status)
 
         // Device A then revokes the already-existing card. Assert the cloud write,
         // otherwise this test could pass merely because Firestore rejected it.
@@ -303,7 +303,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         syncManagerB.syncNow()
         val revokedSyncedCard = deviceBDatabase.cardDao().getCardByIdentifier(cardId)
         assertNotNull("Device B must retain the card record after revocation", revokedSyncedCard)
-        assertEquals("Device B must update its cached card to LOST", CardStatus.LOST, revokedSyncedCard?.status)
+        assertEquals("Device B must update its cached card to LOST", "LOST", revokedSyncedCard?.status)
 
         val gateUser = AuthUser(
             role = UserRole.GATE_STAFF,
