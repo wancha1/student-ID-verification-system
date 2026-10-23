@@ -61,7 +61,7 @@ jobs:
           KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
             STORE_PASSWORD="$STORE_PASSWORD" \
             KEY_PASSWORD="$STORE_PASSWORD" \
-            gradle --no-daemon assembleDebug assembleRelease
+            gradle --no-daemon processDebugGoogleServices processReleaseGoogleServices assembleDebug assembleRelease
       - name: Verify Firebase resources were generated and packaged in both variants
         run: |
           set -euo pipefail
