@@ -1,5 +1,6 @@
 package com.example
 
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.firebase.FirebaseApp
@@ -24,5 +25,14 @@ class ExampleInstrumentedTest {
       "1:863997008927:android:87c2ce91560390f176892a",
       firebaseApp.options.applicationId
     )
+  }
+
+  @Test
+  fun mainActivityLaunchesWithoutCrashing() {
+    ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+      scenario.onActivity { activity ->
+        assertNotNull(activity.window)
+      }
+    }
   }
 }
