@@ -202,6 +202,77 @@ class SyncManager(
                     }
                 }
 
+                // Pull operational history so all authorized devices share meal, attendance,
+                // and exam-exception records, not only students and cards.
+                val remoteMealsResult = remoteCloudDataSource.fetchAllRemoteMealRecords()
+                if (remoteMealsResult.isFailure) {
+                    throw remoteMealsResult.exceptionOrNull()
+                        ?: IllegalStateException("Failed to fetch remote meal records")
+                }
+                for (remoteMeal in remoteMealsResult.getOrThrow()) {
+                    val local = database.mealRecordDao().findServing(
+                        remoteMeal.studentId, remoteMeal.mealType, remoteMeal.mealDate
+                    )
+                    if (local == null || remoteMeal.timestamp >= local.timestamp) {
+                        database.mealRecordDao().insertOrUpdate(
+                            remoteMeal.copy(
+                                studentNumber = remoteMeal.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
+                                studentName = remoteMeal.studentName.ifBlank { local?.studentName.orEmpty() },
+                                gradeClass = remoteMeal.gradeClass.ifBlank { local?.gradeClass.orEmpty() },
+                                isSyncedToCloud = true
+                            )
+                        )
+                    }
+                }
+
+                val remoteAttendanceResult = remoteCloudDataSource.fetchAllRemoteAttendanceRecords()
+                if (remoteAttendanceResult.isFailure) {
+                    throw remoteAttendanceResult.exceptionOrNull()
+                        ?: IllegalStateException("Failed to fetch remote attendance records")
+                }
+                for (remoteAttendance in remoteAttendanceResult.getOrThrow()) {
+                    val local = database.attendanceRecordDao().findAttendance(
+                        remoteAttendance.studentId, remoteAttendance.lessonDate, remoteAttendance.sessionName
+                    )
+                    if (local == null || remoteAttendance.timestamp >= local.timestamp) {
+                        database.attendanceRecordDao().insertOrUpdate(
+                            remoteAttendance.copy(
+                                studentNumber = remoteAttendance.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
+                                studentName = remoteAttendance.studentName.ifBlank { local?.studentName.orEmpty() },
+                                gradeClass = remoteAttendance.gradeClass.ifBlank { local?.gradeClass.orEmpty() },
+                                isSyncedToCloud = true
+                            )
+                        )
+                    }
+                }
+
+                val remoteExceptionsResult = remoteCloudDataSource.fetchAllRemoteExamExceptions()
+                if (remoteExceptionsResult.isFailure) {
+                    throw remoteExceptionsResult.exceptionOrNull()
+                        ?: IllegalStateException("Failed to fetch remote exam exceptions")
+                }
+                for (remoteException in remoteExceptionsResult.getOrThrow()) {
+                    val local = database.examExceptionDao().findException(
+                        remoteException.studentId, remoteException.examCode
+                    )
+                    val remoteVersion = maxOf(remoteException.requestedAt, remoteException.approvedAt ?: 0L)
+                    val localVersion = local?.let { maxOf(it.requestedAt, it.approvedAt ?: 0L) } ?: Long.MIN_VALUE
+                    if (local == null || remoteVersion >= localVersion) {
+                        database.examExceptionDao().insertOrUpdate(
+                            remoteException.copy(
+                                studentNumber = remoteException.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
+                                studentName = remoteException.studentName.ifBlank { local?.studentName.orEmpty() },
+                                requestedByBursar = remoteException.requestedByBursar.ifBlank { local?.requestedByBursar.orEmpty() },
+                                recommendationReason = remoteException.recommendationReason.ifBlank { local?.recommendationReason.orEmpty() },
+                                isApproved = remoteException.isApproved || (local?.isApproved == true),
+                                approvedByHeadTeacher = remoteException.approvedByHeadTeacher ?: local?.approvedByHeadTeacher,
+                                approvedAt = remoteException.approvedAt ?: local?.approvedAt,
+                                isSyncedToCloud = true
+                            )
+                        )
+                    }
+                }
+
                 val now = System.currentTimeMillis()
 
                 // 8. Only advance the sync watermark when all local outbox/log records

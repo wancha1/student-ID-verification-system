@@ -16,7 +16,7 @@ object QrCodeGenerator {
     /**
      * Generates a square QR Code Bitmap with optional centered LTC monogram.
      * Uses Level H error correction (30% Reed-Solomon redundancy). The central LTC
-     * emblem is intentionally kept small to protect the encoded modules. A four-module quiet
+     * emblem is kept below 5% of QR width to protect encoded modules. A four-module quiet
      * zone and Level H error correction improve readability across camera and hardware scanners.
      */
     fun generateQrBitmap(
@@ -62,7 +62,7 @@ object QrCodeGenerator {
 
             // Draw centered LTC emblem
             val canvas = Canvas(bitmap)
-            val emblemRadius = width * 0.045f // Diameter = 9% of QR width to preserve data modules
+            val emblemRadius = width * 0.022f // Diameter = 4.4% of QR width to preserve data modules
             val centerX = width / 2f
             val centerY = height / 2f
 
@@ -77,7 +77,7 @@ object QrCodeGenerator {
             val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.rgb(15, 23, 42) // Deep Slate / Navy
                 style = Paint.Style.STROKE
-                strokeWidth = width * 0.014f
+                strokeWidth = width * 0.006f
             }
             canvas.drawCircle(centerX, centerY, emblemRadius - (ringPaint.strokeWidth / 2f), ringPaint)
 
