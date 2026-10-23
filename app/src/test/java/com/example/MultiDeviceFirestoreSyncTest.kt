@@ -225,7 +225,7 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
         assertTrue(backend.pushAttendanceRecords(listOf(attendance)).isSuccess)
         signInAs("bursar_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "BURSAR")
         assertTrue(backend.pushExamExceptions(listOf(exception)).isSuccess)
-        signInAs(adminEmail, "ADMIN")
+        signInAs("admin_ops_reader_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
 
         val managerOnDeviceB = SyncManager(deviceBDatabase, backend)
         val syncResult = managerOnDeviceB.syncNow()
