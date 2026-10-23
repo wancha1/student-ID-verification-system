@@ -65,29 +65,36 @@ jobs:
       - name: Verify Firebase resources were generated and packaged in both variants
         run: |
           set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT" || { echo "Android aapt tool not found under $SDK_ROOT/build-tools" >&2; exit 1; }
+
           for VARIANT in debug release; do
             GENERATED="app/build/generated/res/google-services/$VARIANT/values/values.xml"
             APK="app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
-            test -f "$GENERATED"
-            grep -q 'gen-lang-client-0207053136' "$GENERATED"
-            grep -q '1:863997008927:android:87c2ce91560390f176892a' "$GENERATED"
-            test -f "$APK"
-            unzip -l "$APK" | grep -F 'resources.arsc' >/dev/null
-            SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-            AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-            test -n "$AAPT"
-            # Android resource tables may store string-pool entries as UTF-8 or UTF-16.
-            RESOURCE_TABLE="$(mktemp)"
-            unzip -p "$APK" resources.arsc > "$RESOURCE_TABLE"
+            test -f "$GENERATED" || { echo "Missing generated Firebase resources: $GENERATED" >&2; find app/build/generated/res/google-services -maxdepth 5 -type f -print 2>/dev/null || true; exit 1; }
+            test -f "$APK" || { echo "Missing APK: $APK" >&2; exit 1; }
+
             for EXPECTED in 'gen-lang-client-0207053136' '1:863997008927:android:87c2ce91560390f176892a'; do
-              if ! { strings "$RESOURCE_TABLE"; strings -el "$RESOURCE_TABLE"; } | grep -Fq "$EXPECTED"; then
-                echo "Expected Firebase value not found in compiled $VARIANT resource table: $EXPECTED" >&2
-                "$AAPT" dump --values resources "$APK" | grep -F "$EXPECTED" || true
+              if ! grep -Fq "$EXPECTED" "$GENERATED"; then
+                echo "Expected Firebase value missing from generated $VARIANT resources: $EXPECTED" >&2
+                cat "$GENERATED" >&2
                 exit 1
               fi
             done
-            rm -f "$RESOURCE_TABLE"
-            echo "Expected Firebase project/app IDs are packaged for $VARIANT."
+
+            RESOURCE_DUMP="$(mktemp)"
+            "$AAPT" dump --values resources "$APK" > "$RESOURCE_DUMP"
+            for EXPECTED in 'gen-lang-client-0207053136' '1:863997008927:android:87c2ce91560390f176892a'; do
+              if ! grep -Fq "$EXPECTED" "$RESOURCE_DUMP"; then
+                echo "Expected Firebase value missing from compiled $VARIANT APK resources: $EXPECTED" >&2
+                grep -n -E 'google_app_id|project_id|google_api_key|Firebase' "$RESOURCE_DUMP" | head -80 >&2 || true
+                rm -f "$RESOURCE_DUMP"
+                exit 1
+              fi
+            done
+            rm -f "$RESOURCE_DUMP"
+            echo "Verified expected Firebase project/app IDs in generated resources and compiled $VARIANT APK."
           done
       - name: Run unit tests with Firebase Auth and Firestore emulators
         run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
