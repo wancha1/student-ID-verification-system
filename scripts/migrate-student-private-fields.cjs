@@ -18,6 +18,7 @@ const { initializeApp, applicationDefault } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 const SCHOOL_ID = "ltc_school_01";
+const AUTHORIZED_PROJECT_ID = "gen-lang-client-0207053136";
 const AUTHORIZED_DATABASE_ID =
   "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba";
 const PRIVATE_FIELDS = ["guardianName", "guardianPhone", "emergencyContact", "notes"];
@@ -31,9 +32,9 @@ async function main() {
       "Set GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID to the verified LTC project/database."
     );
   }
-  if (projectId === "demo-no-project" || databaseId !== AUTHORIZED_DATABASE_ID) {
+  if (projectId !== AUTHORIZED_PROJECT_ID || databaseId !== AUTHORIZED_DATABASE_ID) {
     throw new Error(
-      "Refusing to run: project must be real and FIRESTORE_DATABASE_ID must match the owner-authorized LTC database."
+      "Refusing to run: GOOGLE_CLOUD_PROJECT and FIRESTORE_DATABASE_ID must both match the owner-authorized LTC resources."
     );
   }
 
