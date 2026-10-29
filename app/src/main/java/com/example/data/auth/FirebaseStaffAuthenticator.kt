@@ -77,9 +77,18 @@ class FirebaseStaffAuthenticator {
                     (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
                         staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
             )
-        } catch (error: Exception) {
-            // Never leave an authenticated but unprovisioned account active in the client.
+        } catch (error: SecurityException) {
+            // Explicitly invalid membership must end this local Firebase session.
             auth.signOut()
+            throw error
+        } catch (error: IllegalStateException) {
+            // A configuration mismatch is not recoverable by retrying this session.
+            auth.signOut()
+            throw error
+        } catch (error: Exception) {
+            // Firestore/network failures are not proof that the account is unprovisioned.
+            // Keep this device's Firebase session so the user can retry server validation.
+            // No app role is granted unless the trusted staff document validates.
             throw error
         }
     }
