@@ -84,7 +84,11 @@ class MainViewModel(
                 }
             } catch (_: Exception) {
                 // Fail closed: do not grant a role when server validation fails.
-                // Firebase network failures leave the login screen available for retry.
+                // A later foreground event can retry after transient network failures.
+            } finally {
+                // Always release the guard. Without this, one transient failure can
+                // permanently disable session restoration for this ViewModel instance.
+                sessionRestoreStarted = false
             }
         }
     }
