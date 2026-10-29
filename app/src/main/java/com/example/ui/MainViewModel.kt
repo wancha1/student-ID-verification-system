@@ -887,12 +887,13 @@ class MainViewModel(
         }
     }
 
-    fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String) {
-        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Preparing guardian SMS alerts")) return
-        // No SMS gateway/provider is integrated in this app yet. Do not create a
-        // fake dispatch record or tell staff that a text was sent.
+    fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String): Boolean {
+        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Preparing guardian WhatsApp messages")) return false
+        // This only authorizes the UI to open WhatsApp with a prefilled message.
+        // It does not send the message or prove delivery.
         _userFeedbackMessage.value =
-            "SMS NOT SENT: no SMS gateway is configured. The message was not delivered to $guardianPhone."
+            "WhatsApp message prepared for $guardianPhone. Review it in WhatsApp and tap Send; LTC cannot confirm delivery."
+        return true
     }
 
     fun exportGateLogsCsv(context: Context) {
