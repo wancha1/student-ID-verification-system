@@ -28,6 +28,6 @@ data class GuardianNotification(
     val channel: NotificationChannel = NotificationChannel.SMS,
     val message: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val isDelivered: Boolean = true,
+    val isDelivered: Boolean = false,
     val gateLocation: String = "Gate 1 (Main Entrance)"
 )
