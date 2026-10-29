@@ -167,7 +167,7 @@ fun AdminDashboardScreen(
                                     text = roleTheme.departmentTagline,
                                     color = GoldAccent,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     letterSpacing = 1.2.sp
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -178,7 +178,7 @@ fun AdminDashboardScreen(
                                     Text(
                                         text = roleTheme.stationBadge,
                                         color = roleTheme.badgeTextColor,
-                                        fontSize = 9.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                     )
@@ -275,7 +275,7 @@ fun AdminDashboardScreen(
                     Text(
                         text = "QUICK ACCESS",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.6.sp,
                         modifier = Modifier.padding(start = 2.dp)
@@ -551,12 +551,12 @@ fun AdminDashboardScreen(
                                             Text(
                                                 text = if (isCleared) "CLEARED" else "OUTSTANDING",
                                                 fontWeight = FontWeight.Black,
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 color = if (isCleared) ApprovedGreenText else RejectedRedText
                                             )
                                             Text(
                                                 text = "Tap to flip",
-                                                fontSize = 8.sp,
+                                                fontSize = 10.sp,
                                                 color = if (isCleared) ApprovedGreenDark else RejectedRedDark
                                             )
                                         }
@@ -696,7 +696,7 @@ private fun KpiCard(
         ) {
             Text(
                 text = title,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 letterSpacing = 0.5.sp
