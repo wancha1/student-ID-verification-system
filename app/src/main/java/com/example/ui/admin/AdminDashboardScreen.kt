@@ -556,7 +556,7 @@ fun AdminDashboardScreen(
                                             )
                                             Text(
                                                 text = "Tap to flip",
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 color = if (isCleared) ApprovedGreenDark else RejectedRedDark
                                             )
                                         }
