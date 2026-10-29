@@ -84,8 +84,10 @@ class MainViewModel(
                 }
             } catch (_: Exception) {
                 // Fail closed: do not grant a role when server validation fails.
-                // Allow a later foreground/resume event to retry if this was a transient
-                // network failure; otherwise the retained ViewModel would never retry.
+                // Keep the login screen available if server validation fails.
+            } finally {
+                // Always release the guard, including when there is no cached Firebase
+                // user or validation fails. A later foreground/start event can retry.
                 sessionRestoreStarted = false
             }
         }
