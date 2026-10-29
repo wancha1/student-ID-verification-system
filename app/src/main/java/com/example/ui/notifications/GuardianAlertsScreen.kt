@@ -290,10 +290,10 @@ fun GuardianAlertsScreen(
                                     )
                                 }
                                 Text(
-                                    text = "SMS DELIVERED",
+                                    text = if (notif.isDelivered) "DELIVERY CONFIRMED" else "NOT SENT",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 9.5.sp,
-                                    color = ApprovedGreen
+                                    color = if (notif.isDelivered) ApprovedGreen else MaterialTheme.colorScheme.error
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
@@ -309,6 +309,16 @@ fun GuardianAlertsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    Text(
+                        text = if (notif.isDelivered) {
+                            "Delivery confirmed for ${notif.guardianName}."
+                        } else {
+                            "No SMS was sent or delivery confirmed. An SMS gateway must be configured before this alert can reach the guardian."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (notif.isDelivered) ApprovedGreen else MaterialTheme.colorScheme.error
+                    )
                     Text(
                         text = "Recipient: ${notif.guardianName} (Guardian of ${notif.studentName})",
                         style = MaterialTheme.typography.bodySmall,
