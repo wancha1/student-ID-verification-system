@@ -620,13 +620,33 @@ class MainViewModel(
         }
         viewModelScope.launch {
             val result = repository.addStudent(student)
-            if (result.isSuccess) {
-                _userFeedbackMessage.value = "Student ${student.fullName} (${student.studentNumber}) and Active ID Card created successfully!"
-                onComplete(true, "Student registered successfully")
-            } else {
+            if (result.isFailure) {
                 val msg = result.exceptionOrNull()?.message ?: "Failed to add student"
                 _userFeedbackMessage.value = msg
                 onComplete(false, msg)
+                return@launch
+            }
+
+            // A successful Room write is not proof that Firestore accepted the record.
+            // Attempt a sync before claiming cloud registration, and keep the local
+            // record queued for retry if network/rules reject the upload.
+            val syncResult = repository.syncWithCloud()
+            if (syncResult.isSuccess) {
+                val msg = "Student ${student.fullName} (${student.studentNumber}) and active ID card are saved and synchronized."
+                _userFeedbackMessage.value = msg
+                onComplete(true, msg)
+            } else {
+                val detail = syncResult.exceptionOrNull()?.localizedMessage
+                    ?.takeIf { it.isNotBlank() }
+                val msg = buildString {
+                    append("Student ${student.fullName} (${student.studentNumber}) is saved on this device, but cloud sync is pending. ")
+                    append("It may not appear on other phones until synchronization succeeds.")
+                    if (detail != null) append(" Details: ").append(detail)
+                }
+                _userFeedbackMessage.value = msg
+                // Local registration succeeded; preserve the record and allow the UI
+                // to close the form while clearly disclosing that cloud sync is pending.
+                onComplete(true, msg)
             }
         }
     }
