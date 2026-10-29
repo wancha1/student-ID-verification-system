@@ -155,7 +155,7 @@ fun RequirementsMasterScreen(
                                     Text(
                                         text = roleTheme.stationBadge,
                                         color = roleTheme.badgeTextColor,
-                                        fontSize = 8.5.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                     )
