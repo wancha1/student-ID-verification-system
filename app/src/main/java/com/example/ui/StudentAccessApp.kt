@@ -663,8 +663,29 @@ fun StudentAccessApp(
                                         showGuardianAlertsScreen = false
                                         showExeatScreen = false
                                     },
-                                    icon = { Icon(Icons.Default.School, contentDescription = "Students") },
-                                    label = { Text("Students", fontSize = 11.sp, fontWeight = if (isDashboard) FontWeight.Bold else FontWeight.Normal) },
+                                    icon = {
+                                        val destinationIcon = when (user.role) {
+                                            UserRole.BURSAR_FINANCE -> Icons.Default.AccountBalance
+                                            UserRole.HEAD_TEACHER_MANAGEMENT -> Icons.Default.SupervisorAccount
+                                            else -> Icons.Default.School
+                                        }
+                                        Icon(
+                                            destinationIcon,
+                                            contentDescription = when (user.role) {
+                                                UserRole.BURSAR_FINANCE -> "Fees"
+                                                UserRole.HEAD_TEACHER_MANAGEMENT -> "Overview"
+                                                else -> "Students"
+                                            }
+                                        )
+                                    },
+                                    label = {
+                                        val destinationLabel = when (user.role) {
+                                            UserRole.BURSAR_FINANCE -> "Fees"
+                                            UserRole.HEAD_TEACHER_MANAGEMENT -> "Overview"
+                                            else -> "Students"
+                                        }
+                                        Text(destinationLabel, fontSize = 11.sp, fontWeight = if (isDashboard) FontWeight.Bold else FontWeight.Normal)
+                                    },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
