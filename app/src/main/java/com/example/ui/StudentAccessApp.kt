@@ -284,8 +284,8 @@ fun StudentAccessApp(
                                                 Text(
                                                     text = roleTheme.stationBadge,
                                                     color = roleTheme.badgeTextColor,
-                                                    fontSize = 8.sp,
-                                                    fontWeight = FontWeight.Black,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
                                                     letterSpacing = 0.4.sp,
                                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
                                                 )
@@ -295,7 +295,7 @@ fun StudentAccessApp(
                                                 text = "$roleTitle • ${user.name}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = Color.White.copy(alpha = 0.78f),
-                                                fontSize = 10.sp,
+                                                fontSize = 12.sp,
                                                 maxLines = 1
                                             )
                                         }
@@ -621,7 +621,7 @@ fun StudentAccessApp(
                 if (!isAnyScannerOpen && selectedStudentDetail == null) {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 6.dp,
+                        tonalElevation = 2.dp,
                         modifier = Modifier.testTag("main_navigation_bar")
                     ) {
                         when (user.role) {
