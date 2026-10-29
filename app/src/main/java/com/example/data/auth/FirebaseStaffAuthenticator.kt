@@ -22,6 +22,8 @@ data class AuthenticatedStaff(
 )
 
 class FirebaseStaffAuthenticator {
+    private class InvalidFirebaseConfigurationException(message: String) : IllegalStateException(message)
+
     suspend fun signIn(context: Context, email: String, password: String): AuthenticatedStaff {
         require(email.isNotBlank()) { "Enter your staff email address." }
         require(password.isNotBlank()) { "Enter your password." }
@@ -36,7 +38,7 @@ class FirebaseStaffAuthenticator {
             // The school owner confirmed this exact Firestore database for LTC.
             // Fail closed if local configuration drifts to any other database.
             if (databaseId != AUTHORIZED_FIRESTORE_DATABASE_ID) {
-                throw IllegalStateException(
+                throw InvalidFirebaseConfigurationException(
                     "LTC Firebase database configuration does not match the authorized school database."
                 )
             }
@@ -81,8 +83,8 @@ class FirebaseStaffAuthenticator {
             // Explicitly invalid membership must end this local Firebase session.
             auth.signOut()
             throw error
-        } catch (error: IllegalStateException) {
-            // A configuration mismatch is not recoverable by retrying this session.
+        } catch (error: InvalidFirebaseConfigurationException) {
+            // A known database configuration mismatch is not recoverable by retrying this session.
             auth.signOut()
             throw error
         } catch (error: Exception) {
