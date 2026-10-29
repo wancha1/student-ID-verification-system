@@ -117,7 +117,7 @@ fun AttendanceMasterScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(text = "ACADEMIC LESSON CONTEXT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SchoolPrimary)
+                    Text(text = "ACADEMIC LESSON CONTEXT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SchoolPrimary)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(text = "Subject: $selectedSubject", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -262,9 +262,9 @@ private fun AttendanceRecordRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = record.studentName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(text = "${record.studentNumber} • ${record.gradeClass}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text = "${record.subject} • ${record.sessionName} @ $timeStr", fontSize = 11.sp, color = SchoolPrimary)
+                Text(text = "${record.subject} • ${record.sessionName} @ $timeStr", fontSize = 12.sp, color = SchoolPrimary)
                 if (record.isCorrection) {
-                    Text(text = "Corrected by ${record.correctedBy ?: "Teacher"}: ${record.notes}", fontSize = 11.sp, color = ApprovedGreenText)
+                    Text(text = "Corrected by ${record.correctedBy ?: "Teacher"}: ${record.notes}", fontSize = 12.sp, color = ApprovedGreenText)
                 }
             }
         }
