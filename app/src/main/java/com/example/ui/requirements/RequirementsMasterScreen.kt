@@ -406,7 +406,7 @@ private fun ReqStatCard(
             )
             Text(
                 text = title,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -498,7 +498,7 @@ private fun StudentRequirementCard(
                         Text(
                             text = if (isCleared) "CLEARED (7/7)" else "PENDING ($clearedCount/7)",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = if (isCleared) Color(0xFF16A34A) else Color(0xFFD97706)
                         )
                     }
@@ -681,7 +681,7 @@ private fun ReqCheckItem(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp
+                fontSize = 12.sp
             )
         }
     }
