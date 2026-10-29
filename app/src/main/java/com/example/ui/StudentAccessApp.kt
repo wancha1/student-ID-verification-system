@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.model.FeeStatus
@@ -160,10 +164,18 @@ fun StudentAccessApp(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Firebase Auth persists the credential; restore the app role only after
-    // MainViewModel verifies active staff membership against the Firestore server.
-    LaunchedEffect(Unit) {
+    // Firebase credentials persist per device. Revalidate staff membership on
+    // app start/resume, and retry after a transient server/network validation failure.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                viewModel.restoreFirebaseSession(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         viewModel.restoreFirebaseSession(context)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(userFeedbackMessage) {
