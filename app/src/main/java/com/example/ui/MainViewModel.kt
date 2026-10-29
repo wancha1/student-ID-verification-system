@@ -888,22 +888,11 @@ class MainViewModel(
     }
 
     fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String) {
-        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Dispatching guardian SMS alerts")) return
-        viewModelScope.launch {
-            val notif = GuardianNotification(
-                studentId = "manual-dispatch",
-                studentNumber = "MANUAL",
-                studentName = studentName,
-                guardianName = "Guardian of $studentName",
-                guardianPhone = guardianPhone,
-                type = NotificationType.ARRIVAL,
-                message = message,
-                timestamp = System.currentTimeMillis(),
-                isDelivered = true
-            )
-            repository.sendGuardianNotification(notif)
-            _userFeedbackMessage.value = "SMS Alert dispatched to $guardianPhone!"
-        }
+        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Preparing guardian SMS alerts")) return
+        // No SMS gateway/provider is integrated in this app yet. Do not create a
+        // fake dispatch record or tell staff that a text was sent.
+        _userFeedbackMessage.value =
+            "SMS NOT SENT: no SMS gateway is configured. The message was not delivered to $guardianPhone."
     }
 
     fun exportGateLogsCsv(context: Context) {
