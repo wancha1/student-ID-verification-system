@@ -75,6 +75,7 @@ fun AttendanceMasterScreen(
     var manualStudentNumber by remember { mutableStateOf("") }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
