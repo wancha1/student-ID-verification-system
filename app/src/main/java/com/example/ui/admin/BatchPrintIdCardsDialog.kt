@@ -120,7 +120,7 @@ private fun printStudentCards(
                     <div class="identity"><strong>${html(student.fullName.uppercase())}</strong><span>CLASS: ${html(student.gradeClass)}</span><span>STUDENT NO: ${html(student.studentNumber)}</span><span>CARD: ${html(cardId)}</span></div>
                     ${if (qr != null) "<img class=\"qr\" alt=\"Student verification QR\" src=\"$qr\"/>" else "<div class=\"qr-error\">QR UNAVAILABLE</div>"}
                   </main>
-                  <footer><span>${if (student.isDayScholar) "DAY SCHOLAR" else "BOARDER"}</span><span>${if (card != null && qr != null) "VALID LTC ID" else "CARD NOT ISSUED — CONTACT ADMIN"}</span></footer>
+                  <footer><span>${if (student.isDayScholar) "DAY SCHOLAR" else "BOARDER"}</span><span>${if (card != null && qr != null) "V2 CREDENTIAL PRESENT" else "CARD NOT ISSUED — CONTACT ADMIN"}</span></footer>
                 </section>
                 <section class="face back">
                   <header><span class="crest">LTC</span><div><strong>LIRA TOWN COLLEGE</strong><small>STUDENT ID · REVERSE</small></div></header>
