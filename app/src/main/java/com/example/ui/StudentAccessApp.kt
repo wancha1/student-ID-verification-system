@@ -627,10 +627,10 @@ fun StudentAccessApp(
                         when (user.role) {
                             UserRole.TEACHERS -> {
                                 NavigationBarItem(
-                                    selected = !showAllExportsDialog,
+                                    selected = true,
                                     onClick = { showAllExportsDialog = false },
                                     icon = { Icon(Icons.Default.MenuBook, contentDescription = "Attendance") },
-                                    label = { Text("Attendance", fontSize = 11.sp, fontWeight = if (!showAllExportsDialog) FontWeight.Bold else FontWeight.Normal) },
+                                    label = { Text("Attendance", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -639,7 +639,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_attendance")
                                 )
                                 NavigationBarItem(
-                                    selected = showAllExportsDialog,
+                                    selected = false,
                                     onClick = {
                                         exportDatasetTarget = "ATTENDANCE"
                                         showAllExportsDialog = true
@@ -773,7 +773,7 @@ fun StudentAccessApp(
 
                             UserRole.MEAL_SERVING_STAFF -> {
                                 NavigationBarItem(
-                                    selected = !showAllExportsDialog,
+                                    selected = true,
                                     onClick = { showAllExportsDialog = false },
                                     icon = { Icon(Icons.Default.Restaurant, contentDescription = "Dining Hall") },
                                     label = { Text("Dining Hall", fontSize = 11.sp) },
@@ -785,7 +785,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_dining")
                                 )
                                 NavigationBarItem(
-                                    selected = showAllExportsDialog,
+                                    selected = false,
                                     onClick = {
                                         exportDatasetTarget = "MEALS"
                                         showAllExportsDialog = true
@@ -803,7 +803,7 @@ fun StudentAccessApp(
 
                             UserRole.EXAMINATION_STAFF -> {
                                 NavigationBarItem(
-                                    selected = !showAllExportsDialog,
+                                    selected = true,
                                     onClick = { showAllExportsDialog = false },
                                     icon = { Icon(Icons.Default.FactCheck, contentDescription = "Clearance") },
                                     label = { Text("Requirements", fontSize = 11.sp) },
@@ -815,7 +815,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_requirements")
                                 )
                                 NavigationBarItem(
-                                    selected = showAllExportsDialog,
+                                    selected = false,
                                     onClick = {
                                         exportDatasetTarget = "REQUIREMENTS"
                                         showAllExportsDialog = true
