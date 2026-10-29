@@ -490,7 +490,7 @@ fun StudentAccessApp(
                                         modifier = Modifier.testTag("menu_view_logs")
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Guardian SMS & Alerts") },
+                                        text = { Text("Guardian WhatsApp Alerts") },
                                         leadingIcon = {
                                             Icon(
                                                 imageVector = Icons.Default.Notifications,
@@ -712,7 +712,7 @@ fun StudentAccessApp(
                                         showExeatScreen = false
                                     },
                                     icon = { Icon(Icons.Default.Notifications, contentDescription = "SMS Alerts") },
-                                    label = { Text("SMS Alerts", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    label = { Text("WhatsApp", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
