@@ -237,7 +237,7 @@ fun MealsMasterScreen(
                                 )
                                 Text(
                                     text = type.timeWindow,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                     color = if (isSelected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
                             }
@@ -494,7 +494,7 @@ private fun MealRecordRow(
                     text = "Served by ${record.serverName}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    fontSize = 10.sp
+                    fontSize = 11.sp
                 )
             }
 
@@ -506,7 +506,7 @@ private fun MealRecordRow(
                     Text(
                         text = record.mealType.label.uppercase(),
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFE11D48)
                     )
