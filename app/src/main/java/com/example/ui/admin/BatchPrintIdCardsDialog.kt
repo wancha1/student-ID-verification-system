@@ -104,11 +104,15 @@ private fun printStudentCards(
 
     val pages = buildString {
         students.forEach { student ->
-            val card = cards.firstOrNull { it.studentId == student.id && it.status.name == "ACTIVE" }
-                ?: cards.firstOrNull { it.studentId == student.id }
-            val payload = card?.qrPayload?.takeIf { it.isNotBlank() } ?: student.uniqueQrCode
-            val qr = qrDataUri(payload)
-            val cardId = card?.cardIdentifier ?: "CRD-${student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")}-01"
+            // Only print an issued, active V2 credential. Legacy student QR strings and
+            // fabricated card identifiers are not accepted by the production gate verifier.
+            val card = cards.firstOrNull {
+                it.studentId == student.id &&
+                    it.status.name == "ACTIVE" &&
+                    it.qrPayload.startsWith("LTC:V2:")
+            }
+            val qr = card?.qrPayload?.let(::qrDataUri)
+            val cardId = card?.cardIdentifier ?: "CARD NOT ISSUED"
             append("""
                 <section class="face front">
                   <header><span class="crest">LTC</span><div><strong>LIRA TOWN COLLEGE</strong><small>LIRA, UGANDA · STUDENT ID</small></div><span class="year">${html(student.academicYear)}</span></header>
@@ -116,7 +120,7 @@ private fun printStudentCards(
                     <div class="identity"><strong>${html(student.fullName.uppercase())}</strong><span>CLASS: ${html(student.gradeClass)}</span><span>STUDENT NO: ${html(student.studentNumber)}</span><span>CARD: ${html(cardId)}</span></div>
                     ${if (qr != null) "<img class=\"qr\" alt=\"Student verification QR\" src=\"$qr\"/>" else "<div class=\"qr-error\">QR UNAVAILABLE</div>"}
                   </main>
-                  <footer><span>${if (student.isDayScholar) "DAY SCHOLAR" else "BOARDER"}</span><span>VALID LTC ID</span></footer>
+                  <footer><span>${if (student.isDayScholar) "DAY SCHOLAR" else "BOARDER"}</span><span>${if (card != null && qr != null) "VALID LTC ID" else "CARD NOT ISSUED — CONTACT ADMIN"}</span></footer>
                 </section>
                 <section class="face back">
                   <header><span class="crest">LTC</span><div><strong>LIRA TOWN COLLEGE</strong><small>STUDENT ID · REVERSE</small></div></header>
