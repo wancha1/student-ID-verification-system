@@ -619,7 +619,7 @@ private fun StudentRequirementCard(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f)
                                 )
-                                IconButton(onClick = onEditNotes, modifier = Modifier.size(28.dp)) {
+                                if (!readOnly) IconButton(onClick = onEditNotes, modifier = Modifier.size(28.dp)) {
                                     Icon(Icons.Default.Edit, contentDescription = "Edit notes", modifier = Modifier.size(16.dp))
                                 }
                             }
@@ -628,7 +628,7 @@ private fun StudentRequirementCard(
                     }
 
                     // Bottom Row: Mark All Cleared / Edit Notes
-                    Row(
+                    if (!readOnly) Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
