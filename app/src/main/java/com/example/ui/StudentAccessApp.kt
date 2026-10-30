@@ -938,7 +938,7 @@ fun StudentAccessApp(
                         selectedSession = selectedAttendanceSession,
                         onSubjectChange = { viewModel.setAttendanceSubject(it) },
                         onSessionChange = { viewModel.setAttendanceSession(it) },
-                        onOpenScanner = { showSnackbarPlaceholder() },
+                        onOpenScanner = { },
                         onManualLookup = { },
                         onCorrectAttendance = { _, _ -> }
                     )
