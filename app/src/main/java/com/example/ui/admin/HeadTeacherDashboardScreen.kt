@@ -61,7 +61,7 @@ fun HeadTeacherDashboardScreen(
     onOpenGuardianAlerts: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val clearedRequirements = requirements.count { it.isComplete }
+    val clearedRequirements = requirements.count { it.isFullyCleared }
     val pendingRequirements = (requirements.size - clearedRequirements).coerceAtLeast(0)
 
     LazyColumn(
