@@ -67,7 +67,8 @@ fun AttendanceMasterScreen(
     onOpenScanner: () -> Unit,
     onManualLookup: (String) -> Unit,
     onCorrectAttendance: (recordId: String, note: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     val subjects = listOf("Mathematics", "English Language", "Physics", "Chemistry", "Biology", "History", "Geography")
     val sessions = listOf("Morning Lesson 1", "Morning Lesson 2", "Mid-day Lesson 3", "Afternoon Lesson 4", "Evening Study")
@@ -91,7 +92,7 @@ fun AttendanceMasterScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            if (!readOnly) FloatingActionButton(
                 onClick = onOpenScanner,
                 containerColor = SchoolPrimary,
                 contentColor = Color.White
@@ -155,7 +156,7 @@ fun AttendanceMasterScreen(
             }
 
             // Quick manual entry
-            Row(
+            if (!readOnly) Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
