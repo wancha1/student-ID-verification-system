@@ -290,7 +290,15 @@ class SyncManager(
                         errorMessage = null
                     )
                 } else {
-                    val message = "$pendingAfter local change(s) remain unsynchronized; they will be retried."
+                    // Surface the actual first failed outbox item. A generic pending count
+                    // made permission, configuration, and connectivity failures impossible
+                    // to distinguish during on-device troubleshooting.
+                    val firstFailure = database.pendingChangeDao().getFailedChanges().firstOrNull()
+                    val failureDetail = firstFailure?.let { change ->
+                        "${change.entityType} ${change.operationType} (${change.recordId}): ${change.lastError ?: "Remote write failed"}"
+                    }
+                    val message = failureDetail
+                        ?: "$pendingAfter local change(s) remain unsynchronized; they will be retried."
                     _syncInfo.value = _syncInfo.value.copy(
                         status = SyncStatus.SYNC_FAILED,
                         pendingLogsCount = pendingAfter,
