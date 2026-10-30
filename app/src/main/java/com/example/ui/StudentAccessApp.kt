@@ -940,7 +940,8 @@ fun StudentAccessApp(
                         onSessionChange = { viewModel.setAttendanceSession(it) },
                         onOpenScanner = { },
                         onManualLookup = { },
-                        onCorrectAttendance = { _, _ -> }
+                        onCorrectAttendance = { _, _ -> },
+                        readOnly = true
                     )
                 } else if (showRequirementsScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                     RequirementsMasterScreen(
@@ -953,7 +954,8 @@ fun StudentAccessApp(
                         onMarkAllCleared = { },
                         onUpdateNotes = { _, _ -> },
                         onOpenScanner = { },
-                        onExport = { format -> viewModel.exportDataset("REQUIREMENTS", format, context) }
+                        onExport = { format -> viewModel.exportDataset("REQUIREMENTS", format, context) },
+                        readOnly = true
                     )
                 } else if (showMealsScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                     MealsMasterScreen(
@@ -966,7 +968,8 @@ fun StudentAccessApp(
                         onOpenScanner = { },
                         onManualServe = { },
                         onDismissScanOutcome = { },
-                        onExport = { format -> viewModel.exportDataset("MEALS", format, context) }
+                        onExport = { format -> viewModel.exportDataset("MEALS", format, context) },
+                        readOnly = true
                     )
                 } else {
                     when (user.role) {
