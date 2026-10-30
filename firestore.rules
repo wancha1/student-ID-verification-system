@@ -37,8 +37,13 @@ service cloud.firestore {
       return getStaffDoc(schoolId).data.role;
     }
 
-    function isSchoolAdmin(schoolId) {
+    function isSchoolLeadership(schoolId) {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER'];
+    }
+
+    // Only the designated Administrator manages school records and staff accounts.
+    function isSchoolAdmin(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) == 'ADMIN';
     }
 
     // Guardian/emergency-contact data is restricted to the school leadership roles.
@@ -56,7 +61,7 @@ service cloud.firestore {
     function isFinanceStaff(schoolId) {
       return isSchoolStaff(schoolId) &&
         (getStaffRole(schoolId) == 'BURSAR' ||
-          (getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER'] &&
+          (getStaffRole(schoolId) == 'ADMIN' &&
             getStaffDoc(schoolId).data.hasExplicitFinanceAccess == true));
     }
 
@@ -64,12 +69,24 @@ service cloud.firestore {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'SECURITY_HEAD', 'GATE_OFFICER'];
     }
 
+    function isGateOperator(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'SECURITY_HEAD', 'GATE_OFFICER'];
+    }
+
     function isMealStaff(schoolId) {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'MATRON_PATRON', 'MEAL_STAFF'];
     }
 
+    function isMealOperator(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'MATRON_PATRON', 'MEAL_STAFF'];
+    }
+
     function isTeacher(schoolId) {
       return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'HEAD_TEACHER', 'DIRECTOR_OF_STUDIES', 'TEACHER'];
+    }
+
+    function isTeacherOperator(schoolId) {
+      return isSchoolStaff(schoolId) && getStaffRole(schoolId) in ['ADMIN', 'DIRECTOR_OF_STUDIES', 'TEACHER'];
     }
 
     function isExamStaff(schoolId) {
@@ -118,7 +135,7 @@ service cloud.firestore {
       // Sensitive student information is stored separately from the shared roster.
       match /student_private/{studentId} {
         allow get, list: if isStudentPrivacyStaff(schoolId);
-        allow create, update: if isStudentPrivacyStaff(schoolId) &&
+        allow create, update: if isSchoolAdmin(schoolId) &&
           request.resource.data.studentId == studentId &&
           request.resource.data.keys().hasOnly([
             'studentId', 'guardianName', 'guardianPhone', 'emergencyContact', 'notes', 'updatedAt'
@@ -143,7 +160,7 @@ service cloud.firestore {
       // Departmental records: Gate Scan Logs (Append-Only)
       match /gate_logs/{logId} {
         allow get, list: if isGateStaff(schoolId);
-        allow create: if isGateStaff(schoolId) &&
+        allow create: if isGateOperator(schoolId) &&
                          isValidId(logId) &&
                          request.resource.data.keys().hasAll(['id', 'studentNumber', 'decision', 'gateLocation', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/gate_logs/$(logId));
@@ -154,7 +171,7 @@ service cloud.firestore {
       // Departmental records: Meals
       match /meals/{mealId} {
         allow get, list: if isMealStaff(schoolId);
-        allow create: if isMealStaff(schoolId) &&
+        allow create: if isMealOperator(schoolId) &&
                          isValidId(mealId) &&
                          request.resource.data.keys().hasAll(['id', 'studentId', 'mealType', 'servingStation', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/meals/$(mealId));
@@ -165,7 +182,7 @@ service cloud.firestore {
       // Departmental records: Attendance
       match /attendance/{attId} {
         allow get, list: if isTeacher(schoolId);
-        allow create: if isTeacher(schoolId) &&
+        allow create: if isTeacherOperator(schoolId) &&
                          isValidId(attId) &&
                          request.resource.data.keys().hasAll(['id', 'studentId', 'subject', 'status', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/attendance/$(attId));
@@ -191,7 +208,7 @@ service cloud.firestore {
         allow update: if
                          ((isFinanceStaff(schoolId) || isExamStaff(schoolId)) &&
                            request.resource.data == resource.data) ||
-                         (isSchoolAdmin(schoolId) &&
+                         (isSchoolLeadership(schoolId) &&
                            resource.data.isApproved == false &&
                            request.resource.data.isApproved == true &&
                            request.resource.data.approvedByUid == request.auth.uid &&
