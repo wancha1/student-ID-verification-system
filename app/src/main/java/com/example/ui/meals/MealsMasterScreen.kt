@@ -275,6 +275,7 @@ fun MealsMasterScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                if (!readOnly) {
                 // Manual Student Entry Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -310,6 +311,8 @@ fun MealsMasterScreen(
                 }
             }
         }
+
+                }
 
         // Serving History Section
         Column(
