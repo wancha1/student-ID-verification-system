@@ -67,6 +67,7 @@ test("Legacy /users tree is denied to all client accounts", async () => {
 const SCHOOL_LTC = "ltc_school_01";
 const OTHER_SCHOOL = "other_school_99";
 const ADMIN_UID = "admin_staff_01";
+const HEAD_UID = "head_teacher_07";
 const GATE_UID = "gate_officer_02";
 const BURSAR_UID = "bursar_florence_03";
 const TEACHER_UID = "teacher_akello_04";
@@ -81,6 +82,7 @@ async function setupSchoolStaff() {
     await db.collection("schools").doc(SCHOOL_LTC).set({ studentPrivacyMigrationComplete: true });
     const ltcRef = db.collection("schools").doc(SCHOOL_LTC).collection("staff");
     await ltcRef.doc(ADMIN_UID).set({ role: "ADMIN", name: "System Admin", active: true });
+    await ltcRef.doc(HEAD_UID).set({ role: "HEAD_TEACHER", name: "Head Teacher", active: true });
     await ltcRef.doc(GATE_UID).set({ role: "GATE_OFFICER", name: "Gate Officer Okello", active: true });
     await ltcRef.doc(BURSAR_UID).set({ role: "BURSAR", name: "Bursar Florence", active: true });
     await ltcRef.doc(TEACHER_UID).set({ role: "TEACHER", name: "Teacher Akello", active: true });
@@ -96,6 +98,42 @@ async function setupSchoolStaff() {
   });
 }
 
+
+test("Head Teacher: leadership review is allowed but administrative writes are denied", async () => {
+  await setupSchoolStaff();
+  const headDb = testEnv.authenticatedContext(HEAD_UID).firestore();
+  const school = headDb.collection("schools").doc(SCHOOL_LTC);
+
+  await assertSucceeds(school.collection("students").get());
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("schools").doc(SCHOOL_LTC)
+      .collection("student_private").doc("HEAD-REVIEW-01")
+      .set({ studentId: "HEAD-REVIEW-01", guardianPhone: "+256700000001" });
+  });
+  await assertSucceeds(school.collection("student_private").doc("HEAD-REVIEW-01").get());
+
+  await assertFails(school.collection("staff").doc("new_staff_01").set({
+    role: "TEACHER", name: "New Teacher", active: true
+  }));
+  await assertFails(school.collection("students").doc("HEAD-STUDENT-01").set({
+    id: "HEAD-STUDENT-01", studentNumber: "LTC-HEAD-01", firstName: "Test",
+    lastName: "Student", gradeClass: "Senior 4", updatedAt: Date.now()
+  }));
+  await assertFails(school.collection("cards").doc("HEAD-CARD-01").set({
+    id: "HEAD-CARD-01", status: "ACTIVE", isDeleted: false
+  }));
+
+  await assertSucceeds(school.collection("gate_logs").get());
+  await assertFails(school.collection("gate_logs").doc("HEAD-GATE-01").set({
+    id: "HEAD-GATE-01", studentNumber: "LTC-2026-0001",
+    decision: "APPROVED", gateLocation: "Main Gate", timestamp: Date.now()
+  }));
+  await assertSucceeds(school.collection("meals").get());
+  await assertFails(school.collection("meals").doc("HEAD-MEAL-01").set({
+    id: "HEAD-MEAL-01", studentId: "STU-01",
+    mealType: "LUNCH", servingStation: "Main Hall", timestamp: Date.now()
+  }));
+});
 
 test("Cross-device sync: Admin on Device A registers student, Gate on Device B reads student", async () => {
   await setupSchoolStaff();
@@ -210,7 +248,7 @@ test("Exam exception: only the authenticated Bursar UID can be recorded as recom
 test("Exam exception: approval is one-way and attributed to authenticated leadership UID", async () => {
   await setupSchoolStaff();
   const bursarDb = testEnv.authenticatedContext(BURSAR_UID).firestore();
-  const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(HEAD_UID).firestore();
   const ref = bursarDb.collection("schools").doc(SCHOOL_LTC).collection("exam_exceptions").doc("EX-APPROVAL-01");
   await assertSucceeds(ref.set({
     id: "EX-APPROVAL-01",
@@ -229,8 +267,8 @@ test("Exam exception: approval is one-way and attributed to authenticated leader
   }));
   await assertSucceeds(adminRef.update({
     isApproved: true,
-    approvedBy: "System Admin",
-    approvedByUid: ADMIN_UID,
+    approvedBy: "Head Teacher",
+    approvedByUid: HEAD_UID,
     approvedAt: new Date()
   }));
   await assertFails(adminRef.update({
