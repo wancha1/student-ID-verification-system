@@ -69,6 +69,8 @@ import com.example.model.AuthUser
 import com.example.model.FeeStatus
 import com.example.model.ScanLog
 import com.example.model.Student
+import com.example.model.SyncInfo
+import com.example.model.SyncStatus
 import com.example.ui.FeeFilter
 import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.ApprovedGreen
@@ -102,6 +104,8 @@ fun AdminDashboardScreen(
     onViewExeatPasses: () -> Unit = {},
     onViewBatchPrint: () -> Unit = {},
     onExportLogsCsv: () -> Unit = {},
+    syncInfo: SyncInfo? = null,
+    onTriggerSync: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalStudents = allStudents.size
@@ -216,6 +220,67 @@ fun AdminDashboardScreen(
                                 tint = GoldAccent,
                                 modifier = Modifier.size(22.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(12.dp)) }
+
+            syncInfo?.let { info ->
+                item {
+                    val syncColor = when (info.status) {
+                        SyncStatus.SYNCED -> ApprovedGreen
+                        SyncStatus.SYNC_FAILED -> RejectedRed
+                        SyncStatus.OFFLINE -> Color(0xFFB7791F)
+                        SyncStatus.SYNCING -> SchoolPrimary
+                        SyncStatus.NEEDS_SYNC -> Color(0xFFB7791F)
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = syncColor.copy(alpha = 0.08f)),
+                        border = BorderStroke(1.dp, syncColor.copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = when (info.status) {
+                                            SyncStatus.SYNCED -> "Cloud sync is up to date"
+                                            SyncStatus.SYNCING -> "Synchronizing with school database…"
+                                            SyncStatus.NEEDS_SYNC -> "Changes waiting to sync"
+                                            SyncStatus.OFFLINE -> "Device is offline"
+                                            SyncStatus.SYNC_FAILED -> "Cloud synchronization failed"
+                                        },
+                                        color = syncColor,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = if (info.pendingLogsCount == 0) "No pending local changes"
+                                        else "${info.pendingLogsCount} pending local change(s)",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (info.status != SyncStatus.SYNCING) {
+                                    TextButton(onClick = onTriggerSync, enabled = info.isOnline) {
+                                        Text("Retry sync")
+                                    }
+                                }
+                            }
+                            info.errorMessage?.takeIf { it.isNotBlank() }?.let { error ->
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = error,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 }
