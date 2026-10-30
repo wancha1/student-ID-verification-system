@@ -88,6 +88,7 @@ fun GuardianAlertsScreen(
     notifications: List<GuardianNotification>,
     onBack: () -> Unit,
     onSendCustomAlert: (studentName: String, guardianPhone: String, message: String) -> Boolean,
+    readOnly: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -140,7 +141,7 @@ fun GuardianAlertsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            if (!readOnly) FloatingActionButton(
                 onClick = { showSendCustomDialog = true },
                 containerColor = SchoolPrimary,
                 contentColor = Color.White,
@@ -365,7 +366,7 @@ fun GuardianAlertsScreen(
     }
 
     // Compose WhatsApp message handoff dialog
-    if (showSendCustomDialog) {
+    if (showSendCustomDialog && !readOnly) {
         var studentNameInput by remember { mutableStateOf("") }
         var phoneInput by remember { mutableStateOf("+256 ") }
         var messageInput by remember { mutableStateOf("Dear Parent, this is an official gate security update from Lira Town College (LTC).") }
