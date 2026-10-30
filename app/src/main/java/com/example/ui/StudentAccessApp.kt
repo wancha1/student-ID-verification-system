@@ -908,7 +908,7 @@ fun StudentAccessApp(
                     GateAccessLogsScreen(
                         scanLogs = scanLogs,
                         onBack = { showLogsScreen = false },
-                        onClearLogs = { viewModel.clearLogs() }
+                        onClearLogs = if (user.role == UserRole.ADMINISTRATOR) ({ viewModel.clearLogs() }) else null
                     )
                 } else if (showGuardianAlertsScreen) {
                     GuardianAlertsScreen(
@@ -916,7 +916,8 @@ fun StudentAccessApp(
                         onBack = { showGuardianAlertsScreen = false },
                         onSendCustomAlert = { studentName, phone, message ->
                             viewModel.sendCustomGuardianAlert(studentName, phone, message)
-                        }
+                        },
+                        readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
                     )
                 } else if (showExeatScreen) {
                     ExeatPassScreen(
@@ -928,7 +929,8 @@ fun StudentAccessApp(
                         },
                         onMarkExeatUsed = { passId ->
                             viewModel.markExeatUsed(passId)
-                        }
+                        },
+                        readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
                     )
                 } else if (showAttendanceScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                     AttendanceMasterScreen(
