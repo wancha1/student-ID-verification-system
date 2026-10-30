@@ -1118,6 +1118,8 @@ fun StudentAccessApp(
                                     allStudents = allStudents,
                                     filteredStudents = filteredStudents,
                                     scanLogs = scanLogs,
+                                    syncInfo = syncInfo,
+                                    onTriggerSync = { viewModel.triggerCloudSync() },
                                     searchQuery = searchQuery,
                                     feeFilter = feeFilter,
                                     onSearchChange = { viewModel.setSearchQuery(it) },
