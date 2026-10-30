@@ -178,6 +178,54 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
+    fun realRegistrationFlowUploadsStudentAndInitialCardForSecondDevice() = runBlocking {
+        val adminEmail = "admin_registration_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
+        signInAs(adminEmail, "ADMIN")
+        val backendA = FirestoreCloudBackend(firestore, auth, schoolId)
+        val repositoryA = RoomStudentRepository(deviceADatabase, remoteCloudDataSource = backendA)
+        repositoryA.initialize()
+
+        val student = Student(
+            id = "STU-REAL-FLOW-${UUID.randomUUID().toString().take(8)}",
+            studentNumber = "LTC-2026-5533",
+            firstName = "Martha",
+            lastName = "Auma",
+            gradeClass = "Senior 5",
+            isDayScholar = true,
+            dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+            feesStatus = FeeStatus.CLEARED,
+            outstandingAmount = 0.0,
+            accessStatus = AccessStatus.APPROVED
+        )
+
+        val registration = repositoryA.addStudent(student)
+        assertTrue("Local registration should complete: ${registration.exceptionOrNull()}", registration.isSuccess)
+
+        val cloudStudent = firestore.collection("schools").document(schoolId)
+            .collection("students").document(student.id).get().await()
+        assertTrue("The real registration flow must upload the student document", cloudStudent.exists())
+
+        val cloudCards = firestore.collection("schools").document(schoolId)
+            .collection("cards").whereEqualTo("studentId", student.id).get().await()
+        assertEquals("Registration must upload exactly one initial card", 1, cloudCards.size())
+
+        signInAs("gate_registration_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "GATE_OFFICER")
+        val backendB = FirestoreCloudBackend(firestore, auth, schoolId)
+        val managerB = SyncManager(deviceBDatabase, backendB)
+        val syncResult = managerB.syncNow()
+        assertTrue("Second device must pull the registered student and card: ${syncResult.exceptionOrNull()}", syncResult.isSuccess)
+
+        assertNotNull(
+            "Second device must cache the student from Firestore",
+            deviceBDatabase.studentDao().getStudentById(student.id)
+        )
+        assertNotNull(
+            "Second device must cache the initial ID card from Firestore",
+            deviceBDatabase.cardDao().getCardById(cloudCards.documents.single().id)
+        )
+    }
+
+    @Test
     fun operationalRecordsUploadedOnOneDeviceArePulledToAnother() = runBlocking {
         val adminEmail = "admin_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
         signInAs(adminEmail, "ADMIN")
