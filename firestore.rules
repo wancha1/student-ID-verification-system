@@ -186,7 +186,7 @@ service cloud.firestore {
                          isValidId(attId) &&
                          request.resource.data.keys().hasAll(['id', 'studentId', 'subject', 'status', 'timestamp']) &&
                          !exists(/databases/$(database)/documents/schools/$(schoolId)/attendance/$(attId));
-        allow update: if isTeacher(schoolId) &&
+        allow update: if isTeacherOperator(schoolId) &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'auditNote', 'syncedAt']);
         allow delete: if false;
       }
