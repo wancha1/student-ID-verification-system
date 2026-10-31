@@ -33,9 +33,9 @@ Do not restore local self-provisioning or client-side staff document creation. D
 }
 ```
 
-3. Grant finance access only when explicitly approved by school leadership. Set `hasExplicitFinanceAccess: true` only for an administrator who has been authorized to perform finance operations.
+3. Version 1 does not include finance permissions. Do not add finance flags or legacy finance roles to Version 1 staff profiles.
 4. Sign in through the Android app. The app will reject the account if the staff document is absent, inactive, or has an unsupported role.
-5. Provision subsequent staff the same way with least-privilege roles such as `BURSAR`, `GATE_OFFICER`, `MEAL_STAFF`, `TEACHER`, or `EXAM_STAFF`.
+5. Provision subsequent staff the same way with least-privilege roles using only `ADMIN`, `HEAD_TEACHER`, `GATE_OFFICER`, or `MEAL_STAFF`.
 
 ## Deactivate a staff member
 
