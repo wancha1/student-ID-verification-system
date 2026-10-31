@@ -75,9 +75,7 @@ class FirebaseStaffAuthenticator {
                 email = signedInUser.email ?: email.trim(),
                 displayName = name,
                 role = role,
-                hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
-                    (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
-                        staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
+                hasExplicitFinanceAccess = false
             )
         } catch (error: SecurityException) {
             // Explicitly invalid membership must end this local Firebase session.
@@ -148,20 +146,15 @@ class FirebaseStaffAuthenticator {
             email = signedInUser.email.orEmpty(),
             displayName = name,
             role = role,
-            hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
-                (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
-                    staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
+            hasExplicitFinanceAccess = false
         )
     }
 
     private fun mapRole(role: String): UserRole? = when (role) {
         "ADMIN" -> UserRole.ADMINISTRATOR
         "HEAD_TEACHER" -> UserRole.HEAD_TEACHER_MANAGEMENT
-        "BURSAR" -> UserRole.BURSAR_FINANCE
-        "GATE_OFFICER", "SECURITY_HEAD" -> UserRole.GATE_STAFF
-        "MATRON_PATRON", "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
-        "DIRECTOR_OF_STUDIES", "TEACHER" -> UserRole.TEACHERS
-        "EXAM_STAFF" -> UserRole.EXAMINATION_STAFF
+        "GATE_OFFICER" -> UserRole.GATE_STAFF
+        "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
         else -> null
     }
 
