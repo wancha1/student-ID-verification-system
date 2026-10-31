@@ -109,8 +109,6 @@ fun AdminDashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val totalStudents = allStudents.size
-    val clearedCount = allStudents.count { it.feesStatus == FeeStatus.CLEARED }
-    val outstandingCount = allStudents.count { it.feesStatus == FeeStatus.OUTSTANDING }
     val totalScans = scanLogs.size
 
     val roleTheme = LocalRoleTheme.current
@@ -290,37 +288,15 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // KPI Summary Cards
+            // Version 1 registry KPI: student enrolment only.
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Total
-                    KpiCard(
-                        title = "TOTAL",
-                        count = totalStudents.toString(),
-                        color = MaterialTheme.colorScheme.primary,
-                        bgColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        modifier = Modifier.weight(1f)
-                    )
-                    // Cleared
-                    KpiCard(
-                        title = "CLEARED",
-                        count = clearedCount.toString(),
-                        color = ApprovedGreenDark,
-                        bgColor = ApprovedGreenLight,
-                        modifier = Modifier.weight(1f)
-                    )
-                    // Outstanding
-                    KpiCard(
-                        title = "OUTSTANDING",
-                        count = outstandingCount.toString(),
-                        color = RejectedRedDark,
-                        bgColor = RejectedRedLight,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                KpiCard(
+                    title = "REGISTERED STUDENTS",
+                    count = totalStudents.toString(),
+                    color = MaterialTheme.colorScheme.primary,
+                    bgColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -427,43 +403,14 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(12.dp)) }
 
-            // Filter Chips
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = feeFilter == FeeFilter.ALL,
-                        onClick = { onFilterChange(FeeFilter.ALL) },
-                        label = { Text("All ($totalStudents)") },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("filter_all")
-                    )
-                    FilterChip(
-                        selected = feeFilter == FeeFilter.CLEARED,
-                        onClick = { onFilterChange(FeeFilter.CLEARED) },
-                        label = { Text("Cleared ($clearedCount)") },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ApprovedGreenLight,
-                            selectedLabelColor = ApprovedGreenDark
-                        ),
-                        modifier = Modifier.testTag("filter_cleared")
-                    )
-                    FilterChip(
-                        selected = feeFilter == FeeFilter.OUTSTANDING,
-                        onClick = { onFilterChange(FeeFilter.OUTSTANDING) },
-                        label = { Text("Outstanding ($outstandingCount)") },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = RejectedRedLight,
-                            selectedLabelColor = RejectedRedDark
-                        ),
-                        modifier = Modifier.testTag("filter_outstanding")
-                    )
-                }
+                Text(
+                    text = "STUDENT DIRECTORY",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -538,8 +485,6 @@ fun AdminDashboardScreen(
                 }
             } else {
                 items(filteredStudents, key = { it.id }) { student ->
-                    val isCleared = student.feesStatus == FeeStatus.CLEARED
-
                     Card(
                         onClick = { onSelectStudent(student.id) },
                         shape = RoundedCornerShape(16.dp),
