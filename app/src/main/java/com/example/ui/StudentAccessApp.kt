@@ -483,6 +483,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_multi_export")
                                     )
+                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.GATE_STAFF)) {
                                     DropdownMenuItem(
                                         text = { Text("Gate Access Logs") },
                                         leadingIcon = {
@@ -490,6 +491,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.History,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             showLogsScreen = true
@@ -499,6 +501,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_logs")
                                     )
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Guardian WhatsApp Alerts") },
                                         leadingIcon = {
@@ -506,6 +509,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.Notifications,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             showGuardianAlertsScreen = true
@@ -515,6 +519,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_alerts")
                                     )
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Exeat & Gate Leave Passes") },
                                         leadingIcon = {
@@ -522,6 +527,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.AdminPanelSettings,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             showExeatScreen = true
@@ -531,6 +537,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_exeats")
                                     )
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Batch ID Badges Studio") },
                                         leadingIcon = {
@@ -538,6 +545,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.Badge,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             showBatchPrintDialog = true
@@ -545,6 +553,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_batch_print")
                                     )
+                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.GATE_STAFF)) {
                                     DropdownMenuItem(
                                         text = { Text("Export Gate Logs (CSV)") },
                                         leadingIcon = {
@@ -552,6 +561,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.FileDownload,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             viewModel.exportGateLogsCsv(context)
@@ -559,6 +569,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_export_csv")
                                     )
+                                    if (false) {
                                     DropdownMenuItem(
                                         text = { Text("Share Attendance Summary") },
                                         leadingIcon = {
@@ -566,6 +577,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.Assessment,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             viewModel.exportAttendanceSummaryReport(context)
@@ -587,6 +599,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_trigger_sync")
                                     )
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Clear Gate Logs") },
                                         leadingIcon = {
@@ -594,6 +607,7 @@ fun StudentAccessApp(
                                                 imageVector = Icons.Default.History,
                                                 contentDescription = null
                                             )
+                                    }
                                         },
                                         onClick = {
                                             viewModel.clearLogs()
