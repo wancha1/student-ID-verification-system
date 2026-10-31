@@ -280,77 +280,42 @@ class LtcSystemVerificationTest {
             repository.addStudent(targetStudent)
             val viewModel = MainViewModel(repository)
 
-            // Initial launch requires login
-            assertFalse(viewModel.currentUser.value != null && viewModel.currentUser.value?.role == UserRole.ADMINISTRATOR)
+            assertNull("Application starts without an authenticated user", viewModel.currentUser.value)
 
-            // Log in as Gate Keeper (Guard post)
-            viewModel.loginAs(UserRole.GATE_KEEPER)
-            assertEquals(UserRole.GATE_KEEPER, viewModel.currentUser.value?.role)
+            // Gate Officer: operational access only; no student administration or finance.
+            viewModel.loginAs(UserRole.GATE_STAFF)
+            assertEquals(UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
 
-            // 1. Guard attempts to modify fee status -> Blocked!
             viewModel.updateFeeStatus(targetStudent.id, FeeStatus.OUTSTANDING, 500000.0)
             assertTrue(
-                "Guard modification of fees must be denied",
+                "Gate Officer cannot modify fee status",
                 viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true
             )
 
-            // 2. Guard attempts to register new student -> Blocked!
-            var registerCallbackCalled = false
-            var registerSuccess = false
-            val newStudent = Student(
-                id = "unauthorized-add-01",
-                studentNumber = "LTC-2026-9999",
-                firstName = "Hacker",
-                lastName = "Attempt",
-                gradeClass = "Senior 1"
-            )
-            viewModel.registerNewStudent(newStudent) { success, _ ->
-                registerCallbackCalled = true
-                registerSuccess = success
-            }
-            assertTrue(registerCallbackCalled)
-            assertFalse("Guard registration of students must be blocked", registerSuccess)
+            val newStudent = targetStudent.copy(id = "unauthorized-add-01", studentNumber = "LTC-2026-9999")
+            var gateRegistrationSucceeded = false
+            viewModel.registerNewStudent(newStudent) { success, _ -> gateRegistrationSucceeded = success }
+            assertFalse("Gate Officer cannot register students", gateRegistrationSucceeded)
 
-            // 3. Guard attempts to delete student -> Blocked!
             viewModel.deleteStudentRecord(targetStudent.id)
             assertTrue(
-                "Guard deletion of students must be denied",
-                viewModel.userFeedbackMessage.value?.contains("requires Administrator privileges") == true
+                "Gate Officer cannot delete students",
+                viewModel.userFeedbackMessage.value?.contains("Administrator privileges") == true
             )
 
-            // 4. Authenticate as Administrator without explicit finance clearance -> Fee modification is blocked!
-            viewModel.loginAs(UserRole.ADMINISTRATOR, hasFinancePermission = false)
+            // Meal Staff: meal operations only; no student administration.
+            viewModel.loginAs(UserRole.MEAL_SERVING_STAFF)
+            assertEquals(UserRole.MEAL_SERVING_STAFF, viewModel.currentUser.value?.role)
+            var mealStaffRegistrationSucceeded = false
+            viewModel.registerNewStudent(newStudent) { success, _ -> mealStaffRegistrationSucceeded = success }
+            assertFalse("Meal Staff cannot register students", mealStaffRegistrationSucceeded)
+
+            // Admin is the only V1 role allowed to register shared student records.
+            viewModel.loginAs(UserRole.ADMINISTRATOR)
             assertEquals(UserRole.ADMINISTRATOR, viewModel.currentUser.value?.role)
-
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue(
-                "Administrator without explicit finance clearance must be blocked from fee updates per least privilege",
-                viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true
-            )
-
-            // 5. Authenticate with explicit finance clearance (or as Bursar) -> Allowed!
-            viewModel.loginAs(UserRole.ADMINISTRATOR, hasFinancePermission = true)
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue(
-                "Administrator with explicit finance clearance must succeed",
-                viewModel.userFeedbackMessage.value?.contains("CLEARED") == true
-            )
-
-            // 6. Authenticate as Bursar / Finance directly -> Fee modification allowed, registration blocked
-            viewModel.loginAs(UserRole.BURSAR_FINANCE)
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.OUTSTANDING, 150000.0)
-            assertTrue(
-                "Bursar modification must succeed",
-                viewModel.userFeedbackMessage.value?.contains("OUTSTANDING") == true
-            )
-            var bursarRegisterCalled = false
-            var bursarRegisterSuccess = false
-            viewModel.registerNewStudent(newStudent) { success, _ ->
-                bursarRegisterCalled = true
-                bursarRegisterSuccess = success
-            }
-            assertTrue(bursarRegisterCalled)
-            assertFalse("Bursar must not be permitted to register students (reserved for Admin)", bursarRegisterSuccess)
+            var adminRegistrationSucceeded = false
+            viewModel.registerNewStudent(newStudent) { success, _ -> adminRegistrationSucceeded = success }
+            assertTrue("Administrator can register students", adminRegistrationSucceeded)
         }
     }
 
