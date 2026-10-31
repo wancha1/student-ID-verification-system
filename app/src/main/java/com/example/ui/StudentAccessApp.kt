@@ -483,7 +483,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_multi_export")
                                     )
-                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.GATE_STAFF)) {
                                     DropdownMenuItem(
                                         text = { Text("Gate Access Logs") },
                                         leadingIcon = {
@@ -500,8 +499,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_logs")
                                     )
-                                    }
-                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Guardian WhatsApp Alerts") },
                                         leadingIcon = {
@@ -518,8 +515,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_alerts")
                                     )
-                                    }
-                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Exeat & Gate Leave Passes") },
                                         leadingIcon = {
@@ -536,8 +531,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_exeats")
                                     )
-                                    }
-                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Batch ID Badges Studio") },
                                         leadingIcon = {
@@ -552,8 +545,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_batch_print")
                                     )
-                                    }
-                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.GATE_STAFF)) {
                                     DropdownMenuItem(
                                         text = { Text("Export Gate Logs (CSV)") },
                                         leadingIcon = {
@@ -568,8 +559,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_export_csv")
                                     )
-                                    }
-                                    if (false) {
                                     DropdownMenuItem(
                                         text = { Text("Share Attendance Summary") },
                                         leadingIcon = {
@@ -584,7 +573,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_export_summary")
                                     )
-                                    }
                                     DropdownMenuItem(
                                         text = { Text("Sync with Central Server") },
                                         leadingIcon = {
@@ -599,7 +587,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_trigger_sync")
                                     )
-                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Clear Gate Logs") },
                                         leadingIcon = {
@@ -614,7 +601,6 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_clear_logs")
                                     )
-                                    }
                                     DropdownMenuItem(
                                         text = { Text("Lock Terminal / Log Out") },
                                         leadingIcon = {
