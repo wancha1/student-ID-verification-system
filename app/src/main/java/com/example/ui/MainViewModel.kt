@@ -68,6 +68,15 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
+    private companion object {
+        val VERSION_ONE_ROLES = setOf(
+            UserRole.ADMINISTRATOR,
+            UserRole.HEAD_TEACHER_MANAGEMENT,
+            UserRole.GATE_STAFF,
+            UserRole.MEAL_SERVING_STAFF
+        )
+    }
+
     // Current authenticated user. Firebase sessions are restored only after a fresh
     // server-side check of the staff membership document.
     private var sessionRestoreStarted = false
@@ -293,6 +302,11 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun loginAs(role: UserRole, customName: String? = null, hasFinancePermission: Boolean = false) {
+        if (role !in VERSION_ONE_ROLES) {
+            _currentUser.value = null
+            _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
+            return
+        }
         _currentUser.value = AuthUser(
             role = role,
             name = customName ?: role.defaultUsername,
@@ -312,6 +326,10 @@ class MainViewModel(
         pin: String,
         customName: String? = null
     ): Boolean {
+        if (role !in VERSION_ONE_ROLES) {
+            _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
+            return false
+        }
         if (!SecurityManager.isProvisioned(context)) {
             _userFeedbackMessage.value = "Login unavailable: this terminal has not been provisioned by an administrator."
             return false
