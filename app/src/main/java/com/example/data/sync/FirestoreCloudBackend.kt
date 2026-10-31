@@ -186,6 +186,10 @@ class FirestoreCloudBackend(
                     "updatedAt" to student.updatedAt,
                     "isDeleted" to student.isDeleted
                 )
+                // Remove legacy finance fields from the shared roster. Firestore
+                // merges preserve omitted fields, so explicit deletes are required.
+                data["feesStatus"] = FieldValue.delete()
+                data["outstandingAmount"] = FieldValue.delete()
                 if (canWritePrivate) {
                     // Move sensitive fields off the shared roster; never reintroduce them.
                     data["guardianName"] = FieldValue.delete()
