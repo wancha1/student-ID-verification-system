@@ -100,6 +100,8 @@ fun StudentDetailScreen(
     cards: List<StudentCard> = emptyList(),
     onBack: () -> Unit,
     onUpdateFeeStatus: (FeeStatus, Double) -> Unit,
+    canManageStudentRecords: Boolean = true,
+    canManageFees: Boolean = true,
     onUpdateStudentDetails: (Student) -> Unit,
     onDeleteStudent: (String) -> Unit,
     onReportCardLost: (studentId: String, cardId: String, reason: String) -> Unit = { _, _, _ -> },
@@ -199,7 +201,7 @@ fun StudentDetailScreen(
                         )
                     }
 
-                    IconButton(
+                    if (canManageStudentRecords) IconButton(
                         onClick = { showEditDialog = true },
                         modifier = Modifier.testTag("button_detail_edit_student")
                     ) {
@@ -210,7 +212,7 @@ fun StudentDetailScreen(
                         )
                     }
 
-                    IconButton(
+                    if (canManageStudentRecords) IconButton(
                         onClick = { showDeleteDialog = true },
                         modifier = Modifier.testTag("button_detail_delete_student")
                     ) {
@@ -227,7 +229,7 @@ fun StudentDetailScreen(
         item { Spacer(modifier = Modifier.height(16.dp)) }
 
         // STUDENT HEADER CARD
-        item {
+        if (canManageFees) item {
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -246,7 +248,7 @@ fun StudentDetailScreen(
                                 student = student,
                                 size = 96.dp
                             )
-                            IconButton(
+                            if (canManageStudentRecords) IconButton(
                                 onClick = {
                                     photoPickerLauncher.launch(
                                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
