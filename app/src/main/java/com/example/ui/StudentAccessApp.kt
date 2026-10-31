@@ -700,6 +700,7 @@ fun StudentAccessApp(
                                     ),
                                     modifier = Modifier.testTag("nav_item_students")
                                 )
+                                if (user.role == UserRole.ADMINISTRATOR) {
                                 NavigationBarItem(
                                     selected = showLogsScreen,
                                     onClick = {
@@ -746,6 +747,7 @@ fun StudentAccessApp(
                                         selectedIconColor = roleColor,
                                         selectedTextColor = roleColor
                                     ),
+                                }
                                     modifier = Modifier.testTag("nav_item_alerts")
                                 )
                             }
