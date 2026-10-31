@@ -69,6 +69,8 @@ import com.example.model.AuthUser
 import com.example.model.FeeStatus
 import com.example.model.ScanLog
 import com.example.model.Student
+import com.example.model.SyncInfo
+import com.example.model.SyncStatus
 import com.example.ui.FeeFilter
 import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.ApprovedGreen
@@ -102,11 +104,11 @@ fun AdminDashboardScreen(
     onViewExeatPasses: () -> Unit = {},
     onViewBatchPrint: () -> Unit = {},
     onExportLogsCsv: () -> Unit = {},
+    syncInfo: SyncInfo? = null,
+    onTriggerSync: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalStudents = allStudents.size
-    val clearedCount = allStudents.count { it.feesStatus == FeeStatus.CLEARED }
-    val outstandingCount = allStudents.count { it.feesStatus == FeeStatus.OUTSTANDING }
     val totalScans = scanLogs.size
 
     val roleTheme = LocalRoleTheme.current
@@ -167,7 +169,7 @@ fun AdminDashboardScreen(
                                     text = roleTheme.departmentTagline,
                                     color = GoldAccent,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     letterSpacing = 1.2.sp
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -178,7 +180,7 @@ fun AdminDashboardScreen(
                                     Text(
                                         text = roleTheme.stationBadge,
                                         color = roleTheme.badgeTextColor,
-                                        fontSize = 9.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                     )
@@ -203,19 +205,82 @@ fun AdminDashboardScreen(
                             )
                         }
 
-                        IconButton(
-                            onClick = onViewScanLogs,
-                            modifier = Modifier
-                                .testTag("button_admin_view_logs")
-                                .size(42.dp)
-                                .background(Color.White.copy(alpha = 0.08f), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Gate Activity Logs",
-                                tint = GoldAccent,
-                                modifier = Modifier.size(22.dp)
-                            )
+                        if (user.role == UserRole.ADMINISTRATOR) {
+                            IconButton(
+                                onClick = onViewScanLogs,
+                                modifier = Modifier
+                                    .testTag("button_admin_view_logs")
+                                    .size(42.dp)
+                                    .background(Color.White.copy(alpha = 0.08f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "Gate Activity Logs",
+                                    tint = GoldAccent,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(12.dp)) }
+
+            syncInfo?.let { info ->
+                item {
+                    val syncColor = when (info.status) {
+                        SyncStatus.SYNCED -> ApprovedGreen
+                        SyncStatus.SYNC_FAILED -> RejectedRed
+                        SyncStatus.OFFLINE -> Color(0xFFB7791F)
+                        SyncStatus.SYNCING -> SchoolPrimary
+                        SyncStatus.NEEDS_SYNC -> Color(0xFFB7791F)
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = syncColor.copy(alpha = 0.08f)),
+                        border = BorderStroke(1.dp, syncColor.copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = when (info.status) {
+                                            SyncStatus.SYNCED -> "Cloud sync is up to date"
+                                            SyncStatus.SYNCING -> "Synchronizing with school database…"
+                                            SyncStatus.NEEDS_SYNC -> "Changes waiting to sync"
+                                            SyncStatus.OFFLINE -> "Device is offline"
+                                            SyncStatus.SYNC_FAILED -> "Cloud synchronization failed"
+                                        },
+                                        color = syncColor,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = if (info.pendingLogsCount == 0) "No pending local changes"
+                                        else "${info.pendingLogsCount} pending local change(s)",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (info.status != SyncStatus.SYNCING) {
+                                    TextButton(onClick = onTriggerSync, enabled = info.isOnline) {
+                                        Text("Retry sync")
+                                    }
+                                }
+                            }
+                            info.errorMessage?.takeIf { it.isNotBlank() }?.let { error ->
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = error,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 }
@@ -223,100 +288,78 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // KPI Summary Cards
+            // Version 1 registry KPI: student enrolment only.
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Total
-                    KpiCard(
-                        title = "TOTAL",
-                        count = totalStudents.toString(),
-                        color = MaterialTheme.colorScheme.primary,
-                        bgColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        modifier = Modifier.weight(1f)
-                    )
-                    // Cleared
-                    KpiCard(
-                        title = "CLEARED",
-                        count = clearedCount.toString(),
-                        color = ApprovedGreenDark,
-                        bgColor = ApprovedGreenLight,
-                        modifier = Modifier.weight(1f)
-                    )
-                    // Outstanding
-                    KpiCard(
-                        title = "OUTSTANDING",
-                        count = outstandingCount.toString(),
-                        color = RejectedRedDark,
-                        bgColor = RejectedRedLight,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-
-            // Gate Analytics & Live Metrics
-            item {
-                GateAnalyticsCard(
-                    students = allStudents,
-                    scanLogs = scanLogs
+                KpiCard(
+                    title = "REGISTERED STUDENTS",
+                    count = totalStudents.toString(),
+                    color = MaterialTheme.colorScheme.primary,
+                    bgColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // Quick access: two comfortable rows instead of four cramped
-            // touch targets, especially on narrow Android phones.
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "QUICK ACCESS",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.6.sp,
-                        modifier = Modifier.padding(start = 2.dp)
+            // Gate analytics and operational shortcuts are restricted to the Administrator.
+            if (user.role == UserRole.ADMINISTRATOR) {
+                item {
+                    GateAnalyticsCard(
+                        students = allStudents,
+                        scanLogs = scanLogs
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        HubButton(
-                            icon = Icons.Default.History,
-                            title = "Gate Logs",
-                            onClick = onViewScanLogs,
-                            testTag = "button_hub_gate_logs",
-                            modifier = Modifier.weight(1f)
+                }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "QUICK ACCESS",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.6.sp,
+                            modifier = Modifier.padding(start = 2.dp)
                         )
-                        HubButton(
-                            icon = Icons.Default.Notifications,
-                            title = "SMS Alerts",
-                            onClick = onViewGuardianAlerts,
-                            testTag = "button_hub_sms_alerts",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        HubButton(
-                            icon = Icons.Default.ConfirmationNumber,
-                            title = "Exeat Passes",
-                            onClick = onViewExeatPasses,
-                            testTag = "button_hub_exeat_passes",
-                            modifier = Modifier.weight(1f)
-                        )
-                        HubButton(
-                            icon = Icons.Default.Badge,
-                            title = "Print Badges",
-                            onClick = onViewBatchPrint,
-                            testTag = "button_hub_print_badges",
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            HubButton(
+                                icon = Icons.Default.History,
+                                title = "Gate Logs",
+                                onClick = onViewScanLogs,
+                                testTag = "button_hub_gate_logs",
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubButton(
+                                icon = Icons.Default.Notifications,
+                                title = "SMS Alerts",
+                                onClick = onViewGuardianAlerts,
+                                testTag = "button_hub_sms_alerts",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            HubButton(
+                                icon = Icons.Default.ConfirmationNumber,
+                                title = "Exeat Passes",
+                                onClick = onViewExeatPasses,
+                                testTag = "button_hub_exeat_passes",
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubButton(
+                                icon = Icons.Default.Badge,
+                                title = "Print Badges",
+                                onClick = onViewBatchPrint,
+                                testTag = "button_hub_print_badges",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -360,43 +403,14 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(12.dp)) }
 
-            // Filter Chips
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = feeFilter == FeeFilter.ALL,
-                        onClick = { onFilterChange(FeeFilter.ALL) },
-                        label = { Text("All ($totalStudents)") },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("filter_all")
-                    )
-                    FilterChip(
-                        selected = feeFilter == FeeFilter.CLEARED,
-                        onClick = { onFilterChange(FeeFilter.CLEARED) },
-                        label = { Text("Cleared ($clearedCount)") },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ApprovedGreenLight,
-                            selectedLabelColor = ApprovedGreenDark
-                        ),
-                        modifier = Modifier.testTag("filter_cleared")
-                    )
-                    FilterChip(
-                        selected = feeFilter == FeeFilter.OUTSTANDING,
-                        onClick = { onFilterChange(FeeFilter.OUTSTANDING) },
-                        label = { Text("Outstanding ($outstandingCount)") },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = RejectedRedLight,
-                            selectedLabelColor = RejectedRedDark
-                        ),
-                        modifier = Modifier.testTag("filter_outstanding")
-                    )
-                }
+                Text(
+                    text = "STUDENT DIRECTORY",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -472,7 +486,6 @@ fun AdminDashboardScreen(
             } else {
                 items(filteredStudents, key = { it.id }) { student ->
                     val isCleared = student.feesStatus == FeeStatus.CLEARED
-
                     Card(
                         onClick = { onSelectStudent(student.id) },
                         shape = RoundedCornerShape(16.dp),
@@ -522,7 +535,8 @@ fun AdminDashboardScreen(
                                     )
                                 }
 
-                                // Quick 1-tap Fee Status Switcher Button
+                                // Fee changes are restricted to the Bursar role.
+                                if (user.role == UserRole.BURSAR_FINANCE) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = if (isCleared) ApprovedGreenLight else RejectedRedLight,
@@ -551,12 +565,12 @@ fun AdminDashboardScreen(
                                             Text(
                                                 text = if (isCleared) "CLEARED" else "OUTSTANDING",
                                                 fontWeight = FontWeight.Black,
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 color = if (isCleared) ApprovedGreenText else RejectedRedText
                                             )
                                             Text(
                                                 text = "Tap to flip",
-                                                fontSize = 8.sp,
+                                                fontSize = 11.sp,
                                                 color = if (isCleared) ApprovedGreenDark else RejectedRedDark
                                             )
                                         }
@@ -564,7 +578,10 @@ fun AdminDashboardScreen(
                                 }
                             }
 
-                            // Secondary Quick Actions Row
+                                }
+
+                            // Registry actions are restricted to the Administrator role.
+                            if (user.role == UserRole.ADMINISTRATOR) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -603,8 +620,10 @@ fun AdminDashboardScreen(
                 }
             }
         }
+        }
 
-        // Floating Action Button to Register New Student
+        // Only the Administrator can register students.
+        if (user.role == UserRole.ADMINISTRATOR) {
         ExtendedFloatingActionButton(
             onClick = { showAddStudentDialog = true },
             icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
@@ -616,10 +635,11 @@ fun AdminDashboardScreen(
                 .padding(20.dp)
                 .testTag("fab_register_student")
         )
+        }
     }
 
     // Register Student Modal
-    if (showAddStudentDialog) {
+    if (user.role == UserRole.ADMINISTRATOR && showAddStudentDialog) {
         StudentFormDialog(
             initialStudent = null,
             onDismiss = { showAddStudentDialog = false },
@@ -631,7 +651,7 @@ fun AdminDashboardScreen(
     }
 
     // Edit Student Modal
-    if (studentToEdit != null) {
+    if (user.role == UserRole.ADMINISTRATOR && studentToEdit != null) {
         StudentFormDialog(
             initialStudent = studentToEdit,
             onDismiss = { studentToEdit = null },
@@ -643,7 +663,7 @@ fun AdminDashboardScreen(
     }
 
     // Delete Confirmation Dialog
-    if (studentToDelete != null) {
+    if (user.role == UserRole.ADMINISTRATOR && studentToDelete != null) {
         val s = studentToDelete!!
         AlertDialog(
             onDismissRequest = { studentToDelete = null },
@@ -696,7 +716,7 @@ private fun KpiCard(
         ) {
             Text(
                 text = title,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 letterSpacing = 0.5.sp

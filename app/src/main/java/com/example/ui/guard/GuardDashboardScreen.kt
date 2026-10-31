@@ -206,7 +206,7 @@ fun GuardDashboardScreen(
                                 Text(
                                     text = roleTheme.stationBadge,
                                     color = Color.White,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Black,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                 )

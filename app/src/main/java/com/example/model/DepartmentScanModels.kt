@@ -18,19 +18,19 @@ enum class ScanDepartment(
     MEALS(
         title = "Dining Hall Meals",
         subtitle = "Food Service • Lunch & Supper Distribution",
-        requiredPermission = StaffPermission.SERVE_MEALS,
+        requiredPermission = StaffPermission.RECORD_MEALS,
         badge = "MEALS"
     ),
     EXAMINATIONS(
         title = "Examination Hall",
         subtitle = "Hall Entry Clearance • Policy & Authorized Exceptions",
-        requiredPermission = StaffPermission.EXAM_CLEARANCE,
+        requiredPermission = StaffPermission.MANAGE_EXAM_CLEARANCE,
         badge = "EXAMS"
     ),
     ATTENDANCE(
         title = "Classroom Attendance",
         subtitle = "Class Roster • Subject Lesson Roll-Call",
-        requiredPermission = StaffPermission.VIEW_AUDIT_LOGS,
+        requiredPermission = StaffPermission.MARK_ATTENDANCE,
         badge = "ATTENDANCE"
     );
 
@@ -40,7 +40,7 @@ enum class ScanDepartment(
             UserRole.MEAL_SERVING_STAFF -> MEALS
             UserRole.EXAMINATION_STAFF -> EXAMINATIONS
             UserRole.TEACHERS -> ATTENDANCE
-            UserRole.BURSAR_FINANCE -> EXAMINATIONS
+            UserRole.BURSAR_FINANCE -> GATE
             UserRole.HEAD_TEACHER_MANAGEMENT -> GATE
             UserRole.ADMINISTRATOR -> GATE
         }

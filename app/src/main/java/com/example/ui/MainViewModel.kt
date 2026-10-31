@@ -68,6 +68,13 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
+    private val VERSION_ONE_ROLES = setOf(
+            UserRole.ADMINISTRATOR,
+            UserRole.HEAD_TEACHER_MANAGEMENT,
+            UserRole.GATE_STAFF,
+        UserRole.MEAL_SERVING_STAFF
+    )
+
     // Current authenticated user. Firebase sessions are restored only after a fresh
     // server-side check of the staff membership document.
     private var sessionRestoreStarted = false
@@ -84,7 +91,11 @@ class MainViewModel(
                 }
             } catch (_: Exception) {
                 // Fail closed: do not grant a role when server validation fails.
-                // Firebase network failures leave the login screen available for retry.
+                // Keep the login screen available if server validation fails.
+            } finally {
+                // Always release the guard, including when there is no cached Firebase
+                // user or validation fails. A later foreground/start event can retry.
+                sessionRestoreStarted = false
             }
         }
     }
@@ -289,6 +300,11 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun loginAs(role: UserRole, customName: String? = null, hasFinancePermission: Boolean = false) {
+        if (role !in VERSION_ONE_ROLES) {
+            _currentUser.value = null
+            _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
+            return
+        }
         _currentUser.value = AuthUser(
             role = role,
             name = customName ?: role.defaultUsername,
@@ -308,6 +324,10 @@ class MainViewModel(
         pin: String,
         customName: String? = null
     ): Boolean {
+        if (role !in VERSION_ONE_ROLES) {
+            _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
+            return false
+        }
         if (!SecurityManager.isProvisioned(context)) {
             _userFeedbackMessage.value = "Login unavailable: this terminal has not been provisioned by an administrator."
             return false
@@ -620,13 +640,33 @@ class MainViewModel(
         }
         viewModelScope.launch {
             val result = repository.addStudent(student)
-            if (result.isSuccess) {
-                _userFeedbackMessage.value = "Student ${student.fullName} (${student.studentNumber}) and Active ID Card created successfully!"
-                onComplete(true, "Student registered successfully")
-            } else {
+            if (result.isFailure) {
                 val msg = result.exceptionOrNull()?.message ?: "Failed to add student"
                 _userFeedbackMessage.value = msg
                 onComplete(false, msg)
+                return@launch
+            }
+
+            // A successful Room write is not proof that Firestore accepted the record.
+            // Attempt a sync before claiming cloud registration, and keep the local
+            // record queued for retry if network/rules reject the upload.
+            val syncResult = repository.syncWithCloud()
+            if (syncResult.isSuccess) {
+                val msg = "Student ${student.fullName} (${student.studentNumber}) and active ID card are saved and synchronized."
+                _userFeedbackMessage.value = msg
+                onComplete(true, msg)
+            } else {
+                val detail = syncResult.exceptionOrNull()?.localizedMessage
+                    ?.takeIf { it.isNotBlank() }
+                val msg = buildString {
+                    append("Student ${student.fullName} (${student.studentNumber}) is saved on this device, but cloud sync is pending. ")
+                    append("It may not appear on other phones until synchronization succeeds.")
+                    if (detail != null) append(" Details: ").append(detail)
+                }
+                _userFeedbackMessage.value = msg
+                // Local registration succeeded; preserve the record and allow the UI
+                // to close the form while clearly disclosing that cloud sync is pending.
+                onComplete(true, msg)
             }
         }
     }
@@ -863,23 +903,13 @@ class MainViewModel(
         }
     }
 
-    fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String) {
-        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Dispatching guardian SMS alerts")) return
-        viewModelScope.launch {
-            val notif = GuardianNotification(
-                studentId = "manual-dispatch",
-                studentNumber = "MANUAL",
-                studentName = studentName,
-                guardianName = "Guardian of $studentName",
-                guardianPhone = guardianPhone,
-                type = NotificationType.ARRIVAL,
-                message = message,
-                timestamp = System.currentTimeMillis(),
-                isDelivered = true
-            )
-            repository.sendGuardianNotification(notif)
-            _userFeedbackMessage.value = "SMS Alert dispatched to $guardianPhone!"
-        }
+    fun sendCustomGuardianAlert(studentName: String, guardianPhone: String, message: String): Boolean {
+        if (!requirePermission(StaffPermission.MANAGE_STUDENTS, "Preparing guardian WhatsApp messages")) return false
+        // This only authorizes the UI to open WhatsApp with a prefilled message.
+        // It does not send the message or prove delivery.
+        _userFeedbackMessage.value =
+            "WhatsApp message prepared for $guardianPhone. Review it in WhatsApp and tap Send; LTC cannot confirm delivery."
+        return true
     }
 
     fun exportGateLogsCsv(context: Context) {

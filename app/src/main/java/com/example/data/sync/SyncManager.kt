@@ -56,8 +56,6 @@ class SyncManager(
     private suspend fun calculatePendingCount(): Int {
         return database.scanLogDao().getUnsyncedLogsCount() +
                 database.mealRecordDao().getUnsynced().size +
-                database.attendanceRecordDao().getUnsynced().size +
-                database.examExceptionDao().getUnsynced().size +
                 database.pendingChangeDao().getPendingCount()
     }
 
@@ -118,24 +116,8 @@ class SyncManager(
                     }
                 }
 
-                // 3. Upload unsynced classroom attendance records
-                val unsyncedAttendance = database.attendanceRecordDao().getUnsynced()
-                if (unsyncedAttendance.isNotEmpty()) {
-                    val attResult = remoteCloudDataSource.pushAttendanceRecords(unsyncedAttendance)
-                    if (attResult.isSuccess) {
-                        database.attendanceRecordDao().markSynced(unsyncedAttendance.map { it.id })
-                        logsUploadedCount += unsyncedAttendance.size
-                    }
-                }
-
-                // 4. Upload unsynced examination exceptions
-                val unsyncedExceptions = database.examExceptionDao().getUnsynced()
-                if (unsyncedExceptions.isNotEmpty()) {
-                    val exResult = remoteCloudDataSource.pushExamExceptions(unsyncedExceptions)
-                    if (exResult.isSuccess) {
-                        database.examExceptionDao().markSynced(unsyncedExceptions.map { it.id })
-                    }
-                }
+                // Version 1 does not synchronize attendance or examination records.
+                // These modules are intentionally disabled until a later release.
 
                 // Dispatch local outbox mutations before pulling remote state, so a remote
                 // snapshot cannot overwrite a local change that has not yet been uploaded.
@@ -225,54 +207,6 @@ class SyncManager(
                     }
                 }
 
-                val remoteAttendanceResult = remoteCloudDataSource.fetchAllRemoteAttendanceRecords()
-                if (remoteAttendanceResult.isFailure) {
-                    throw remoteAttendanceResult.exceptionOrNull()
-                        ?: IllegalStateException("Failed to fetch remote attendance records")
-                }
-                for (remoteAttendance in remoteAttendanceResult.getOrThrow()) {
-                    val local = database.attendanceRecordDao().findAttendance(
-                        remoteAttendance.studentId, remoteAttendance.lessonDate, remoteAttendance.sessionName
-                    )
-                    if (local == null || remoteAttendance.timestamp >= local.timestamp) {
-                        database.attendanceRecordDao().insertOrUpdate(
-                            remoteAttendance.copy(
-                                studentNumber = remoteAttendance.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
-                                studentName = remoteAttendance.studentName.ifBlank { local?.studentName.orEmpty() },
-                                gradeClass = remoteAttendance.gradeClass.ifBlank { local?.gradeClass.orEmpty() },
-                                isSyncedToCloud = true
-                            )
-                        )
-                    }
-                }
-
-                val remoteExceptionsResult = remoteCloudDataSource.fetchAllRemoteExamExceptions()
-                if (remoteExceptionsResult.isFailure) {
-                    throw remoteExceptionsResult.exceptionOrNull()
-                        ?: IllegalStateException("Failed to fetch remote exam exceptions")
-                }
-                for (remoteException in remoteExceptionsResult.getOrThrow()) {
-                    val local = database.examExceptionDao().findException(
-                        remoteException.studentId, remoteException.examCode
-                    )
-                    val remoteVersion = maxOf(remoteException.requestedAt, remoteException.approvedAt ?: 0L)
-                    val localVersion = local?.let { maxOf(it.requestedAt, it.approvedAt ?: 0L) } ?: Long.MIN_VALUE
-                    if (local == null || remoteVersion >= localVersion) {
-                        database.examExceptionDao().insertOrUpdate(
-                            remoteException.copy(
-                                studentNumber = remoteException.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
-                                studentName = remoteException.studentName.ifBlank { local?.studentName.orEmpty() },
-                                requestedByBursar = remoteException.requestedByBursar.ifBlank { local?.requestedByBursar.orEmpty() },
-                                recommendationReason = remoteException.recommendationReason.ifBlank { local?.recommendationReason.orEmpty() },
-                                isApproved = remoteException.isApproved || (local?.isApproved == true),
-                                approvedByHeadTeacher = remoteException.approvedByHeadTeacher ?: local?.approvedByHeadTeacher,
-                                approvedAt = remoteException.approvedAt ?: local?.approvedAt,
-                                isSyncedToCloud = true
-                            )
-                        )
-                    }
-                }
-
                 val now = System.currentTimeMillis()
 
                 // 8. Only advance the sync watermark when all local outbox/log records
@@ -290,7 +224,15 @@ class SyncManager(
                         errorMessage = null
                     )
                 } else {
-                    val message = "$pendingAfter local change(s) remain unsynchronized; they will be retried."
+                    // Surface the actual first failed outbox item. A generic pending count
+                    // made permission, configuration, and connectivity failures impossible
+                    // to distinguish during on-device troubleshooting.
+                    val firstFailure = database.pendingChangeDao().getFailedChanges().firstOrNull()
+                    val failureDetail = firstFailure?.let { change ->
+                        "${change.entityType} ${change.operationType} (${change.recordId}): ${change.lastError ?: "Remote write failed"}"
+                    }
+                    val message = failureDetail
+                        ?: "$pendingAfter local change(s) remain unsynchronized; they will be retried."
                     _syncInfo.value = _syncInfo.value.copy(
                         status = SyncStatus.SYNC_FAILED,
                         pendingLogsCount = pendingAfter,

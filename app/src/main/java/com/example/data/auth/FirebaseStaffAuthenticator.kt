@@ -22,6 +22,8 @@ data class AuthenticatedStaff(
 )
 
 class FirebaseStaffAuthenticator {
+    private class InvalidFirebaseConfigurationException(message: String) : IllegalStateException(message)
+
     suspend fun signIn(context: Context, email: String, password: String): AuthenticatedStaff {
         require(email.isNotBlank()) { "Enter your staff email address." }
         require(password.isNotBlank()) { "Enter your password." }
@@ -36,7 +38,7 @@ class FirebaseStaffAuthenticator {
             // The school owner confirmed this exact Firestore database for LTC.
             // Fail closed if local configuration drifts to any other database.
             if (databaseId != AUTHORIZED_FIRESTORE_DATABASE_ID) {
-                throw IllegalStateException(
+                throw InvalidFirebaseConfigurationException(
                     "LTC Firebase database configuration does not match the authorized school database."
                 )
             }
@@ -73,13 +75,20 @@ class FirebaseStaffAuthenticator {
                 email = signedInUser.email ?: email.trim(),
                 displayName = name,
                 role = role,
-                hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
-                    (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
-                        staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
+                hasExplicitFinanceAccess = false
             )
-        } catch (error: Exception) {
-            // Never leave an authenticated but unprovisioned account active in the client.
+        } catch (error: SecurityException) {
+            // Explicitly invalid membership must end this local Firebase session.
             auth.signOut()
+            throw error
+        } catch (error: InvalidFirebaseConfigurationException) {
+            // A known database configuration mismatch is not recoverable by retrying this session.
+            auth.signOut()
+            throw error
+        } catch (error: Exception) {
+            // Firestore/network failures are not proof that the account is unprovisioned.
+            // Keep this device's Firebase session so the user can retry server validation.
+            // No app role is granted unless the trusted staff document validates.
             throw error
         }
     }
@@ -137,20 +146,15 @@ class FirebaseStaffAuthenticator {
             email = signedInUser.email.orEmpty(),
             displayName = name,
             role = role,
-            hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE ||
-                (role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT) &&
-                    staffSnapshot.getBoolean("hasExplicitFinanceAccess") == true)
+            hasExplicitFinanceAccess = false
         )
     }
 
     private fun mapRole(role: String): UserRole? = when (role) {
         "ADMIN" -> UserRole.ADMINISTRATOR
         "HEAD_TEACHER" -> UserRole.HEAD_TEACHER_MANAGEMENT
-        "BURSAR" -> UserRole.BURSAR_FINANCE
-        "GATE_OFFICER", "SECURITY_HEAD" -> UserRole.GATE_STAFF
-        "MATRON_PATRON", "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
-        "DIRECTOR_OF_STUDIES", "TEACHER" -> UserRole.TEACHERS
-        "EXAM_STAFF" -> UserRole.EXAMINATION_STAFF
+        "GATE_OFFICER" -> UserRole.GATE_STAFF
+        "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
         else -> null
     }
 

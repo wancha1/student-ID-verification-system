@@ -81,7 +81,8 @@ fun MealsMasterScreen(
     onManualServe: (studentNumber: String) -> Unit,
     onDismissScanOutcome: () -> Unit,
     onExport: (format: ExportFormat) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     var showExportDialog by remember { mutableStateOf(false) }
     var manualInput by remember { mutableStateOf("") }
@@ -151,7 +152,7 @@ fun MealsMasterScreen(
                                     Text(
                                         text = roleTheme.stationBadge,
                                         color = roleTheme.badgeTextColor,
-                                        fontSize = 8.5.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                     )
@@ -165,8 +166,8 @@ fun MealsMasterScreen(
                         }
                     }
 
-                    // Action Buttons: Scan QR & Export
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Leadership review is read-only: hide serving and scan controls.
+                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = onOpenScanner,
                             modifier = Modifier.testTag("button_meals_scan_qr"),
@@ -222,7 +223,7 @@ fun MealsMasterScreen(
                             color = if (isSelected) Color(0xFFE11D48) else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onSelectMealType(type) }
+                                .then(if (readOnly) Modifier else Modifier.clickable { onSelectMealType(type) })
                                 .testTag("button_meal_session_${type.name.lowercase()}")
                         ) {
                             Column(
@@ -237,7 +238,7 @@ fun MealsMasterScreen(
                                 )
                                 Text(
                                     text = type.timeWindow,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                     color = if (isSelected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
                             }
@@ -274,6 +275,7 @@ fun MealsMasterScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                if (!readOnly) {
                 // Manual Student Entry Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -309,6 +311,8 @@ fun MealsMasterScreen(
                 }
             }
         }
+
+                }
 
         // Serving History Section
         Column(
@@ -494,7 +498,7 @@ private fun MealRecordRow(
                     text = "Served by ${record.serverName}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    fontSize = 10.sp
+                    fontSize = 11.sp
                 )
             }
 
@@ -506,7 +510,7 @@ private fun MealRecordRow(
                     Text(
                         text = record.mealType.label.uppercase(),
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFE11D48)
                     )

@@ -67,7 +67,8 @@ fun AttendanceMasterScreen(
     onOpenScanner: () -> Unit,
     onManualLookup: (String) -> Unit,
     onCorrectAttendance: (recordId: String, note: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     val subjects = listOf("Mathematics", "English Language", "Physics", "Chemistry", "Biology", "History", "Geography")
     val sessions = listOf("Morning Lesson 1", "Morning Lesson 2", "Mid-day Lesson 3", "Afternoon Lesson 4", "Evening Study")
@@ -75,6 +76,7 @@ fun AttendanceMasterScreen(
     var manualStudentNumber by remember { mutableStateOf("") }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -90,7 +92,7 @@ fun AttendanceMasterScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            if (!readOnly) FloatingActionButton(
                 onClick = onOpenScanner,
                 containerColor = SchoolPrimary,
                 contentColor = Color.White
@@ -117,7 +119,7 @@ fun AttendanceMasterScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(text = "ACADEMIC LESSON CONTEXT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SchoolPrimary)
+                    Text(text = "ACADEMIC LESSON CONTEXT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SchoolPrimary)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(text = "Subject: $selectedSubject", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -154,7 +156,7 @@ fun AttendanceMasterScreen(
             }
 
             // Quick manual entry
-            Row(
+            if (!readOnly) Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
@@ -262,9 +264,9 @@ private fun AttendanceRecordRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = record.studentName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(text = "${record.studentNumber} • ${record.gradeClass}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text = "${record.subject} • ${record.sessionName} @ $timeStr", fontSize = 11.sp, color = SchoolPrimary)
+                Text(text = "${record.subject} • ${record.sessionName} @ $timeStr", fontSize = 12.sp, color = SchoolPrimary)
                 if (record.isCorrection) {
-                    Text(text = "Corrected by ${record.correctedBy ?: "Teacher"}: ${record.notes}", fontSize = 11.sp, color = ApprovedGreenText)
+                    Text(text = "Corrected by ${record.correctedBy ?: "Teacher"}: ${record.notes}", fontSize = 12.sp, color = ApprovedGreenText)
                 }
             }
         }

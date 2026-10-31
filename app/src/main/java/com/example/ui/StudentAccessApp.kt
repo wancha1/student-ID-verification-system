@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,11 +59,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.model.FeeStatus
 import com.example.model.UserRole
 import com.example.ui.admin.AdminDashboardScreen
+import com.example.ui.admin.HeadTeacherDashboardScreen
 import com.example.ui.admin.AdminScanLogsScreen
 import com.example.ui.admin.BatchPrintIdCardsDialog
 import com.example.ui.admin.StudentDetailScreen
@@ -146,6 +151,9 @@ fun StudentAccessApp(
     var showLogsScreen by remember { mutableStateOf(false) }
     var showGuardianAlertsScreen by remember { mutableStateOf(false) }
     var showExeatScreen by remember { mutableStateOf(false) }
+    var showAttendanceScreen by remember { mutableStateOf(false) }
+    var showMealsScreen by remember { mutableStateOf(false) }
+    var showRequirementsScreen by remember { mutableStateOf(false) }
     var showBatchPrintDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
     var showRoleSwitchMenu by remember { mutableStateOf(false) }
@@ -160,10 +168,18 @@ fun StudentAccessApp(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Firebase Auth persists the credential; restore the app role only after
-    // MainViewModel verifies active staff membership against the Firestore server.
-    LaunchedEffect(Unit) {
+    // Firebase credentials persist per device. Revalidate staff membership on
+    // app start/resume, and retry after a transient server/network validation failure.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                viewModel.restoreFirebaseSession(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         viewModel.restoreFirebaseSession(context)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(userFeedbackMessage) {
@@ -190,7 +206,7 @@ fun StudentAccessApp(
             val roleIcon = roleTheme.icon
             val roleTitle = user.role.title
             val roleSubtitle = user.role.subtitle
-            val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showGuardianAlertsScreen || showExeatScreen || (selectedStudentDetail != null)
+            val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showGuardianAlertsScreen || showExeatScreen || showAttendanceScreen || showMealsScreen || showRequirementsScreen || (selectedStudentDetail != null)
 
             // Systematic Android Back Navigation Handling
             BackHandler(enabled = showAuthDialogForRole != null) {
@@ -214,6 +230,9 @@ fun StudentAccessApp(
             BackHandler(enabled = showExeatScreen) {
                 showExeatScreen = false
             }
+            BackHandler(enabled = showAttendanceScreen) { showAttendanceScreen = false }
+            BackHandler(enabled = showMealsScreen) { showMealsScreen = false }
+            BackHandler(enabled = showRequirementsScreen) { showRequirementsScreen = false }
             BackHandler(enabled = selectedStudentDetail != null) {
                 viewModel.selectStudentForDetail(null)
             }
@@ -272,8 +291,8 @@ fun StudentAccessApp(
                                                 Text(
                                                     text = roleTheme.stationBadge,
                                                     color = roleTheme.badgeTextColor,
-                                                    fontSize = 8.sp,
-                                                    fontWeight = FontWeight.Black,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
                                                     letterSpacing = 0.4.sp,
                                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
                                                 )
@@ -283,7 +302,7 @@ fun StudentAccessApp(
                                                 text = "$roleTitle • ${user.name}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = Color.White.copy(alpha = 0.78f),
-                                                fontSize = 10.sp,
+                                                fontSize = 12.sp,
                                                 maxLines = 1
                                             )
                                         }
@@ -291,6 +310,8 @@ fun StudentAccessApp(
                                 }
                             },
                             actions = {
+                                // Role switching is disabled: staff identity comes from Firebase Authentication.
+                                if (false) {
                                 // Quick Role Switcher Pill with Dropdown
                                 Box {
                                     Surface(
@@ -412,6 +433,7 @@ fun StudentAccessApp(
                                 }
                             }
 
+                                }
                             Spacer(modifier = Modifier.width(4.dp))
                             IconButton(
                                 onClick = { viewModel.lockSession() },
@@ -478,7 +500,7 @@ fun StudentAccessApp(
                                         modifier = Modifier.testTag("menu_view_logs")
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Guardian SMS & Alerts") },
+                                        text = { Text("Guardian WhatsApp Alerts") },
                                         leadingIcon = {
                                             Icon(
                                                 imageVector = Icons.Default.Notifications,
@@ -609,16 +631,16 @@ fun StudentAccessApp(
                 if (!isAnyScannerOpen && selectedStudentDetail == null) {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 6.dp,
+                        tonalElevation = 2.dp,
                         modifier = Modifier.testTag("main_navigation_bar")
                     ) {
                         when (user.role) {
                             UserRole.TEACHERS -> {
                                 NavigationBarItem(
-                                    selected = !showAllExportsDialog,
+                                    selected = true,
                                     onClick = { showAllExportsDialog = false },
                                     icon = { Icon(Icons.Default.MenuBook, contentDescription = "Attendance") },
-                                    label = { Text("Attendance", fontSize = 11.sp, fontWeight = if (!showAllExportsDialog) FontWeight.Bold else FontWeight.Normal) },
+                                    label = { Text("Attendance", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -627,7 +649,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_attendance")
                                 )
                                 NavigationBarItem(
-                                    selected = showAllExportsDialog,
+                                    selected = false,
                                     onClick = {
                                         exportDatasetTarget = "ATTENDANCE"
                                         showAllExportsDialog = true
@@ -642,7 +664,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_export")
                                 )
                             }
-                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT -> {
+                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE -> {
                                 val isDashboard = !showLogsScreen && !showGuardianAlertsScreen && !showExeatScreen
                                 NavigationBarItem(
                                     selected = isDashboard,
@@ -651,8 +673,29 @@ fun StudentAccessApp(
                                         showGuardianAlertsScreen = false
                                         showExeatScreen = false
                                     },
-                                    icon = { Icon(Icons.Default.School, contentDescription = "Students") },
-                                    label = { Text("Students", fontSize = 11.sp, fontWeight = if (isDashboard) FontWeight.Bold else FontWeight.Normal) },
+                                    icon = {
+                                        val destinationIcon = when (user.role) {
+                                            UserRole.BURSAR_FINANCE -> Icons.Default.AccountBalance
+                                            UserRole.HEAD_TEACHER_MANAGEMENT -> Icons.Default.SupervisorAccount
+                                            else -> Icons.Default.School
+                                        }
+                                        Icon(
+                                            destinationIcon,
+                                            contentDescription = when (user.role) {
+                                                UserRole.BURSAR_FINANCE -> "Fees"
+                                                UserRole.HEAD_TEACHER_MANAGEMENT -> "Overview"
+                                                else -> "Students"
+                                            }
+                                        )
+                                    },
+                                    label = {
+                                        val destinationLabel = when (user.role) {
+                                            UserRole.BURSAR_FINANCE -> "Fees"
+                                            UserRole.HEAD_TEACHER_MANAGEMENT -> "Overview"
+                                            else -> "Students"
+                                        }
+                                        Text(destinationLabel, fontSize = 11.sp, fontWeight = if (isDashboard) FontWeight.Bold else FontWeight.Normal)
+                                    },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -660,53 +703,111 @@ fun StudentAccessApp(
                                     ),
                                     modifier = Modifier.testTag("nav_item_students")
                                 )
+                                if (user.role == UserRole.ADMINISTRATOR) {
+                                    NavigationBarItem(
+                                        selected = showLogsScreen,
+                                        onClick = {
+                                            showLogsScreen = true
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
+                                        },
+                                        icon = { Icon(Icons.Default.History, contentDescription = "Gate Logs") },
+                                        label = { Text("Gate Logs", fontSize = 11.sp, fontWeight = if (showLogsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = roleColor.copy(alpha = 0.2f),
+                                            selectedIconColor = roleColor,
+                                            selectedTextColor = roleColor
+                                        ),
+                                        modifier = Modifier.testTag("nav_item_logs")
+                                    )
+                                    NavigationBarItem(
+                                        selected = showExeatScreen,
+                                        onClick = {
+                                            showExeatScreen = true
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                        },
+                                        icon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = "Exeat Passes") },
+                                        label = { Text("Exeat Passes", fontSize = 11.sp, fontWeight = if (showExeatScreen) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = roleColor.copy(alpha = 0.2f),
+                                            selectedIconColor = roleColor,
+                                            selectedTextColor = roleColor
+                                        ),
+                                        modifier = Modifier.testTag("nav_item_exeat")
+                                    )
+                                    NavigationBarItem(
+                                        selected = showGuardianAlertsScreen,
+                                        onClick = {
+                                            showGuardianAlertsScreen = true
+                                            showLogsScreen = false
+                                            showExeatScreen = false
+                                        },
+                                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Guardian WhatsApp messages") },
+                                        label = { Text("WhatsApp", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = roleColor.copy(alpha = 0.2f),
+                                            selectedIconColor = roleColor,
+                                            selectedTextColor = roleColor
+                                        ),
+                                        modifier = Modifier.testTag("nav_item_alerts")
+                                    )
+                                }
+                            }
+
+                            UserRole.HEAD_TEACHER_MANAGEMENT -> {
+                                NavigationBarItem(
+                                    selected = !showLogsScreen && !showMealsScreen,
+                                    onClick = {
+                                        showAttendanceScreen = false
+                                        showRequirementsScreen = false
+                                        showLogsScreen = false
+                                        showMealsScreen = false
+                                        showExeatScreen = false
+                                        showGuardianAlertsScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.SupervisorAccount, contentDescription = "Leadership overview") },
+                                    label = { Text("Overview", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_leadership")
+                                )
                                 NavigationBarItem(
                                     selected = showLogsScreen,
                                     onClick = {
                                         showLogsScreen = true
-                                        showGuardianAlertsScreen = false
-                                        showExeatScreen = false
+                                        showMealsScreen = false
+                                        showAttendanceScreen = false
+                                        showRequirementsScreen = false
                                     },
-                                    icon = { Icon(Icons.Default.History, contentDescription = "Gate Logs") },
-                                    label = { Text("Gate Logs", fontSize = 11.sp, fontWeight = if (showLogsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    icon = { Icon(Icons.Default.History, contentDescription = "Gate activity") },
+                                    label = { Text("Gate", fontSize = 11.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
                                         selectedTextColor = roleColor
                                     ),
-                                    modifier = Modifier.testTag("nav_item_logs")
+                                    modifier = Modifier.testTag("nav_item_head_gate")
                                 )
                                 NavigationBarItem(
-                                    selected = showExeatScreen,
+                                    selected = showMealsScreen,
                                     onClick = {
-                                        showExeatScreen = true
+                                        showMealsScreen = true
                                         showLogsScreen = false
-                                        showGuardianAlertsScreen = false
+                                        showAttendanceScreen = false
+                                        showRequirementsScreen = false
                                     },
-                                    icon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = "Exeat Passes") },
-                                    label = { Text("Exeat Passes", fontSize = 11.sp, fontWeight = if (showExeatScreen) FontWeight.Bold else FontWeight.Normal) },
+                                    icon = { Icon(Icons.Default.Restaurant, contentDescription = "Meal reports") },
+                                    label = { Text("Meals", fontSize = 11.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
                                         selectedTextColor = roleColor
                                     ),
-                                    modifier = Modifier.testTag("nav_item_exeat")
-                                )
-                                NavigationBarItem(
-                                    selected = showGuardianAlertsScreen,
-                                    onClick = {
-                                        showGuardianAlertsScreen = true
-                                        showLogsScreen = false
-                                        showExeatScreen = false
-                                    },
-                                    icon = { Icon(Icons.Default.Notifications, contentDescription = "SMS Alerts") },
-                                    label = { Text("SMS Alerts", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        indicatorColor = roleColor.copy(alpha = 0.2f),
-                                        selectedIconColor = roleColor,
-                                        selectedTextColor = roleColor
-                                    ),
-                                    modifier = Modifier.testTag("nav_item_alerts")
+                                    modifier = Modifier.testTag("nav_item_head_meals")
                                 )
                             }
 
@@ -761,7 +862,7 @@ fun StudentAccessApp(
 
                             UserRole.MEAL_SERVING_STAFF -> {
                                 NavigationBarItem(
-                                    selected = !showAllExportsDialog,
+                                    selected = true,
                                     onClick = { showAllExportsDialog = false },
                                     icon = { Icon(Icons.Default.Restaurant, contentDescription = "Dining Hall") },
                                     label = { Text("Dining Hall", fontSize = 11.sp) },
@@ -773,7 +874,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_dining")
                                 )
                                 NavigationBarItem(
-                                    selected = showAllExportsDialog,
+                                    selected = false,
                                     onClick = {
                                         exportDatasetTarget = "MEALS"
                                         showAllExportsDialog = true
@@ -791,7 +892,7 @@ fun StudentAccessApp(
 
                             UserRole.EXAMINATION_STAFF -> {
                                 NavigationBarItem(
-                                    selected = !showAllExportsDialog,
+                                    selected = true,
                                     onClick = { showAllExportsDialog = false },
                                     icon = { Icon(Icons.Default.FactCheck, contentDescription = "Clearance") },
                                     label = { Text("Requirements", fontSize = 11.sp) },
@@ -803,7 +904,7 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_requirements")
                                 )
                                 NavigationBarItem(
-                                    selected = showAllExportsDialog,
+                                    selected = false,
                                     onClick = {
                                         exportDatasetTarget = "REQUIREMENTS"
                                         showAllExportsDialog = true
@@ -833,7 +934,7 @@ fun StudentAccessApp(
                     GateAccessLogsScreen(
                         scanLogs = scanLogs,
                         onBack = { showLogsScreen = false },
-                        onClearLogs = { viewModel.clearLogs() }
+                        onClearLogs = if (user.role == UserRole.ADMINISTRATOR) ({ viewModel.clearLogs() }) else null
                     )
                 } else if (showGuardianAlertsScreen) {
                     GuardianAlertsScreen(
@@ -841,7 +942,8 @@ fun StudentAccessApp(
                         onBack = { showGuardianAlertsScreen = false },
                         onSendCustomAlert = { studentName, phone, message ->
                             viewModel.sendCustomGuardianAlert(studentName, phone, message)
-                        }
+                        },
+                        readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
                     )
                 } else if (showExeatScreen) {
                     ExeatPassScreen(
@@ -853,7 +955,49 @@ fun StudentAccessApp(
                         },
                         onMarkExeatUsed = { passId ->
                             viewModel.markExeatUsed(passId)
-                        }
+                        },
+                        readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
+                    )
+                } else if (showAttendanceScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                    AttendanceMasterScreen(
+                        user = user,
+                        attendanceRecords = attendanceRecords,
+                        selectedSubject = selectedAttendanceSubject,
+                        selectedSession = selectedAttendanceSession,
+                        onSubjectChange = { viewModel.setAttendanceSubject(it) },
+                        onSessionChange = { viewModel.setAttendanceSession(it) },
+                        onOpenScanner = { },
+                        onManualLookup = { },
+                        onCorrectAttendance = { _, _ -> },
+                        readOnly = true
+                    )
+                } else if (showRequirementsScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                    RequirementsMasterScreen(
+                        user = user,
+                        requirementsList = requirementsList,
+                        allStudents = allStudents,
+                        searchQuery = requirementsSearchQuery,
+                        onSearchQueryChange = { viewModel.setRequirementsSearchQuery(it) },
+                        onToggleRequirement = { _, _ -> },
+                        onMarkAllCleared = { },
+                        onUpdateNotes = { _, _ -> },
+                        onOpenScanner = { },
+                        onExport = { format -> viewModel.exportDataset("REQUIREMENTS", format, context) },
+                        readOnly = true
+                    )
+                } else if (showMealsScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                    MealsMasterScreen(
+                        user = user,
+                        activeMealType = activeMealType,
+                        mealRecords = mealRecords,
+                        mealScanOutcome = null,
+                        allStudents = allStudents,
+                        onSelectMealType = { viewModel.setActiveMealType(it) },
+                        onOpenScanner = { },
+                        onManualServe = { },
+                        onDismissScanOutcome = { },
+                        onExport = { format -> viewModel.exportDataset("MEALS", format, context) },
+                        readOnly = true
                     )
                 } else {
                     when (user.role) {
@@ -946,7 +1090,18 @@ fun StudentAccessApp(
                                 )
                             }
                         }
-                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE, UserRole.HEAD_TEACHER_MANAGEMENT -> {
+                        UserRole.HEAD_TEACHER_MANAGEMENT -> {
+                            HeadTeacherDashboardScreen(
+                                user = user,
+                                students = allStudents,
+                                mealRecords = mealRecords,
+                                gateLogs = scanLogs,
+                                onOpenGateLogs = { showLogsScreen = true },
+                                onOpenMeals = { showMealsScreen = true }
+                            )
+                        }
+
+                        UserRole.ADMINISTRATOR, UserRole.BURSAR_FINANCE -> {
                             if (selectedStudentDetail != null) {
                                 StudentDetailScreen(
                                     student = selectedStudentDetail!!,
@@ -955,6 +1110,8 @@ fun StudentAccessApp(
                                     onUpdateFeeStatus = { newStatus, amount ->
                                         viewModel.updateFeeStatus(selectedStudentDetail!!.id, newStatus, amount)
                                     },
+                                    canManageStudentRecords = user.role == UserRole.ADMINISTRATOR,
+                                    canManageFees = user.role == UserRole.BURSAR_FINANCE,
                                     onUpdateStudentDetails = { updated ->
                                         viewModel.updateStudentDetails(updated)
                                     },
@@ -985,6 +1142,8 @@ fun StudentAccessApp(
                                     allStudents = allStudents,
                                     filteredStudents = filteredStudents,
                                     scanLogs = scanLogs,
+                                    syncInfo = syncInfo,
+                                    onTriggerSync = { viewModel.triggerCloudSync() },
                                     searchQuery = searchQuery,
                                     feeFilter = feeFilter,
                                     onSearchChange = { viewModel.setSearchQuery(it) },

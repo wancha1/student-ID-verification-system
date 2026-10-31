@@ -23,8 +23,7 @@ const PROJECT_ID = "gen-lang-client-0207053136";
 const DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba";
 const SCHOOL_ID = "ltc_school_01";
 const ALLOWED_ROLES = new Set([
-  "ADMIN", "HEAD_TEACHER", "BURSAR", "GATE_OFFICER", "SECURITY_HEAD",
-  "MATRON_PATRON", "MEAL_STAFF", "DIRECTOR_OF_STUDIES", "TEACHER", "EXAM_STAFF"
+  "ADMIN", "HEAD_TEACHER", "GATE_OFFICER", "MEAL_STAFF"
 ]);
 
 function argument(name) {
@@ -69,7 +68,6 @@ async function main() {
       email: user.email,
       role,
       active: true,
-      hasExplicitFinanceAccess: false
     });
 
     console.log(JSON.stringify({

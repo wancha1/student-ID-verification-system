@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Crest colors and open-book motif follow the Lira Town College school mark. -->
+    <path android:fillColor="#D5A62E" android:pathData="M54,7 L88,17 L86,57 C83,73 68,87 54,98 C40,87 25,73 22,57 L20,17 Z"/>
+    <path android:fillColor="#173C83" android:pathData="M54,12 L83,21 L81,56 C78,70 65,82 54,91 C43,82 30,70 27,56 L25,21 Z"/>
+    <path android:fillColor="#F8F4E8" android:pathData="M30,26 L49,30 L49,56 C43,52 37,51 30,53 Z"/>
+    <path android:fillColor="#D5A62E" android:pathData="M51,30 L54,32 L57,30 L57,58 L54,61 L51,58 Z"/>
+    <path android:fillColor="#F8F4E8" android:pathData="M59,30 L78,26 L78,53 C71,51 65,52 59,56 Z"/>
+    <path android:fillColor="#D5A62E" android:pathData="M30,57 C39,54 47,58 54,64 C61,58 69,54 78,57 L78,62 C69,60 61,64 54,70 C47,64 39,60 30,62 Z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M39,72 L46,79 L68,59 L73,64 L46,87 L34,77 Z"/>
+    <path android:fillColor="#D5A62E" android:pathData="M27,17 L81,17 L79,22 L29,22 Z"/>
+</vector>
