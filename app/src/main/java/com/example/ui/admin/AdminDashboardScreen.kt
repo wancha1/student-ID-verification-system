@@ -672,6 +672,7 @@ fun AdminDashboardScreen(
                 }
             }
         }
+        }
 
         // Only the Administrator can register students.
         if (user.role == UserRole.ADMINISTRATOR) {
