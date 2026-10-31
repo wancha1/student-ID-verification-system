@@ -701,56 +701,55 @@ fun StudentAccessApp(
                                     modifier = Modifier.testTag("nav_item_students")
                                 )
                                 if (user.role == UserRole.ADMINISTRATOR) {
-                                NavigationBarItem(
-                                    selected = showLogsScreen,
-                                    onClick = {
-                                        showLogsScreen = true
-                                        showGuardianAlertsScreen = false
-                                        showExeatScreen = false
-                                    },
-                                    icon = { Icon(Icons.Default.History, contentDescription = "Gate Logs") },
-                                    label = { Text("Gate Logs", fontSize = 11.sp, fontWeight = if (showLogsScreen) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        indicatorColor = roleColor.copy(alpha = 0.2f),
-                                        selectedIconColor = roleColor,
-                                        selectedTextColor = roleColor
-                                    ),
-                                    modifier = Modifier.testTag("nav_item_logs")
-                                )
-                                NavigationBarItem(
-                                    selected = showExeatScreen,
-                                    onClick = {
-                                        showExeatScreen = true
-                                        showLogsScreen = false
-                                        showGuardianAlertsScreen = false
-                                    },
-                                    icon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = "Exeat Passes") },
-                                    label = { Text("Exeat Passes", fontSize = 11.sp, fontWeight = if (showExeatScreen) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        indicatorColor = roleColor.copy(alpha = 0.2f),
-                                        selectedIconColor = roleColor,
-                                        selectedTextColor = roleColor
-                                    ),
-                                    modifier = Modifier.testTag("nav_item_exeat")
-                                )
-                                NavigationBarItem(
-                                    selected = showGuardianAlertsScreen,
-                                    onClick = {
-                                        showGuardianAlertsScreen = true
-                                        showLogsScreen = false
-                                        showExeatScreen = false
-                                    },
-                                    icon = { Icon(Icons.Default.Notifications, contentDescription = "SMS Alerts") },
-                                    label = { Text("WhatsApp", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        indicatorColor = roleColor.copy(alpha = 0.2f),
-                                        selectedIconColor = roleColor,
-                                        selectedTextColor = roleColor
-                                    ),
+                                    NavigationBarItem(
+                                        selected = showLogsScreen,
+                                        onClick = {
+                                            showLogsScreen = true
+                                            showGuardianAlertsScreen = false
+                                            showExeatScreen = false
+                                        },
+                                        icon = { Icon(Icons.Default.History, contentDescription = "Gate Logs") },
+                                        label = { Text("Gate Logs", fontSize = 11.sp, fontWeight = if (showLogsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = roleColor.copy(alpha = 0.2f),
+                                            selectedIconColor = roleColor,
+                                            selectedTextColor = roleColor
+                                        ),
+                                        modifier = Modifier.testTag("nav_item_logs")
+                                    )
+                                    NavigationBarItem(
+                                        selected = showExeatScreen,
+                                        onClick = {
+                                            showExeatScreen = true
+                                            showLogsScreen = false
+                                            showGuardianAlertsScreen = false
+                                        },
+                                        icon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = "Exeat Passes") },
+                                        label = { Text("Exeat Passes", fontSize = 11.sp, fontWeight = if (showExeatScreen) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = roleColor.copy(alpha = 0.2f),
+                                            selectedIconColor = roleColor,
+                                            selectedTextColor = roleColor
+                                        ),
+                                        modifier = Modifier.testTag("nav_item_exeat")
+                                    )
+                                    NavigationBarItem(
+                                        selected = showGuardianAlertsScreen,
+                                        onClick = {
+                                            showGuardianAlertsScreen = true
+                                            showLogsScreen = false
+                                            showExeatScreen = false
+                                        },
+                                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Guardian WhatsApp messages") },
+                                        label = { Text("WhatsApp", fontSize = 11.sp, fontWeight = if (showGuardianAlertsScreen) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = roleColor.copy(alpha = 0.2f),
+                                            selectedIconColor = roleColor,
+                                            selectedTextColor = roleColor
+                                        ),
+                                        modifier = Modifier.testTag("nav_item_alerts")
+                                    )
                                 }
-                                    modifier = Modifier.testTag("nav_item_alerts")
-                                )
-                            }
 
                             UserRole.HEAD_TEACHER_MANAGEMENT -> {
                                 NavigationBarItem(
