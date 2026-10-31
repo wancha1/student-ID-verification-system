@@ -1093,16 +1093,10 @@ fun StudentAccessApp(
                             HeadTeacherDashboardScreen(
                                 user = user,
                                 students = allStudents,
-                                attendanceRecords = attendanceRecords,
                                 mealRecords = mealRecords,
-                                requirements = requirementsList,
                                 gateLogs = scanLogs,
-                                onOpenAttendance = { },
-                                onOpenRequirements = { },
-                                onOpenGateLogs = { showLogsScreen = true; showAttendanceScreen = false; showRequirementsScreen = false },
-                                onOpenMeals = { showMealsScreen = true; showAttendanceScreen = false; showRequirementsScreen = false },
-                                onOpenExeat = { showExeatScreen = true },
-                                onOpenGuardianAlerts = { showGuardianAlertsScreen = true }
+                                onOpenGateLogs = { showLogsScreen = true },
+                                onOpenMeals = { showMealsScreen = true }
                             )
                         }
 
