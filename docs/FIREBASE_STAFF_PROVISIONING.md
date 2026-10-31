@@ -28,8 +28,7 @@ Do not restore local self-provisioning or client-side staff document creation. D
   "name": "LTC System Administrator",
   "email": "admin@your-school-domain.example",
   "role": "ADMIN",
-  "active": true,
-  "hasExplicitFinanceAccess": false
+  "active": true
 }
 ```
 
