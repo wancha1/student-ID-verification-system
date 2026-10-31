@@ -184,8 +184,7 @@ class SyncManager(
                     }
                 }
 
-                // Pull operational history so all authorized devices share meal, attendance,
-                // and exam-exception records, not only students and cards.
+                // V1 pulls meal history only. Attendance and examination are outside this release.
                 val remoteMealsResult = remoteCloudDataSource.fetchAllRemoteMealRecords()
                 if (remoteMealsResult.isFailure) {
                     throw remoteMealsResult.exceptionOrNull()
