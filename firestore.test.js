@@ -81,8 +81,6 @@ function studentRecord(id = "STU-001") {
     isDayScholar: true,
     dayScholarType: "DAY_SCHOLAR_WALK",
     transportRoute: "",
-    feesStatus: "CLEARED",
-    outstandingAmount: 0,
     gender: "Female",
     avatarColorSeed: 42,
     homeroomTeacher: "",
@@ -242,4 +240,28 @@ test("Gate and Meal staff cannot manage staff accounts", async () => {
       active: true,
     })
   );
+});
+
+test("Administrator can provision only the four Version 1 roles", async () => {
+  const admin = schoolDb(USERS.admin).collection("staff");
+  const profile = { name: "New Staff", email: "new@ltc.ac.ug", active: true };
+
+  for (const role of ["ADMIN", "HEAD_TEACHER", "GATE_OFFICER", "MEAL_STAFF"]) {
+    await assertSucceeds(admin.doc("new_" + role).set({ ...profile, role }));
+  }
+  await assertFails(admin.doc("new_BURSAR").set({ ...profile, role: "BURSAR" }));
+  await assertFails(admin.doc("new_TEACHER").set({ ...profile, role: "TEACHER" }));
+});
+
+test("Administrators cannot modify their own staff profile", async () => {
+  await assertFails(
+    schoolDb(USERS.admin).collection("staff").doc(USERS.admin).update({ role: "GATE_OFFICER" })
+  );
+});
+
+test("Only administrators can list staff profiles", async () => {
+  await assertSucceeds(schoolDb(USERS.admin).collection("staff").get());
+  await assertFails(schoolDb(USERS.head).collection("staff").get());
+  await assertFails(schoolDb(USERS.gate).collection("staff").get());
+  await assertFails(schoolDb(USERS.meal).collection("staff").get());
 });
