@@ -9,11 +9,16 @@ enum class StaffPermission {
     MANAGE_FEES,           // Update fee clearance status and outstanding balances (Bursar)
     VERIFY_GATE_ACCESS,    // QR barcode gate scanning and day scholar pass checks
     SERVE_MEALS,           // Dining hall meal issuance and double-serving prevention
-    EXAM_CLEARANCE,        // Requirements / examination hall clearance checklists
-    EMERGENCY_OVERRIDE,    // Supervisor authorization for rejected access
-    VIEW_AUDIT_LOGS,       // View gate logs, attendance records, audit trail
-    EXPORT_DATA,           // Export reports in Excel, Word, CSV, JSON
-    SYSTEM_CONFIGURATION   // Manage security PINs, staff provisioning, system setup
+    EXAM_CLEARANCE,        // View/check examination clearance
+    MANAGE_EXAM_CLEARANCE,  // Create and update examination clearance records
+    MARK_ATTENDANCE,        // Record attendance for assigned classes
+    RECORD_MEALS,           // Record a meal serving and prevent duplicates
+    REVIEW_DEPARTMENT_DATA, // Management read-only review of departmental records
+    APPROVE_EXAM_EXCEPTION, // Approve eligible examination exceptions
+    EMERGENCY_OVERRIDE,     // Supervisor authorization for rejected access
+    VIEW_AUDIT_LOGS,        // View permitted audit records
+    EXPORT_DATA,            // Export reports within the user's data scope
+    SYSTEM_CONFIGURATION    // Manage security PINs, staff provisioning, system setup
 }
 
 /**
@@ -93,17 +98,22 @@ enum class UserRole(
             )
             MEAL_SERVING_STAFF -> setOf(
                 StaffPermission.SERVE_MEALS,
+                StaffPermission.RECORD_MEALS,
                 StaffPermission.VIEW_AUDIT_LOGS
             )
             TEACHERS -> setOf(
+                StaffPermission.MARK_ATTENDANCE,
                 StaffPermission.VIEW_AUDIT_LOGS
             )
             EXAMINATION_STAFF -> setOf(
                 StaffPermission.EXAM_CLEARANCE,
+                StaffPermission.MANAGE_EXAM_CLEARANCE,
                 StaffPermission.VIEW_AUDIT_LOGS
             )
             HEAD_TEACHER_MANAGEMENT -> setOf(
                 StaffPermission.VIEW_AUDIT_LOGS,
+                StaffPermission.REVIEW_DEPARTMENT_DATA,
+                StaffPermission.APPROVE_EXAM_EXCEPTION,
                 StaffPermission.EMERGENCY_OVERRIDE,
                 StaffPermission.EXPORT_DATA
             )
