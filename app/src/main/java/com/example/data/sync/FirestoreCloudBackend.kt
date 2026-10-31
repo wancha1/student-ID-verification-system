@@ -158,7 +158,8 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
-    override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
+    override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> {
+        return try {
         if (students.isEmpty()) return Result.success(Unit)
         val role = currentActiveStaffRole()
             ?: throw SecurityException("Active staff sign-in is required to sync student records.")
@@ -226,9 +227,11 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
-    override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = try {
+    override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> {
+        return try {
         if (cards.isEmpty()) return Result.success(Unit)
         if (currentActiveStaffRole() != "ADMIN") {
             throw SecurityException("Only the Administrator can synchronize ID-card changes.")
@@ -262,9 +265,11 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
-    override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> = try {
+    override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> {
+        return try {
         if (logs.isEmpty()) return Result.success(Unit)
         val role = currentActiveStaffRole()
         if (role != "ADMIN" && role != "GATE_OFFICER") {
@@ -289,9 +294,11 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
-    override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> = try {
+    override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> {
+        return try {
         if (meals.isEmpty()) return Result.success(Unit)
         val role = currentActiveStaffRole()
         if (role != "ADMIN" && role != "MEAL_STAFF") {
@@ -323,6 +330,7 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
     override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> = try {
