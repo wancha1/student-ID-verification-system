@@ -1090,6 +1090,8 @@ fun StudentAccessApp(
                                     onUpdateFeeStatus = { newStatus, amount ->
                                         viewModel.updateFeeStatus(selectedStudentDetail!!.id, newStatus, amount)
                                     },
+                                    canManageStudentRecords = user.role == UserRole.ADMINISTRATOR,
+                                    canManageFees = user.role == UserRole.BURSAR_FINANCE,
                                     onUpdateStudentDetails = { updated ->
                                         viewModel.updateStudentDetails(updated)
                                     },
