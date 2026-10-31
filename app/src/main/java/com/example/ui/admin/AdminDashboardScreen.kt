@@ -485,6 +485,7 @@ fun AdminDashboardScreen(
                 }
             } else {
                 items(filteredStudents, key = { it.id }) { student ->
+                    val isCleared = student.feesStatus == FeeStatus.CLEARED
                     Card(
                         onClick = { onSelectStudent(student.id) },
                         shape = RoundedCornerShape(16.dp),
