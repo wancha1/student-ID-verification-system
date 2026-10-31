@@ -310,6 +310,8 @@ fun StudentAccessApp(
                                 }
                             },
                             actions = {
+                                // Role switching is disabled: staff identity comes from Firebase Authentication.
+                                if (false) {
                                 // Quick Role Switcher Pill with Dropdown
                                 Box {
                                     Surface(
@@ -431,6 +433,7 @@ fun StudentAccessApp(
                                 }
                             }
 
+                                }
                             Spacer(modifier = Modifier.width(4.dp))
                             IconButton(
                                 onClick = { viewModel.lockSession() },
