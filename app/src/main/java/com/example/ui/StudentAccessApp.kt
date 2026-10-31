@@ -753,6 +753,7 @@ fun StudentAccessApp(
                                         modifier = Modifier.testTag("nav_item_alerts")
                                     )
                                 }
+                            }
 
                             UserRole.HEAD_TEACHER_MANAGEMENT -> {
                                 NavigationBarItem(
