@@ -68,14 +68,12 @@ class MainViewModel(
     private val repository: StudentRepository
 ) : ViewModel() {
 
-    private companion object {
-        val VERSION_ONE_ROLES = setOf(
+    private val VERSION_ONE_ROLES = setOf(
             UserRole.ADMINISTRATOR,
             UserRole.HEAD_TEACHER_MANAGEMENT,
             UserRole.GATE_STAFF,
-            UserRole.MEAL_SERVING_STAFF
-        )
-    }
+        UserRole.MEAL_SERVING_STAFF
+    )
 
     // Current authenticated user. Firebase sessions are restored only after a fresh
     // server-side check of the staff membership document.
