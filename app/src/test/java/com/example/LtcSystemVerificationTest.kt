@@ -1726,15 +1726,22 @@ class LtcSystemVerificationTest {
             assertFalse("Gate Staff must NOT have MANAGE_FEES", UserRole.GATE_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
 
             assertTrue("Meals Staff must have SERVE_MEALS", UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.SERVE_MEALS))
+            assertTrue("Meals Staff must have RECORD_MEALS", UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.RECORD_MEALS))
             assertFalse("Meals Staff must NOT have MANAGE_FEES", UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
 
-            assertTrue("Teachers must have VIEW_AUDIT_LOGS", UserRole.TEACHERS.defaultPermissions.contains(StaffPermission.VIEW_AUDIT_LOGS))
+            assertTrue("Teachers must have MARK_ATTENDANCE", UserRole.TEACHERS.defaultPermissions.contains(StaffPermission.MARK_ATTENDANCE))
+            assertTrue("Teachers must retain permitted audit access", UserRole.TEACHERS.defaultPermissions.contains(StaffPermission.VIEW_AUDIT_LOGS))
             assertFalse("Teachers must NOT have MANAGE_STUDENTS", UserRole.TEACHERS.defaultPermissions.contains(StaffPermission.MANAGE_STUDENTS))
 
             assertTrue("Exams Staff must have EXAM_CLEARANCE", UserRole.EXAMINATION_STAFF.defaultPermissions.contains(StaffPermission.EXAM_CLEARANCE))
+            assertTrue("Exams Staff must have MANAGE_EXAM_CLEARANCE", UserRole.EXAMINATION_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_EXAM_CLEARANCE))
             assertFalse("Exams Staff must NOT have MANAGE_FEES", UserRole.EXAMINATION_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
 
+            assertTrue("Head Teacher must have departmental review access", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.REVIEW_DEPARTMENT_DATA))
+            assertTrue("Head Teacher must approve exam exceptions", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.APPROVE_EXAM_EXCEPTION))
             assertTrue("Head Teacher must have EMERGENCY_OVERRIDE", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.EMERGENCY_OVERRIDE))
+            assertFalse("Head Teacher must NOT operate gate scans", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.VERIFY_GATE_ACCESS))
+            assertFalse("Head Teacher must NOT record meals", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.RECORD_MEALS))
             assertFalse("Head Teacher must NOT have MANAGE_FEES", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
 
             // 2. Unauthenticated session: all sensitive operations blocked
