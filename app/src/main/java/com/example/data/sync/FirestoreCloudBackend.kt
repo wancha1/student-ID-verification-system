@@ -266,7 +266,8 @@ class FirestoreCloudBackend(
 
     override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> = try {
         if (logs.isEmpty()) return Result.success(Unit)
-        if (currentActiveStaffRole() !in setOf("ADMIN", "GATE_OFFICER")) {
+        val role = currentActiveStaffRole()
+        if (role != "ADMIN" && role != "GATE_OFFICER") {
             throw SecurityException("Only Admin or Gate Officer can synchronize gate logs.")
         }
         for (chunk in logs.chunked(MAX_BATCH_WRITES)) {
@@ -292,7 +293,8 @@ class FirestoreCloudBackend(
 
     override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> = try {
         if (meals.isEmpty()) return Result.success(Unit)
-        if (currentActiveStaffRole() !in setOf("ADMIN", "MEAL_STAFF")) {
+        val role = currentActiveStaffRole()
+        if (role != "ADMIN" && role != "MEAL_STAFF") {
             throw SecurityException("Only Admin or Meal Staff can synchronize meal records.")
         }
         for (chunk in meals.chunked(MAX_BATCH_WRITES)) {
