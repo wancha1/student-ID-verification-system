@@ -207,19 +207,21 @@ fun AdminDashboardScreen(
                             )
                         }
 
-                        IconButton(
-                            onClick = onViewScanLogs,
-                            modifier = Modifier
-                                .testTag("button_admin_view_logs")
-                                .size(42.dp)
-                                .background(Color.White.copy(alpha = 0.08f), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Gate Activity Logs",
-                                tint = GoldAccent,
-                                modifier = Modifier.size(22.dp)
-                            )
+                        if (user.role == UserRole.ADMINISTRATOR) {
+                            IconButton(
+                                onClick = onViewScanLogs,
+                                modifier = Modifier
+                                    .testTag("button_admin_view_logs")
+                                    .size(42.dp)
+                                    .background(Color.White.copy(alpha = 0.08f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "Gate Activity Logs",
+                                    tint = GoldAccent,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -323,65 +325,65 @@ fun AdminDashboardScreen(
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // Gate Analytics & Live Metrics
-            item {
-                GateAnalyticsCard(
-                    students = allStudents,
-                    scanLogs = scanLogs
-                )
-            }
-
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-
-            // Quick access: two comfortable rows instead of four cramped
-            // touch targets, especially on narrow Android phones.
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "QUICK ACCESS",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.6.sp,
-                        modifier = Modifier.padding(start = 2.dp)
+            // Gate analytics and operational shortcuts are restricted to the Administrator.
+            if (user.role == UserRole.ADMINISTRATOR) {
+                item {
+                    GateAnalyticsCard(
+                        students = allStudents,
+                        scanLogs = scanLogs
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        HubButton(
-                            icon = Icons.Default.History,
-                            title = "Gate Logs",
-                            onClick = onViewScanLogs,
-                            testTag = "button_hub_gate_logs",
-                            modifier = Modifier.weight(1f)
+                }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "QUICK ACCESS",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.6.sp,
+                            modifier = Modifier.padding(start = 2.dp)
                         )
-                        HubButton(
-                            icon = Icons.Default.Notifications,
-                            title = "SMS Alerts",
-                            onClick = onViewGuardianAlerts,
-                            testTag = "button_hub_sms_alerts",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        HubButton(
-                            icon = Icons.Default.ConfirmationNumber,
-                            title = "Exeat Passes",
-                            onClick = onViewExeatPasses,
-                            testTag = "button_hub_exeat_passes",
-                            modifier = Modifier.weight(1f)
-                        )
-                        HubButton(
-                            icon = Icons.Default.Badge,
-                            title = "Print Badges",
-                            onClick = onViewBatchPrint,
-                            testTag = "button_hub_print_badges",
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            HubButton(
+                                icon = Icons.Default.History,
+                                title = "Gate Logs",
+                                onClick = onViewScanLogs,
+                                testTag = "button_hub_gate_logs",
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubButton(
+                                icon = Icons.Default.Notifications,
+                                title = "SMS Alerts",
+                                onClick = onViewGuardianAlerts,
+                                testTag = "button_hub_sms_alerts",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            HubButton(
+                                icon = Icons.Default.ConfirmationNumber,
+                                title = "Exeat Passes",
+                                onClick = onViewExeatPasses,
+                                testTag = "button_hub_exeat_passes",
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubButton(
+                                icon = Icons.Default.Badge,
+                                title = "Print Badges",
+                                onClick = onViewBatchPrint,
+                                testTag = "button_hub_print_badges",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
