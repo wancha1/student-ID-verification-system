@@ -80,15 +80,11 @@ service cloud.firestore {
         && data.gradeClass is string
         && data.updatedAt is number
         && data.isDayScholar is bool
-        && data.feesStatus in ['CLEARED', 'OUTSTANDING']
-        && data.outstandingAmount is number
-        && data.outstandingAmount >= 0
         && data.accessStatus is string
         && data.keys().hasOnly([
           'id', 'studentNumber', 'name', 'firstName', 'lastName',
           'photoUrl', 'accessStatus', 'gradeClass', 'isDayScholar',
-          'dayScholarType', 'transportRoute', 'feesStatus',
-          'outstandingAmount', 'gender', 'avatarColorSeed',
+          'dayScholarType', 'transportRoute', 'gender', 'avatarColorSeed',
           'homeroomTeacher', 'academicYear', 'qrToken', 'updatedAt',
           'isDeleted'
         ])
