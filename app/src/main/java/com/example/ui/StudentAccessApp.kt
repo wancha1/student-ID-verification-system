@@ -756,36 +756,57 @@ fun StudentAccessApp(
 
                             UserRole.HEAD_TEACHER_MANAGEMENT -> {
                                 NavigationBarItem(
-                                    selected = !showAttendanceScreen && !showRequirementsScreen && !showLogsScreen,
-                                    onClick = { showAttendanceScreen = false; showRequirementsScreen = false; showLogsScreen = false; showMealsScreen = false; showExeatScreen = false; showGuardianAlertsScreen = false },
+                                    selected = !showLogsScreen && !showMealsScreen,
+                                    onClick = {
+                                        showAttendanceScreen = false
+                                        showRequirementsScreen = false
+                                        showLogsScreen = false
+                                        showMealsScreen = false
+                                        showExeatScreen = false
+                                        showGuardianAlertsScreen = false
+                                    },
                                     icon = { Icon(Icons.Default.SupervisorAccount, contentDescription = "Leadership overview") },
                                     label = { Text("Overview", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(indicatorColor = roleColor.copy(alpha = 0.2f), selectedIconColor = roleColor, selectedTextColor = roleColor),
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
                                     modifier = Modifier.testTag("nav_item_leadership")
                                 )
                                 NavigationBarItem(
-                                    selected = showAttendanceScreen,
-                                    onClick = { showAttendanceScreen = true; showRequirementsScreen = false; showLogsScreen = false; showMealsScreen = false },
-                                    icon = { Icon(Icons.Default.MenuBook, contentDescription = "Attendance") },
-                                    label = { Text("Attendance", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(indicatorColor = roleColor.copy(alpha = 0.2f), selectedIconColor = roleColor, selectedTextColor = roleColor),
-                                    modifier = Modifier.testTag("nav_item_head_attendance")
-                                )
-                                NavigationBarItem(
-                                    selected = showRequirementsScreen,
-                                    onClick = { showRequirementsScreen = true; showAttendanceScreen = false; showLogsScreen = false; showMealsScreen = false },
-                                    icon = { Icon(Icons.Default.FactCheck, contentDescription = "Requirements") },
-                                    label = { Text("Clearance", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(indicatorColor = roleColor.copy(alpha = 0.2f), selectedIconColor = roleColor, selectedTextColor = roleColor),
-                                    modifier = Modifier.testTag("nav_item_head_clearance")
-                                )
-                                NavigationBarItem(
                                     selected = showLogsScreen,
-                                    onClick = { showLogsScreen = true; showAttendanceScreen = false; showRequirementsScreen = false; showMealsScreen = false; showExeatScreen = false; showGuardianAlertsScreen = false },
+                                    onClick = {
+                                        showLogsScreen = true
+                                        showMealsScreen = false
+                                        showAttendanceScreen = false
+                                        showRequirementsScreen = false
+                                    },
                                     icon = { Icon(Icons.Default.History, contentDescription = "Gate activity") },
                                     label = { Text("Gate", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(indicatorColor = roleColor.copy(alpha = 0.2f), selectedIconColor = roleColor, selectedTextColor = roleColor),
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
                                     modifier = Modifier.testTag("nav_item_head_gate")
+                                )
+                                NavigationBarItem(
+                                    selected = showMealsScreen,
+                                    onClick = {
+                                        showMealsScreen = true
+                                        showLogsScreen = false
+                                        showAttendanceScreen = false
+                                        showRequirementsScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.Restaurant, contentDescription = "Meal reports") },
+                                    label = { Text("Meals", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_head_meals")
                                 )
                             }
 
@@ -1076,8 +1097,8 @@ fun StudentAccessApp(
                                 mealRecords = mealRecords,
                                 requirements = requirementsList,
                                 gateLogs = scanLogs,
-                                onOpenAttendance = { showAttendanceScreen = true; showRequirementsScreen = false; showLogsScreen = false },
-                                onOpenRequirements = { showRequirementsScreen = true; showAttendanceScreen = false; showLogsScreen = false },
+                                onOpenAttendance = { },
+                                onOpenRequirements = { },
                                 onOpenGateLogs = { showLogsScreen = true; showAttendanceScreen = false; showRequirementsScreen = false },
                                 onOpenMeals = { showMealsScreen = true; showAttendanceScreen = false; showRequirementsScreen = false },
                                 onOpenExeat = { showExeatScreen = true },
