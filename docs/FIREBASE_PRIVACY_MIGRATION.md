@@ -5,7 +5,8 @@
 - The retired `/users/{uid}` schema is denied to all client accounts. The application must use the school-scoped `/schools/ltc_school_01` data model.
 - The shared `students` collection must not contain `guardianName`, `guardianPhone`, `emergencyContact`, or `notes`.
 - Those fields live in `schools/ltc_school_01/student_private/{studentId}`, readable/writable only by active Admin and Head Teacher accounts.
-- Exam recommendations must be created by active finance staff with `recommendedByUid == request.auth.uid`. Approval is a one-way transition attributed to the authenticated Admin/Head Teacher UID.
+- Version 1 supports only four active staff roles: `ADMIN`, `HEAD_TEACHER`, `GATE_OFFICER`, and `MEAL_STAFF`. Finance, attendance, examination and other legacy collections are denied by default.
+- Private student information is readable/writable only by active Admin and Head Teacher accounts.
 - Staff role lookup uses a server read so cached membership cannot authorize a disabled account.
 
 ## Before deployment
@@ -68,7 +69,7 @@ Run from a trusted administrator workstation with Firebase Admin SDK Application
    node scripts/migrate-student-private-fields.cjs --apply
    ```
 7. The script re-reads the shared roster and refuses to set `studentPrivacyMigrationComplete` if any private fields remain.
-8. Verify sample records with an Admin account, and verify that Gate, Meal, and Teacher accounts cannot read the private collection.
+8. Verify sample records with an Admin account, and verify that Gate Officer and Meal Staff accounts cannot read the private collection.
 9. Deploy `firestore.rules` to the same confirmed named database. Emulator tests do not deploy production rules.
 
 ## Release gates
