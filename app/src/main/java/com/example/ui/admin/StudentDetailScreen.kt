@@ -190,15 +190,17 @@ fun StudentDetailScreen(
 
                 // Edit & Delete Icons
                 Row {
-                    IconButton(
-                        onClick = { showDigitalCardDialog = true },
-                        modifier = Modifier.testTag("button_detail_print_card")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Print,
-                            contentDescription = "Print ID Card",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    if (canManageStudentRecords) {
+                        IconButton(
+                            onClick = { showDigitalCardDialog = true },
+                            modifier = Modifier.testTag("button_detail_print_card")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Print,
+                                contentDescription = "Print ID Card",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
                     if (canManageStudentRecords) IconButton(
@@ -755,56 +757,57 @@ fun StudentDetailScreen(
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
 
-        // PRINTABLE DIGITAL ID CARD WITH GENERATED QR CODE
-        item {
-            Text(
-                text = "STUDENT DIGITAL ID & SECURE BARCODE",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                letterSpacing = 1.sp
-            )
-        }
-
-        item { Spacer(modifier = Modifier.height(8.dp)) }
-
-        item {
-            PrintableStudentIdCard(
-                student = student,
-                card = activeCard
-            )
-        }
-
-        item { Spacer(modifier = Modifier.height(16.dp)) }
-
-        // QUICK ACTION: TEST IN SECURITY GUARD SCANNER
-        item {
-            Button(
-                onClick = { onTestScanAsGuard(student.qrPayload) },
-                modifier = Modifier
-                    .testTag("button_test_as_guard")
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
+        if (canManageStudentRecords) {
+            // ID-card printing and scanner testing are Administrator functions.
+            item {
                 Text(
-                    text = "Test QR Scan in Security Guard Mode",
+                    text = "STUDENT DIGITAL ID & SECURE BARCODE",
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
                 )
             }
-        }
 
-        item { Spacer(modifier = Modifier.height(20.dp)) }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+
+            item {
+                PrintableStudentIdCard(
+                    student = student,
+                    card = activeCard
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+
+            item {
+                Button(
+                    onClick = { onTestScanAsGuard(student.qrPayload) },
+                    modifier = Modifier
+                        .testTag("button_test_as_guard")
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Test QR Scan in Security Guard Mode",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(20.dp)) }
+        }
 
         // GUARDIAN & HOMEROOM DETAILS
         item {
