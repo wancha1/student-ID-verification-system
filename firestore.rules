@@ -232,7 +232,7 @@ service cloud.firestore {
           && request.resource.data.studentNumber is string
           && request.resource.data.studentName is string
           && request.resource.data.gradeClass is string
-          && request.resource.data.mealType in ['LUNCH', 'SUPPER']
+          && request.resource.data.mealType in ['BREAKFAST', 'LUNCH', 'DINNER', 'SPECIAL_SNACK']
           && request.resource.data.mealDate is string
           && request.resource.data.status is string
           && request.resource.data.notes is string
