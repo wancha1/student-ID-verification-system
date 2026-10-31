@@ -59,7 +59,7 @@ class FirestoreCloudBackend(
         val uid = auth.currentUser?.uid ?: return false
         val staff = getSchoolRef().collection("staff").document(uid).get().await()
         return staff.getBoolean("active") == true &&
-            staff.getString("role") in setOf("ADMIN", "ADMINISTRATOR", "HEAD_TEACHER", "HEAD_TEACHER_MANAGEMENT")
+            staff.getString("role") in setOf("ADMIN", "HEAD_TEACHER")
     }
 
     companion object {
@@ -159,43 +159,53 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
-        val canWritePrivate = isStudentPrivacyStaff()
-        // Each student may require two writes (shared + private); stay well below
-        // Firestore's 500-write batch limit during bulk synchronization.
+        if (students.isEmpty()) return Result.success(Unit)
+        val role = currentActiveStaffRole()
+            ?: throw SecurityException("Active staff sign-in is required to sync student records.")
+        val canWriteShared = role == "ADMIN"
+        val canWritePrivate = role in setOf("ADMIN", "HEAD_TEACHER")
+        if (!canWriteShared && !canWritePrivate) {
+            throw SecurityException("Only Admin or Head Teacher can synchronize permitted student information.")
+        }
+
+        // Admin writes the shared roster and private profile. Head Teacher writes
+        // private profiles only; Firestore rules keep the shared roster Admin-only.
         for (chunk in students.chunked(200)) {
             val batch = db.batch()
             for (student in chunk) {
-                val docRef = getSchoolRef().collection("students").document(student.id)
-                val data = hashMapOf<String, Any>(
-                    "id" to student.id,
-                    "studentNumber" to student.studentNumber,
-                    "name" to student.name,
-                    "firstName" to student.firstName,
-                    "lastName" to student.lastName,
-                    "photoUrl" to (student.photoUrl ?: ""),
-                    "accessStatus" to student.accessStatus,
-                    "gradeClass" to student.gradeClass,
-                    "isDayScholar" to student.isDayScholar,
-                    "dayScholarType" to student.dayScholarType,
-                    "transportRoute" to (student.transportRoute ?: ""),
-                    "gender" to student.gender,
-                    "avatarColorSeed" to student.avatarColorSeed,
-                    "homeroomTeacher" to student.homeroomTeacher,
-                    "academicYear" to student.academicYear,
-                    "qrToken" to student.qrToken,
-                    "updatedAt" to student.updatedAt,
-                    "isDeleted" to student.isDeleted
-                )
-                // Remove legacy finance fields from the shared roster. Firestore
-                // merges preserve omitted fields, so explicit deletes are required.
-                data["feesStatus"] = FieldValue.delete()
-                data["outstandingAmount"] = FieldValue.delete()
-                if (canWritePrivate) {
-                    // Move sensitive fields off the shared roster; never reintroduce them.
+                if (canWriteShared) {
+                    val docRef = getSchoolRef().collection("students").document(student.id)
+                    val data = hashMapOf<String, Any>(
+                        "id" to student.id,
+                        "studentNumber" to student.studentNumber,
+                        "name" to student.name,
+                        "firstName" to student.firstName,
+                        "lastName" to student.lastName,
+                        "photoUrl" to (student.photoUrl ?: ""),
+                        "accessStatus" to student.accessStatus,
+                        "gradeClass" to student.gradeClass,
+                        "isDayScholar" to student.isDayScholar,
+                        "dayScholarType" to student.dayScholarType,
+                        "transportRoute" to (student.transportRoute ?: ""),
+                        "gender" to student.gender,
+                        "avatarColorSeed" to student.avatarColorSeed,
+                        "homeroomTeacher" to student.homeroomTeacher,
+                        "academicYear" to student.academicYear,
+                        "qrToken" to student.qrToken,
+                        "updatedAt" to student.updatedAt,
+                        "isDeleted" to student.isDeleted
+                    )
+                    // Explicitly remove retired finance and private fields from the shared roster.
+                    data["feesStatus"] = FieldValue.delete()
+                    data["outstandingAmount"] = FieldValue.delete()
                     data["guardianName"] = FieldValue.delete()
                     data["guardianPhone"] = FieldValue.delete()
                     data["emergencyContact"] = FieldValue.delete()
                     data["notes"] = FieldValue.delete()
+                    batch.set(docRef, data, SetOptions.merge())
+                }
+
+                if (canWritePrivate) {
                     val privateRef = getSchoolRef().collection("student_private").document(student.id)
                     batch.set(
                         privateRef,
@@ -210,7 +220,6 @@ class FirestoreCloudBackend(
                         SetOptions.merge()
                     )
                 }
-                batch.set(docRef, data, SetOptions.merge())
             }
             batch.commit().await()
         }
@@ -220,6 +229,10 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = try {
+        if (cards.isEmpty()) return Result.success(Unit)
+        if (currentActiveStaffRole() != "ADMIN") {
+            throw SecurityException("Only the Administrator can synchronize ID-card changes.")
+        }
         // Firestore batches have a 500-write ceiling. Keep headroom for future
         // metadata writes and ensure a large offline backlog cannot fail as one batch.
         for (chunk in cards.chunked(MAX_BATCH_WRITES)) {
@@ -252,6 +265,10 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> = try {
+        if (logs.isEmpty()) return Result.success(Unit)
+        if (currentActiveStaffRole() !in setOf("ADMIN", "GATE_OFFICER")) {
+            throw SecurityException("Only Admin or Gate Officer can synchronize gate logs.")
+        }
         for (chunk in logs.chunked(MAX_BATCH_WRITES)) {
             val batch = db.batch()
             for (log in chunk) {
@@ -274,6 +291,10 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> = try {
+        if (meals.isEmpty()) return Result.success(Unit)
+        if (currentActiveStaffRole() !in setOf("ADMIN", "MEAL_STAFF")) {
+            throw SecurityException("Only Admin or Meal Staff can synchronize meal records.")
+        }
         for (chunk in meals.chunked(MAX_BATCH_WRITES)) {
             val batch = db.batch()
             for (meal in chunk) {
