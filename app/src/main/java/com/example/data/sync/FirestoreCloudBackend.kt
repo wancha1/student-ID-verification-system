@@ -178,8 +178,6 @@ class FirestoreCloudBackend(
                     "isDayScholar" to student.isDayScholar,
                     "dayScholarType" to student.dayScholarType,
                     "transportRoute" to (student.transportRoute ?: ""),
-                    "feesStatus" to student.feesStatus,
-                    "outstandingAmount" to student.outstandingAmount,
                     "gender" to student.gender,
                     "avatarColorSeed" to student.avatarColorSeed,
                     "homeroomTeacher" to student.homeroomTeacher,
