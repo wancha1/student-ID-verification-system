@@ -22,7 +22,10 @@ enum class StaffPermission {
 }
 
 /**
- * The 7 canonical staff duty roles at Lira Town College.
+ * Version 1 authenticates four roles: Administrator, Head Teacher, Gate Staff,
+ * and Meal-Serving Staff. Legacy enum entries remain temporarily so older
+ * screens and local database records compile during the staged feature removal.
+ * FirebaseStaffAuthenticator and MainViewModel reject all legacy roles.
  */
 enum class UserRole(
     val title: String,
