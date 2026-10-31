@@ -229,7 +229,7 @@ fun StudentDetailScreen(
         item { Spacer(modifier = Modifier.height(16.dp)) }
 
         // STUDENT HEADER CARD
-        if (canManageFees) item {
+        item {
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -297,8 +297,8 @@ fun StudentDetailScreen(
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
 
-        // PHYSICAL ID CARD LIFECYCLE MANAGEMENT SECTION (STUDENT ≠ CARD ≠ SCAN)
-        item {
+        // Physical card issuance and lifecycle controls belong to the Administrator.
+        if (canManageStudentRecords) item {
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -558,8 +558,8 @@ fun StudentDetailScreen(
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
 
-        // FEES STATUS MANAGEMENT SECTION (CORE ADMIN FEATURE)
-        item {
+        // Fee status changes belong to the Bursar.
+        if (canManageFees) item {
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
