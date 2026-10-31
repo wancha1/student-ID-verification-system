@@ -79,6 +79,6 @@ Do not call the app production-ready until all are complete:
 - Android and Firestore rules CI pass on the release commit.
 - The private-field migration has been reviewed and applied to the verified production database.
 - Production rules have been deployed to that same database.
-- Cross-device student/card sync and exam recommendation/approval are verified with real staff accounts.
-- The complete role-permission matrix and inactive-staff denial are tested.
+- Cross-device student, card, gate-log and meal-record synchronization are verified with real Version 1 staff accounts.
+- The four-role permission matrix and inactive/legacy-role denial are tested.
 - Physical devices confirm offline queue recovery, card revocation propagation, and no loss of records.
