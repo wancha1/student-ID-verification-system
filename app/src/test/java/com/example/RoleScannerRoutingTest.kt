@@ -69,8 +69,6 @@ class RoleScannerRoutingTest {
         SecurityManager.provisionInitialAdmin(context, "System Admin", "1234")
         SecurityManager.setRolePin(context, UserRole.GATE_STAFF, "2222")
         SecurityManager.setRolePin(context, UserRole.MEAL_SERVING_STAFF, "3333")
-        SecurityManager.setRolePin(context, UserRole.TEACHERS, "4444")
-        SecurityManager.setRolePin(context, UserRole.EXAMINATION_STAFF, "5555")
 
         database = AppDatabase.createInMemory(context)
         cloudBackend = InMemoryCloudBackend()
@@ -178,34 +176,21 @@ class RoleScannerRoutingTest {
     }
 
     @Test
-    fun testExaminationStaffScannerFlow() = runBlocking {
-        val authed = viewModel.authenticateAndLogin(context, UserRole.EXAMINATION_STAFF, "5555")
-        assertTrue("Exam staff should authenticate", authed)
-
-        viewModel.openRequirementScanner()
-        assertTrue("Requirement scanner should be open", viewModel.isRequirementScannerOpen.value)
-
-        viewModel.closeRequirementScanner()
-        assertFalse("Requirement scanner should close on Back", viewModel.isRequirementScannerOpen.value)
-    }
-
-    @Test
-    fun testTeachersScannerFlow() = runBlocking {
-        val authed = viewModel.authenticateAndLogin(context, UserRole.TEACHERS, "4444")
-        assertTrue("Teacher should authenticate", authed)
-
-        viewModel.selectDepartment(ScanDepartment.ATTENDANCE)
-        viewModel.openScanner()
-        assertTrue("Attendance scanner should be open", viewModel.isScannerOpen.value)
-
-        viewModel.closeScanner()
-        assertFalse("Attendance scanner should close on Back", viewModel.isScannerOpen.value)
+    fun unsupportedLegacyRolesCannotAuthenticate() = runBlocking {
+        assertFalse(
+            "Examination role is excluded from V1",
+            viewModel.authenticateAndLogin(context, UserRole.EXAMINATION_STAFF, "5555")
+        )
+        assertFalse(
+            "Teacher role is excluded from V1",
+            viewModel.authenticateAndLogin(context, UserRole.TEACHERS, "4444")
+        )
     }
 
     @Test
     fun testSessionLockAndPersistence() {
-        viewModel.loginAs(UserRole.BURSAR_FINANCE, "Bursar Florence")
-        assertEquals(UserRole.BURSAR_FINANCE, viewModel.currentUser.value?.role)
+        viewModel.loginAs(UserRole.ADMINISTRATOR, "System Admin")
+        assertEquals(UserRole.ADMINISTRATOR, viewModel.currentUser.value?.role)
 
         // Save session
         SecurityManager.saveActiveSession(context, viewModel.currentUser.value)
@@ -213,8 +198,8 @@ class RoleScannerRoutingTest {
         // Restore in a fresh environment
         val restored = SecurityManager.getActiveSession(context)
         assertNotNull("Session must be restored across restarts", restored)
-        assertEquals(UserRole.BURSAR_FINANCE, restored?.role)
-        assertEquals("Bursar Florence", restored?.name)
+        assertEquals(UserRole.ADMINISTRATOR, restored?.role)
+        assertEquals("System Admin", restored?.name)
 
         // Lock session / logout
         viewModel.lockSession()
