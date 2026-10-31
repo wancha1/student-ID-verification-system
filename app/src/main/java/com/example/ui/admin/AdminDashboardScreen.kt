@@ -587,7 +587,8 @@ fun AdminDashboardScreen(
                                     )
                                 }
 
-                                // Quick 1-tap Fee Status Switcher Button
+                                // Fee changes are restricted to the Bursar role.
+                                if (user.role == UserRole.BURSAR_FINANCE) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = if (isCleared) ApprovedGreenLight else RejectedRedLight,
@@ -629,7 +630,10 @@ fun AdminDashboardScreen(
                                 }
                             }
 
-                            // Secondary Quick Actions Row
+                                }
+
+                            // Registry actions are restricted to the Administrator role.
+                            if (user.role == UserRole.ADMINISTRATOR) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -669,7 +673,8 @@ fun AdminDashboardScreen(
             }
         }
 
-        // Floating Action Button to Register New Student
+        // Only the Administrator can register students.
+        if (user.role == UserRole.ADMINISTRATOR) {
         ExtendedFloatingActionButton(
             onClick = { showAddStudentDialog = true },
             icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
@@ -681,10 +686,11 @@ fun AdminDashboardScreen(
                 .padding(20.dp)
                 .testTag("fab_register_student")
         )
+        }
     }
 
     // Register Student Modal
-    if (showAddStudentDialog) {
+    if (user.role == UserRole.ADMINISTRATOR && showAddStudentDialog) {
         StudentFormDialog(
             initialStudent = null,
             onDismiss = { showAddStudentDialog = false },
@@ -696,7 +702,7 @@ fun AdminDashboardScreen(
     }
 
     // Edit Student Modal
-    if (studentToEdit != null) {
+    if (user.role == UserRole.ADMINISTRATOR && studentToEdit != null) {
         StudentFormDialog(
             initialStudent = studentToEdit,
             onDismiss = { studentToEdit = null },
@@ -708,7 +714,7 @@ fun AdminDashboardScreen(
     }
 
     // Delete Confirmation Dialog
-    if (studentToDelete != null) {
+    if (user.role == UserRole.ADMINISTRATOR && studentToDelete != null) {
         val s = studentToDelete!!
         AlertDialog(
             onDismissRequest = { studentToDelete = null },
