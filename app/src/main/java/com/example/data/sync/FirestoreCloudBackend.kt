@@ -597,6 +597,24 @@ class FirestoreCloudBackend(
         }
     }
 
+    override suspend fun refreshStudentPhotos(): Result<Map<String, String>> = try {
+        val snapshot = getSchoolRef().collection("students").get().await()
+        val refreshed = mutableMapOf<String, String>()
+        for (doc in snapshot.documents) {
+            val objectPath = doc.getString("photoUrl")?.trim().orEmpty()
+            if (objectPath.isBlank()) continue
+            if (!objectPath.startsWith("schools/$schoolId/students/")) {
+                throw IllegalStateException("Student ${doc.id} has an invalid photo object path.")
+            }
+            val localPhoto = cacheStudentPhoto(doc.id, objectPath)
+                ?: throw IllegalStateException("Could not download photo for student ${doc.id}; photo refresh will retry.")
+            refreshed[doc.id] = localPhoto
+        }
+        Result.success(refreshed)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> {
         return fetchStudentsUpdatedSince(-1L)
     }
