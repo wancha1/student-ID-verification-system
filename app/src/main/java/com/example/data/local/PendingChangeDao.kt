@@ -15,7 +15,7 @@ interface PendingChangeDao {
     @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS' ORDER BY createdAt ASC")
     fun getPendingChangesFlow(): Flow<List<PendingChangeEntity>>
 
-    @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') ORDER BY createdAt ASC")
+    @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS' ORDER BY createdAt ASC")
     suspend fun getPendingChanges(): List<PendingChangeEntity>
 
     @Query("SELECT * FROM pending_changes WHERE status = 'FAILED' AND entityType != 'FEE_STATUS' ORDER BY createdAt ASC")
@@ -45,7 +45,7 @@ interface PendingChangeDao {
     @Query("DELETE FROM pending_changes WHERE changeId = :changeId")
     suspend fun deleteChange(changeId: String)
 
-    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS'")
+    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS' AND entityType != 'FEE_STATUS'")
     fun getPendingCountFlow(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED')")
