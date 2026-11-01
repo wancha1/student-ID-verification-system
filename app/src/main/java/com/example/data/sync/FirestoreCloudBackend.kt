@@ -66,7 +66,7 @@ class FirestoreCloudBackend(
         val current = student.photoUrl?.trim().orEmpty()
         if (current.isBlank()) return ""
         if (current.startsWith("schools/$schoolId/students/")) return current
-        val context = appContext
+        appContext
             ?: throw IllegalStateException("Android context is required to upload student photos.")
         val parsed = Uri.parse(current)
         val source = when (parsed.scheme) {
@@ -265,7 +265,6 @@ class FirestoreCloudBackend(
                         "name" to student.name,
                         "firstName" to student.firstName,
                         "lastName" to student.lastName,
-                        "photoUrl" to (photoPaths[student.id] ?: ""),
                         "accessStatus" to student.accessStatus,
                         "gradeClass" to student.gradeClass,
                         "isDayScholar" to student.isDayScholar,
@@ -279,6 +278,9 @@ class FirestoreCloudBackend(
                         "updatedAt" to student.updatedAt,
                         "isDeleted" to student.isDeleted
                     )
+                    photoPaths[student.id]?.takeIf { it.isNotBlank() }?.let { data["photoUrl"] = it }
+                    // An absent local photo does not mean the user requested deletion; preserve
+                    // the existing cloud object path when this device has not cached the image.
                     // Explicitly remove retired finance and private fields from the shared roster.
                     data["feesStatus"] = FieldValue.delete()
                     data["outstandingAmount"] = FieldValue.delete()
