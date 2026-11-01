@@ -36,6 +36,31 @@ Do not restore local self-provisioning or client-side staff document creation. D
 4. Sign in through the Android app. The app will reject the account if the staff document is absent, inactive, or has an unsupported role.
 5. Provision subsequent staff the same way with least-privilege roles using only `ADMIN`, `HEAD_TEACHER`, `GATE_OFFICER`, or `MEAL_STAFF`. Each staff member must receive a fresh ID token after provisioning before Storage access will work.
 
+
+## Migrate existing staff claims
+
+Existing staff profiles must be migrated one UID at a time before those accounts can read student photos from Storage. Use a trusted workstation/server with Firebase Admin SDK Application Default Credentials and school-owner authorization. Do not run this from the Android app or a student device.
+
+Preview first (no writes):
+
+```sh
+GOOGLE_CLOUD_PROJECT=gen-lang-client-0207053136 \
+FIRESTORE_DATABASE_ID=ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba \
+node scripts/migrate-ltc-staff-claims.cjs --uid FIREBASE_AUTH_UID
+```
+
+Review the UID, email, role, Firestore active status, Auth disabled status, and proposed claims. The script refuses missing staff documents, unsupported roles, and mismatched emails. It derives `ltcActive` from both the Firestore `active` flag and whether the Auth account is disabled. It preserves unrelated custom claims and never creates or edits staff documents.
+
+Only after explicit school-owner authorization, apply the reviewed change:
+
+```sh
+GOOGLE_CLOUD_PROJECT=gen-lang-client-0207053136 \
+FIRESTORE_DATABASE_ID=ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba \
+node scripts/migrate-ltc-staff-claims.cjs --uid FIREBASE_AUTH_UID --apply --confirm-authorization
+```
+
+The default mode is dry-run. Apply mode changes only that user's Auth custom claims. The staff member must obtain a fresh ID token (normally by signing out and signing in again) before Storage access is expected to work. Repeat separately for each existing staff UID; do not bulk-run without reviewing each account.
+
 ## Student photo Storage
 
 Student photos belong under `schools/{schoolId}/students/{studentId}/photo.jpg`. Storage rules require the matching school ID, an active claim, and one of the four Version 1 roles to read. Only `ADMIN` and `HEAD_TEACHER` can upload, replace, or delete photos. Uploads are limited to JPEG, PNG, or WebP and 5 MiB. The Storage emulator rules tests run in CI; this does not create a bucket or deploy rules to the live Firebase project.
