@@ -539,7 +539,8 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
-    override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = try {
+    override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> {
+        return try {
         val studentRef = getSchoolRef().collection("students").document(studentId)
         val snapshot = studentRef.get().await()
         if (!snapshot.exists()) {
@@ -600,8 +601,9 @@ class FirestoreCloudBackend(
             studentRef.set(safeStudent).await()
         }
         Result.success(Unit)
-    } catch (e: Exception) {
-        Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun updateRemoteCard(card: CardEntity): Result<Unit> = try {
