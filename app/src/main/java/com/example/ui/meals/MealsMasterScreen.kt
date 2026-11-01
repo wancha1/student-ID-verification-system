@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Person
@@ -42,7 +41,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,7 +64,6 @@ import com.example.model.MealRecord
 import com.example.model.MealType
 import com.example.model.MealVerificationResult
 import com.example.model.Student
-import com.example.ui.components.MultiFormatExportDialog
 import com.example.ui.components.StudentAvatar
 import com.example.util.ExportFormat
 import java.text.SimpleDateFormat
@@ -88,7 +85,6 @@ fun MealsMasterScreen(
     modifier: Modifier = Modifier,
     readOnly: Boolean = false
 ) {
-    var showExportDialog by remember { mutableStateOf(false) }
     var manualInput by remember { mutableStateOf("") }
     var historySearchQuery by remember { mutableStateOf("") }
     var selectedMealsTab by remember { mutableStateOf("SERVE") }
@@ -191,19 +187,6 @@ fun MealsMasterScreen(
                             Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
 
-                        OutlinedButton(
-                            onClick = { showExportDialog = true },
-                            modifier = Modifier.testTag("button_meals_export"),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
                     }
                 }
 
@@ -434,18 +417,6 @@ fun MealsMasterScreen(
         )
     }
 
-    // Multi-Format Export Dialog
-    if (showExportDialog) {
-        MultiFormatExportDialog(
-            datasetTitle = "Dining Hall Meal Serving Records",
-            recordCount = mealRecords.size,
-            onDismiss = { showExportDialog = false },
-            onExport = { format ->
-                onExport(format)
-                showExportDialog = false
-            }
-        )
-    }
 }
 
 @Composable
