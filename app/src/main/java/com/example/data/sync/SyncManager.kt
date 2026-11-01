@@ -165,6 +165,35 @@ class SyncManager(
                     }
                 }
 
+                // One-time backfill for existing installations: the normal incremental
+                // student query cannot revisit unchanged records after staff Storage claims
+                // are provisioned. Retry this backfill on later syncs until it succeeds.
+                val photoRefreshMarker = database.syncMetadataDao().getValue("last_student_photo_refresh_timestamp")
+                if (photoRefreshMarker == null) {
+                    val fullRosterForPhotos = remoteCloudDataSource.fetchAllRemoteStudents()
+                    if (fullRosterForPhotos.isSuccess) {
+                        for (cloudStudent in fullRosterForPhotos.getOrThrow()) {
+                            val cloudPhoto = cloudStudent.photoUrl
+                            if (!cloudPhoto.isNullOrBlank()) {
+                                val localStudent = database.studentDao().getStudentById(cloudStudent.id)
+                                if (localStudent != null && localStudent.photoUrl != cloudPhoto) {
+                                    val updatedLocal = localStudent.copy(photoUrl = cloudPhoto)
+                                    database.studentDao().insertOrUpdateStudent(updatedLocal)
+                                    database.studentProfileDao().insertOrUpdateProfile(
+                                        StudentProfileEntity.fromStudent(updatedLocal.toDomain())
+                                    )
+                                }
+                            }
+                        }
+                        val refreshedAt = System.currentTimeMillis()
+                        database.syncMetadataDao().setValue(
+                            SyncMetadataEntity("last_student_photo_refresh_timestamp", refreshedAt.toString(), refreshedAt)
+                        )
+                    }
+                    // Photo backfill is deliberately non-blocking. If Storage access is
+                    // not ready yet, leave the marker unset so the next sync retries it.
+                }
+
                 // 6. Fetch modified card records from cloud
                 val fetchCardsResult = remoteCloudDataSource.fetchCardsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
                 if (fetchCardsResult.isFailure) {
