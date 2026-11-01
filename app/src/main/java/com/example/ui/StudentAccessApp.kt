@@ -1179,7 +1179,9 @@ fun StudentAccessApp(
                                     onBarcodeDetected = { rawCode ->
                                         viewModel.verifyAndServeMeal(rawCode, context)
                                     },
-                                    onCloseScanner = { viewModel.closeMealScanner() }
+                                    onCloseScanner = { viewModel.closeMealScanner() },
+                                    screenTitle = "MEAL QR VERIFICATION",
+                                    cameraPermissionMessage = "Camera access is needed to scan student ID cards and record lunch or supper service."
                                 )
                             } else {
                                 MealsMasterScreen(
