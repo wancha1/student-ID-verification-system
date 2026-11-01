@@ -45,9 +45,9 @@ interface PendingChangeDao {
     @Query("DELETE FROM pending_changes WHERE changeId = :changeId")
     suspend fun deleteChange(changeId: String)
 
-    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS' AND entityType != 'FEE_STATUS'")
+    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS'")
     fun getPendingCountFlow(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED')")
+    @Query("SELECT COUNT(*) FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType != 'FEE_STATUS'")
     suspend fun getPendingCount(): Int
 }
