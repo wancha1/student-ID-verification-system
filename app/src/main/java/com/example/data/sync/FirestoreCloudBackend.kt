@@ -34,7 +34,7 @@ class FirestoreCloudBackend(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(FirebaseApp.getInstance()),
     private val schoolId: String = "ltc_school_01",
     private val appContext: Context? = null,
-    private val storage: FirebaseStorage = FirebaseStorage.getInstance(FirebaseApp.getInstance())
+    private val storage: FirebaseStorage? = null
 ) : RemoteCloudDataSource {
 
     constructor(context: Context) : this(
@@ -54,6 +54,12 @@ class FirestoreCloudBackend(
     )
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
+
+    // Initialize Firebase Storage only when a photo operation is actually requested.
+    // This keeps Firestore-only emulator tests and non-photo sync paths independent
+    // of Android's default FirebaseApp initialization.
+    private fun storageClient(): FirebaseStorage =
+        storage ?: FirebaseStorage.getInstance(FirebaseApp.getInstance())
 
     private fun studentPhotoObjectPath(studentId: String): String =
         "schools/$schoolId/students/$studentId/photo.jpg"
@@ -78,7 +84,7 @@ class FirestoreCloudBackend(
             throw IllegalStateException("Student photo file is missing or unreadable for student ${student.id}.")
         }
         val objectPath = studentPhotoObjectPath(student.id)
-        storage.reference.child(objectPath)
+        storageClient().reference.child(objectPath)
             .putFile(Uri.fromFile(source), com.google.firebase.storage.StorageMetadata.Builder()
                 .setContentType("image/jpeg")
                 .build())
@@ -98,7 +104,7 @@ class FirestoreCloudBackend(
             val directory = File(context.filesDir, "student_photos")
             if (!directory.exists()) directory.mkdirs()
             val destination = File(directory, "cloud_${Uri.encode(studentId)}.jpg")
-            val reference = storage.reference.child(objectPath)
+            val reference = storageClient().reference.child(objectPath)
             val metadata = reference.metadata.await()
             if (!destination.exists() || destination.length() == 0L ||
                 destination.lastModified() < metadata.updatedTimeMillis) {
@@ -711,7 +717,7 @@ class FirestoreCloudBackend(
         if (!photoPath.isNullOrBlank() &&
             photoPath.startsWith("schools/$schoolId/students/$studentId/")) {
             try {
-                storage.reference.child(photoPath).delete().await()
+                storageClient().reference.child(photoPath).delete().await()
             } catch (_: Exception) {
                 // A later administrative cleanup can remove orphaned Storage objects.
             }
