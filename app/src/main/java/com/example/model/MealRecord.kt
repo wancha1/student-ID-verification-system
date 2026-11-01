@@ -12,7 +12,7 @@ enum class MealType(
 ) {
     BREAKFAST("Breakfast", "06:30 - 08:30", "BakeryDining"),
     LUNCH("Lunch", "12:00 - 14:00", "Restaurant"),
-    DINNER("Dinner", "18:00 - 20:00", "DinnerDining"),
+    DINNER("Supper", "18:00 - 20:00", "DinnerDining"),
     SPECIAL_SNACK("Evening Tea", "16:00 - 17:00", "Coffee");
 
     /** Breakfast and evening tea are retained only for historical record compatibility. */
