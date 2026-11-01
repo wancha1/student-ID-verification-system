@@ -143,3 +143,7 @@ jobs:
         run: npm install --no-save firebase @firebase/rules-unit-testing firebase-tools
       - name: Run Firestore emulator tests
         run: npx firebase-tools emulators:exec --only firestore --project demo-no-project "node --test firestore.test.js"
+      - name: Validate Firebase provisioning script syntax
+        run: node --check scripts/provision-ltc-staff.cjs
+      - name: Run Storage emulator tests
+        run: npx firebase-tools emulators:exec --only storage --project demo-no-project "node --test storage.test.js"
