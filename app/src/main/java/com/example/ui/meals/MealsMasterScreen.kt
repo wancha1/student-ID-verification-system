@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.roleGlassBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,7 +114,7 @@ fun MealsMasterScreen(
         modifier = modifier
             .fillMaxSize()
             .animateContentSize()
-            .background(MaterialTheme.colorScheme.background)
+            .roleGlassBackground(roleTheme.primaryColor)
     ) {
         // Meals Master Header
         Surface(
