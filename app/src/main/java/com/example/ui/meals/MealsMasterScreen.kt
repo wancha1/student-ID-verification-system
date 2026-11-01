@@ -1,6 +1,7 @@
 package com.example.ui.meals
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
@@ -111,6 +112,7 @@ fun MealsMasterScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .animateContentSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         // Meals Master Header
@@ -146,7 +148,7 @@ fun MealsMasterScreen(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Meals Master",
+                                    text = "Dining Services",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -186,7 +188,7 @@ fun MealsMasterScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Meal QR", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         OutlinedButton(
