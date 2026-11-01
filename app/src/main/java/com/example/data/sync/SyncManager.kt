@@ -165,24 +165,21 @@ class SyncManager(
                     }
                 }
 
-                // One-time backfill for existing installations: the normal incremental
-                // student query cannot revisit unchanged records after staff Storage claims
-                // are provisioned. Retry this backfill on later syncs until it succeeds.
+                // One-time backfill for existing installations. Unlike the normal
+                // incremental student query, this explicitly retries every stored photo
+                // until Storage access succeeds for all cloud photos.
                 val photoRefreshMarker = database.syncMetadataDao().getValue("last_student_photo_refresh_timestamp")
                 if (photoRefreshMarker == null) {
-                    val fullRosterForPhotos = remoteCloudDataSource.fetchAllRemoteStudents()
-                    if (fullRosterForPhotos.isSuccess) {
-                        for (cloudStudent in fullRosterForPhotos.getOrThrow()) {
-                            val cloudPhoto = cloudStudent.photoUrl
-                            if (!cloudPhoto.isNullOrBlank()) {
-                                val localStudent = database.studentDao().getStudentById(cloudStudent.id)
-                                if (localStudent != null && localStudent.photoUrl != cloudPhoto) {
-                                    val updatedLocal = localStudent.copy(photoUrl = cloudPhoto)
-                                    database.studentDao().insertOrUpdateStudent(updatedLocal)
-                                    database.studentProfileDao().insertOrUpdateProfile(
-                                        StudentProfileEntity.fromStudent(updatedLocal.toDomain())
-                                    )
-                                }
+                    val photoRefreshResult = remoteCloudDataSource.refreshStudentPhotos()
+                    if (photoRefreshResult.isSuccess) {
+                        for ((studentId, localPhotoUri) in photoRefreshResult.getOrThrow()) {
+                            val localStudent = database.studentDao().getStudentById(studentId)
+                            if (localStudent != null && localStudent.photoUrl != localPhotoUri) {
+                                val updatedLocal = localStudent.copy(photoUrl = localPhotoUri)
+                                database.studentDao().insertOrUpdateStudent(updatedLocal)
+                                database.studentProfileDao().insertOrUpdateProfile(
+                                    StudentProfileEntity.fromStudent(updatedLocal.toDomain())
+                                )
                             }
                         }
                         val refreshedAt = System.currentTimeMillis()
@@ -190,8 +187,8 @@ class SyncManager(
                             SyncMetadataEntity("last_student_photo_refresh_timestamp", refreshedAt.toString(), refreshedAt)
                         )
                     }
-                    // Photo backfill is deliberately non-blocking. If Storage access is
-                    // not ready yet, leave the marker unset so the next sync retries it.
+                    // On failure, leave the marker unset so a later sync retries.
+                    // Photo refresh does not block access-record synchronization.
                 }
 
                 // 6. Fetch modified card records from cloud
