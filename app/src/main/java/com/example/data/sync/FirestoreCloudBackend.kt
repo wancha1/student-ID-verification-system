@@ -97,7 +97,7 @@ class FirestoreCloudBackend(
         return try {
             val directory = File(context.filesDir, "student_photos")
             if (!directory.exists()) directory.mkdirs()
-            val destination = File(directory, "cloud_${studentId.hashCode().toUInt().toString(16)}.jpg")
+            val destination = File(directory, "cloud_${Uri.encode(studentId)}.jpg")
             val reference = storage.reference.child(objectPath)
             val metadata = reference.metadata.await()
             if (!destination.exists() || destination.length() == 0L ||
