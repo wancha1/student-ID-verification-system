@@ -540,13 +540,65 @@ class FirestoreCloudBackend(
     }
 
     override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = try {
-        val docRef = getSchoolRef().collection("students").document(studentId)
-        docRef.update(
-            mapOf(
-                "isDeleted" to true,
-                "updatedAt" to updatedAt
-            )
-        ).await()
+        val studentRef = getSchoolRef().collection("students").document(studentId)
+        val snapshot = studentRef.get().await()
+        if (!snapshot.exists()) {
+            // Idempotent retry: the remote student may already have been removed.
+            return Result.success(Unit)
+        }
+
+        // Rebuild the shared roster document using only the current V1 schema.
+        // This also removes legacy finance/private fields that otherwise cause
+        // valid soft-deletion updates to fail strict Firestore validation.
+        val existing = snapshot.data.orEmpty()
+        val safeStudent = hashMapOf<String, Any>(
+            "id" to (existing["id"] as? String ?: studentId),
+            "studentNumber" to (existing["studentNumber"] as? String ?: ""),
+            "name" to (existing["name"] as? String ?: ""),
+            "firstName" to (existing["firstName"] as? String ?: ""),
+            "lastName" to (existing["lastName"] as? String ?: ""),
+            "photoUrl" to (existing["photoUrl"] as? String ?: ""),
+            "accessStatus" to (existing["accessStatus"] as? String ?: "APPROVED"),
+            "gradeClass" to (existing["gradeClass"] as? String ?: ""),
+            "isDayScholar" to (existing["isDayScholar"] as? Boolean ?: true),
+            "dayScholarType" to (existing["dayScholarType"] as? String ?: "DAY_SCHOLAR_WALK"),
+            "transportRoute" to (existing["transportRoute"] as? String ?: ""),
+            "gender" to (existing["gender"] as? String ?: "Male"),
+            "avatarColorSeed" to (existing["avatarColorSeed"] as? Number)?.toLong().let { it ?: 42L },
+            "homeroomTeacher" to (existing["homeroomTeacher"] as? String ?: ""),
+            "academicYear" to (existing["academicYear"] as? String ?: "2026"),
+            "qrToken" to (existing["qrToken"] as? String ?: ""),
+            "updatedAt" to updatedAt,
+            "isDeleted" to true
+        )
+
+        val cardSnapshot = getSchoolRef().collection("cards")
+            .whereEqualTo("studentId", studentId)
+            .get()
+            .await()
+
+        // Revoke every card belonging to the deleted student. Keep card documents
+        // for auditability; a deleted student must never retain an active credential.
+        for (chunk in cardSnapshot.documents.chunked(MAX_BATCH_WRITES - 1)) {
+            val batch = db.batch()
+            batch.set(studentRef, safeStudent)
+            for (cardDoc in chunk) {
+                batch.update(
+                    cardDoc.reference,
+                    mapOf(
+                        "status" to "DEACTIVATED",
+                        "deactivationDate" to updatedAt,
+                        "reason" to "Student record deleted",
+                        "updatedAt" to updatedAt,
+                        "isDeleted" to true
+                    )
+                )
+            }
+            batch.commit().await()
+        }
+        if (cardSnapshot.documents.isEmpty()) {
+            studentRef.set(safeStudent).await()
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
