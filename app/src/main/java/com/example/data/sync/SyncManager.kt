@@ -150,8 +150,16 @@ class SyncManager(
                         val local = database.studentDao().getStudentById(remoteStudent.id)
                         // Conflict resolution: Last-Write-Wins based on updatedAt
                         if (local == null || remoteStudent.updatedAt >= local.updatedAt) {
-                            database.studentDao().insertOrUpdateStudent(remoteStudent)
-                            database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(remoteStudent.toDomain()))
+                            // A Storage download may be unavailable until this staff account
+                            // receives its custom claims. Never replace a working local photo
+                            // with null during an otherwise successful roster sync.
+                            val studentWithPhotoFallback = remoteStudent.copy(
+                                photoUrl = remoteStudent.photoUrl ?: local?.photoUrl
+                            )
+                            database.studentDao().insertOrUpdateStudent(studentWithPhotoFallback)
+                            database.studentProfileDao().insertOrUpdateProfile(
+                                StudentProfileEntity.fromStudent(studentWithPhotoFallback.toDomain())
+                            )
                             studentsUpdatedCount++
                         }
                     }
