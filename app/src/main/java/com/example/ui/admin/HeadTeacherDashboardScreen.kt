@@ -34,6 +34,8 @@ import com.example.model.AuthUser
 import com.example.model.MealRecord
 import com.example.model.ScanLog
 import com.example.model.Student
+import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.roleGlassBackground
 
 /**
  * Version 1 Head Teacher overview.
@@ -49,8 +51,9 @@ fun HeadTeacherDashboardScreen(
     onOpenMeals: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val roleTheme = LocalRoleTheme.current
     LazyColumn(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        modifier = modifier.fillMaxSize().roleGlassBackground(roleTheme.primaryColor),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 18.dp, 16.dp, 100.dp)
     ) {
@@ -58,7 +61,9 @@ fun HeadTeacherDashboardScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF14263D))
+                colors = CardDefaults.cardColors(containerColor = Color(0xCC14263D)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("SCHOOL LEADERSHIP", color = Color(0xFFE8C77A), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
