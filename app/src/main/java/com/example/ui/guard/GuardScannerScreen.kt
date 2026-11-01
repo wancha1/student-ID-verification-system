@@ -88,7 +88,7 @@ fun GuardScannerScreen(
     onCloseScanner: () -> Unit,
     modifier: Modifier = Modifier,
     screenTitle: String = "GATE ACCESS SCANNER",
-    cameraPermissionMessage: String = "${cameraPermissionMessage}"
+    cameraPermissionMessage: String = "The QR scanner requires camera access to verify student badges at the gate."
 ) {
     BackHandler(onBack = onCloseScanner)
     val context = LocalContext.current
@@ -160,7 +160,7 @@ fun GuardScannerScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "The QR scanner requires camera access to verify student badges at the gate.",
+                    text = cameraPermissionMessage,
                     color = Color.White.copy(alpha = 0.8f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(16.dp)
