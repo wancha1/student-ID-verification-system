@@ -948,6 +948,10 @@ class MainViewModel(
     // MEALS MASTER ACTIONS
     // ==========================================
     fun selectMealType(mealType: MealType) {
+        if (!mealType.isEnabledForServing) {
+            _userFeedbackMessage.value = "${mealType.label} is disabled. Only lunch and supper are available."
+            return
+        }
         _activeMealType.value = mealType
     }
 
@@ -972,6 +976,12 @@ class MainViewModel(
     }
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
+        val selectedMeal = _activeMealType.value
+        if (!selectedMeal.isEnabledForServing) {
+            _userFeedbackMessage.value = "${selectedMeal.label} is disabled. Only lunch and supper can be served."
+            FeedbackHelper.playDeniedSoundAndHaptic(context)
+            return
+        }
         val user = _currentUser.value
         if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
             _userFeedbackMessage.value = "Access Denied: Unauthenticated session. Meal Staff authorization is required."
