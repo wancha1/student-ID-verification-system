@@ -565,7 +565,7 @@ class MockStudentRepository : StudentRepository {
                 },
                 timestamp = log.timestamp,
                 gateLocation = log.gateLocation,
-                isDelivered = true
+                isDelivered = false
             )
             _guardianNotifications.update { listOf(notif) + it }
         }
@@ -588,7 +588,7 @@ class MockStudentRepository : StudentRepository {
             type = com.example.model.NotificationType.EXEAT_PASS_ISSUED,
             message = "🎫 OFFICIAL EXEAT PASS: ${pass.passNumber} issued for ${pass.studentName} (${pass.reason.name.replace("_", " ")}). Destination: ${pass.destination}.",
             timestamp = System.currentTimeMillis(),
-            isDelivered = true
+            isDelivered = false
         )
         _guardianNotifications.update { listOf(notif) + it }
         return Result.success(Unit)

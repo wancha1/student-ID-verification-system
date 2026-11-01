@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.roleGlassBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -117,7 +118,7 @@ fun GuardDashboardScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .roleGlassBackground(roleTheme.primaryColor)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -206,7 +207,7 @@ fun GuardDashboardScreen(
                                 Text(
                                     text = roleTheme.stationBadge,
                                     color = Color.White,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Black,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                 )

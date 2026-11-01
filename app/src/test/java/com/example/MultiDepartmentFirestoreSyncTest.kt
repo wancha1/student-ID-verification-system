@@ -24,6 +24,7 @@ import com.example.model.UserRole
 import com.example.testutil.TestCardCryptoHelper
 import com.example.util.CardCryptoManager
 import com.example.util.QrUnifiedVerifier
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -175,11 +176,9 @@ class MultiDepartmentFirestoreSyncTest {
     }
 
     @Test
-    fun test02_MultiDepartmentEvents_SyncToCloudBackend() = runBlocking {
+    fun test02_MealEvents_SyncToCloudBackend() = runBlocking {
         val mealStaff = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Chef Mary", station = "Cafeteria")
-        val teacher = AuthUser(role = UserRole.TEACHERS, name = "Tr. Paul", station = "Class S4")
 
-        // Record a meal on Device A
         val mealResult = QrUnifiedVerifier.verifyAndProcessScan(
             rawQrCode = qrPayload,
             department = ScanDepartment.MEALS,
@@ -188,24 +187,14 @@ class MultiDepartmentFirestoreSyncTest {
             syncManager = syncManagerDeviceA,
             mealType = MealType.LUNCH
         )
-        assertTrue(mealResult is DepartmentVerificationResult.Success)
+        assertTrue("Meal staff can record a meal", mealResult is DepartmentVerificationResult.Success)
 
-        // Record attendance on Device A
-        val attResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = qrPayload,
-            department = ScanDepartment.ATTENDANCE,
-            currentUser = teacher,
-            database = databaseDeviceA,
-            syncManager = syncManagerDeviceA,
-            attendanceSubject = "Mathematics",
-            attendanceSessionName = "Morning Lesson 1"
-        )
-        assertTrue(attResult is DepartmentVerificationResult.Success)
-
-        // Sync Device A to cloud
         val syncA = syncManagerDeviceA.syncNow()
-        assertTrue(syncA.isSuccess)
-        assertEquals(0, databaseDeviceA.mealRecordDao().getUnsynced().size)
-        assertEquals(0, databaseDeviceA.attendanceRecordDao().getUnsynced().size)
+        assertTrue("V1 meal sync succeeds", syncA.isSuccess)
+        assertEquals("Meal outbox is cleared after upload", 0, databaseDeviceA.mealRecordDao().getUnsynced().size)
+
+        val syncB = syncManagerDeviceB.syncNow()
+        assertTrue("Second device pulls meal history", syncB.isSuccess)
+        assertEquals(1, databaseDeviceB.mealRecordDao().observeAll().first().size)
     }
 }

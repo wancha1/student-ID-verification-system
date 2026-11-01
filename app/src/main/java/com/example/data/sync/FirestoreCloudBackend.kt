@@ -1,6 +1,8 @@
 package com.example.data.sync
 
 import android.content.Context
+import android.net.Uri
+import java.io.File
 import com.example.R
 import com.example.data.FirestoreStudentRepository
 import com.example.data.local.AttendanceRecordEntity
@@ -17,6 +19,7 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -29,7 +32,9 @@ class FirestoreCloudBackend(
         FIRESTORE_DATABASE_ID
     ),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(FirebaseApp.getInstance()),
-    private val schoolId: String = "ltc_school_01"
+    private val schoolId: String = "ltc_school_01",
+    private val appContext: Context? = null,
+    private val storage: FirebaseStorage? = null
 ) : RemoteCloudDataSource {
 
     constructor(context: Context) : this(
@@ -38,7 +43,8 @@ class FirestoreCloudBackend(
             requireAuthorizedLtcDatabaseId(context)
         ),
         FirebaseAuth.getInstance(FirebaseApp.getInstance()),
-        "ltc_school_01"
+        "ltc_school_01",
+        context.applicationContext
     )
 
     constructor(firestoreRepo: FirestoreStudentRepository) : this(
@@ -48,6 +54,78 @@ class FirestoreCloudBackend(
     )
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
+
+    // Initialize Firebase Storage only when a photo operation is actually requested.
+    // This keeps Firestore-only emulator tests and non-photo sync paths independent
+    // of Android's default FirebaseApp initialization.
+    private fun storageClient(): FirebaseStorage =
+        storage ?: FirebaseStorage.getInstance(FirebaseApp.getInstance())
+
+    private fun studentPhotoObjectPath(studentId: String): String =
+        "schools/$schoolId/students/$studentId/photo.jpg"
+
+    /**
+     * Uploads a local passport photo and returns its private Storage object path.
+     * Existing Storage paths are idempotent; local file URIs never enter Firestore.
+     */
+    private suspend fun uploadStudentPhoto(student: StudentEntity): String {
+        val current = student.photoUrl?.trim().orEmpty()
+        if (current.isBlank()) return ""
+        if (current.startsWith("schools/$schoolId/students/")) return current
+        appContext
+            ?: throw IllegalStateException("Android context is required to upload student photos.")
+        val parsed = Uri.parse(current)
+        val source = when (parsed.scheme) {
+            "file" -> File(parsed.path ?: "")
+            null, "" -> File(current)
+            else -> throw IllegalArgumentException("Unsupported local student photo URI scheme.")
+        }
+        if (!source.isFile || !source.canRead()) {
+            throw IllegalStateException("Student photo file is missing or unreadable for student ${student.id}.")
+        }
+        val objectPath = studentPhotoObjectPath(student.id)
+        storageClient().reference.child(objectPath)
+            .putFile(Uri.fromFile(source), com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType("image/jpeg")
+                .build())
+            .await()
+        return objectPath
+    }
+
+    /**
+     * Downloads a private Storage object into app-private cache for Coil/local UI use.
+     * Failure is isolated from roster sync so missing claims or a missing legacy object
+     * cannot block student records from synchronizing.
+     */
+    private suspend fun cacheStudentPhoto(studentId: String, objectPath: String?): String? {
+        if (objectPath.isNullOrBlank() || !objectPath.startsWith("schools/$schoolId/students/")) return null
+        val context = appContext ?: return null
+        return try {
+            val directory = File(context.filesDir, "student_photos")
+            if (!directory.exists()) directory.mkdirs()
+            val destination = File(directory, "cloud_${Uri.encode(studentId)}.jpg")
+            val reference = storageClient().reference.child(objectPath)
+            val metadata = reference.metadata.await()
+            if (!destination.exists() || destination.length() == 0L ||
+                destination.lastModified() < metadata.updatedTimeMillis) {
+                val temporary = File(directory, destination.name + ".download")
+                try {
+                    reference.getFile(temporary).await()
+                    if (!temporary.renameTo(destination)) {
+                        temporary.copyTo(destination, overwrite = true)
+                        temporary.delete()
+                    }
+                    destination.setLastModified(metadata.updatedTimeMillis)
+                } finally {
+                    if (temporary.exists()) temporary.delete()
+                }
+            }
+            Uri.fromFile(destination).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
 
     private suspend fun currentActiveStaffRole(): String? {
         val uid = auth.currentUser?.uid ?: return null
@@ -91,6 +169,13 @@ class FirestoreCloudBackend(
             emptyMap()
         }
 
+        // Cache private student photos locally. Photo download failures do not block
+        // roster synchronization; existing local photos are retained by SyncManager.
+        val cachedPhotoById = mutableMapOf<String, String?>()
+        for (doc in snapshot.documents) {
+            cachedPhotoById[doc.id] = cacheStudentPhoto(doc.id, doc.getString("photoUrl"))
+        }
+
         // Do not silently skip malformed records: a failed pull must keep the sync
         // cycle retryable instead of advancing the watermark past missing data.
         val list = snapshot.documents.map { doc ->
@@ -101,7 +186,7 @@ class FirestoreCloudBackend(
                 name = doc.getString("name") ?: "${doc.getString("firstName") ?: ""} ${doc.getString("lastName") ?: ""}".trim(),
                 firstName = doc.getString("firstName") ?: "",
                 lastName = doc.getString("lastName") ?: "",
-                photoUrl = doc.getString("photoUrl"),
+                photoUrl = cachedPhotoById[doc.id],
                 accessStatus = doc.getString("accessStatus") ?: "APPROVED",
                 gradeClass = doc.getString("gradeClass") ?: "",
                 isDayScholar = doc.getBoolean("isDayScholar") ?: true,
@@ -158,42 +243,61 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
-    override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = try {
-        val canWritePrivate = isStudentPrivacyStaff()
-        // Each student may require two writes (shared + private); stay well below
-        // Firestore's 500-write batch limit during bulk synchronization.
+    override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> {
+        return try {
+        if (students.isEmpty()) return Result.success(Unit)
+        val role = currentActiveStaffRole()
+            ?: throw SecurityException("Active staff sign-in is required to sync student records.")
+        val canWriteShared = role == "ADMIN"
+        val canWritePrivate = role in setOf("ADMIN", "HEAD_TEACHER")
+        if (!canWriteShared && !canWritePrivate) {
+            throw SecurityException("Only Admin or Head Teacher can synchronize permitted student information.")
+        }
+
+        // Admin writes the shared roster and private profile. Head Teacher writes
+        // private profiles only; Firestore rules keep the shared roster Admin-only.
         for (chunk in students.chunked(200)) {
+            // Upload each local image before committing its Firestore object path.
+            val photoPaths = if (canWriteShared) {
+                chunk.associate { student -> student.id to uploadStudentPhoto(student) }
+            } else emptyMap()
             val batch = db.batch()
             for (student in chunk) {
-                val docRef = getSchoolRef().collection("students").document(student.id)
-                val data = hashMapOf<String, Any>(
-                    "id" to student.id,
-                    "studentNumber" to student.studentNumber,
-                    "name" to student.name,
-                    "firstName" to student.firstName,
-                    "lastName" to student.lastName,
-                    "photoUrl" to (student.photoUrl ?: ""),
-                    "accessStatus" to student.accessStatus,
-                    "gradeClass" to student.gradeClass,
-                    "isDayScholar" to student.isDayScholar,
-                    "dayScholarType" to student.dayScholarType,
-                    "transportRoute" to (student.transportRoute ?: ""),
-                    "feesStatus" to student.feesStatus,
-                    "outstandingAmount" to student.outstandingAmount,
-                    "gender" to student.gender,
-                    "avatarColorSeed" to student.avatarColorSeed,
-                    "homeroomTeacher" to student.homeroomTeacher,
-                    "academicYear" to student.academicYear,
-                    "qrToken" to student.qrToken,
-                    "updatedAt" to student.updatedAt,
-                    "isDeleted" to student.isDeleted
-                )
-                if (canWritePrivate) {
-                    // Move sensitive fields off the shared roster; never reintroduce them.
+                if (canWriteShared) {
+                    val docRef = getSchoolRef().collection("students").document(student.id)
+                    val data = hashMapOf<String, Any>(
+                        "id" to student.id,
+                        "studentNumber" to student.studentNumber,
+                        "name" to student.name,
+                        "firstName" to student.firstName,
+                        "lastName" to student.lastName,
+                        "accessStatus" to student.accessStatus,
+                        "gradeClass" to student.gradeClass,
+                        "isDayScholar" to student.isDayScholar,
+                        "dayScholarType" to student.dayScholarType,
+                        "transportRoute" to (student.transportRoute ?: ""),
+                        "gender" to student.gender,
+                        "avatarColorSeed" to student.avatarColorSeed,
+                        "homeroomTeacher" to student.homeroomTeacher,
+                        "academicYear" to student.academicYear,
+                        "qrToken" to student.qrToken,
+                        "updatedAt" to student.updatedAt,
+                        "isDeleted" to student.isDeleted
+                    )
+                    photoPaths[student.id]?.takeIf { it.isNotBlank() }?.let { data["photoUrl"] = it }
+                    // An absent local photo does not mean the user requested deletion; preserve
+                    // the existing cloud object path when this device has not cached the image.
+                    // Explicitly remove retired finance and private fields from the shared roster.
+                    data["feesStatus"] = FieldValue.delete()
+                    data["outstandingAmount"] = FieldValue.delete()
                     data["guardianName"] = FieldValue.delete()
                     data["guardianPhone"] = FieldValue.delete()
                     data["emergencyContact"] = FieldValue.delete()
                     data["notes"] = FieldValue.delete()
+                    batch.set(docRef, data, SetOptions.merge())
+                }
+
+                if (canWritePrivate) {
                     val privateRef = getSchoolRef().collection("student_private").document(student.id)
                     batch.set(
                         privateRef,
@@ -208,16 +312,21 @@ class FirestoreCloudBackend(
                         SetOptions.merge()
                     )
                 }
-                batch.set(docRef, data, SetOptions.merge())
             }
             batch.commit().await()
         }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
-    override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> = try {
+    override suspend fun pushCardChanges(cards: List<CardEntity>): Result<Unit> {
+        return try {
+        if (cards.isEmpty()) return Result.success(Unit)
+        if (currentActiveStaffRole() != "ADMIN") {
+            throw SecurityException("Only the Administrator can synchronize ID-card changes.")
+        }
         // Firestore batches have a 500-write ceiling. Keep headroom for future
         // metadata writes and ensure a large offline backlog cannot fail as one batch.
         for (chunk in cards.chunked(MAX_BATCH_WRITES)) {
@@ -247,9 +356,16 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
-    override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> = try {
+    override suspend fun pushGateLogs(logs: List<ScanLogEntity>): Result<Unit> {
+        return try {
+        if (logs.isEmpty()) return Result.success(Unit)
+        val role = currentActiveStaffRole()
+        if (role != "ADMIN" && role != "GATE_OFFICER") {
+            throw SecurityException("Only Admin or Gate Officer can synchronize gate logs.")
+        }
         for (chunk in logs.chunked(MAX_BATCH_WRITES)) {
             val batch = db.batch()
             for (log in chunk) {
@@ -269,9 +385,16 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
-    override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> = try {
+    override suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit> {
+        return try {
+        if (meals.isEmpty()) return Result.success(Unit)
+        val role = currentActiveStaffRole()
+        if (role != "ADMIN" && role != "MEAL_STAFF") {
+            throw SecurityException("Only Admin or Meal Staff can synchronize meal records.")
+        }
         for (chunk in meals.chunked(MAX_BATCH_WRITES)) {
             val batch = db.batch()
             for (meal in chunk) {
@@ -298,6 +421,7 @@ class FirestoreCloudBackend(
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
+        }
     }
 
     override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> = try {
@@ -386,7 +510,7 @@ class FirestoreCloudBackend(
         return try {
             val role = currentActiveStaffRole()
                 ?: throw SecurityException("Active staff sign-in is required to sync meal records.")
-            if (role !in setOf("ADMIN", "HEAD_TEACHER", "MATRON_PATRON", "MEAL_STAFF")) {
+            if (role !in setOf("ADMIN", "HEAD_TEACHER", "MEAL_STAFF")) {
                 return Result.success(emptyList())
             }
             val snapshot = getSchoolRef().collection("meals").get().await()
@@ -415,7 +539,7 @@ class FirestoreCloudBackend(
         return try {
             val role = currentActiveStaffRole()
                 ?: throw SecurityException("Active staff sign-in is required to sync attendance records.")
-            if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "TEACHER")) {
+            if (role !in setOf("ADMIN", "HEAD_TEACHER")) {
                 return Result.success(emptyList())
             }
             val snapshot = getSchoolRef().collection("attendance").get().await()
@@ -448,7 +572,7 @@ class FirestoreCloudBackend(
         return try {
             val role = currentActiveStaffRole()
                 ?: throw SecurityException("Active staff sign-in is required to sync exam exceptions.")
-            if (role !in setOf("ADMIN", "HEAD_TEACHER", "DIRECTOR_OF_STUDIES", "EXAM_STAFF", "BURSAR")) {
+            if (role !in setOf("ADMIN", "HEAD_TEACHER")) {
                 return Result.success(emptyList())
             }
             val snapshot = getSchoolRef().collection("exam_exceptions").get().await()
@@ -479,6 +603,24 @@ class FirestoreCloudBackend(
         }
     }
 
+    override suspend fun refreshStudentPhotos(): Result<Map<String, String>> = try {
+        val snapshot = getSchoolRef().collection("students").get().await()
+        val refreshed = mutableMapOf<String, String>()
+        for (doc in snapshot.documents) {
+            val objectPath = doc.getString("photoUrl")?.trim().orEmpty()
+            if (objectPath.isBlank()) continue
+            if (!objectPath.startsWith("schools/$schoolId/students/")) {
+                throw IllegalStateException("Student ${doc.id} has an invalid photo object path.")
+            }
+            val localPhoto = cacheStudentPhoto(doc.id, objectPath)
+                ?: throw IllegalStateException("Could not download photo for student ${doc.id}; photo refresh will retry.")
+            refreshed[doc.id] = localPhoto
+        }
+        Result.success(refreshed)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> {
         return fetchStudentsUpdatedSince(-1L)
     }
@@ -506,17 +648,84 @@ class FirestoreCloudBackend(
         Result.failure(e)
     }
 
-    override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = try {
-        val docRef = getSchoolRef().collection("students").document(studentId)
-        docRef.update(
-            mapOf(
-                "isDeleted" to true,
-                "updatedAt" to updatedAt
-            )
-        ).await()
+    override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> {
+        return try {
+        val studentRef = getSchoolRef().collection("students").document(studentId)
+        val snapshot = studentRef.get().await()
+        if (!snapshot.exists()) {
+            // Idempotent retry: the remote student may already have been removed.
+            return Result.success(Unit)
+        }
+
+        // Rebuild the shared roster document using only the current V1 schema.
+        // This also removes legacy finance/private fields that otherwise cause
+        // valid soft-deletion updates to fail strict Firestore validation.
+        val existing = snapshot.data.orEmpty()
+        val safeStudent = hashMapOf<String, Any>(
+            "id" to (existing["id"] as? String ?: studentId),
+            "studentNumber" to (existing["studentNumber"] as? String ?: ""),
+            "name" to (existing["name"] as? String ?: ""),
+            "firstName" to (existing["firstName"] as? String ?: ""),
+            "lastName" to (existing["lastName"] as? String ?: ""),
+            "photoUrl" to (existing["photoUrl"] as? String ?: ""),
+            "accessStatus" to (existing["accessStatus"] as? String ?: "APPROVED"),
+            "gradeClass" to (existing["gradeClass"] as? String ?: ""),
+            "isDayScholar" to (existing["isDayScholar"] as? Boolean ?: true),
+            "dayScholarType" to (existing["dayScholarType"] as? String ?: "DAY_SCHOLAR_WALK"),
+            "transportRoute" to (existing["transportRoute"] as? String ?: ""),
+            "gender" to (existing["gender"] as? String ?: "Male"),
+            "avatarColorSeed" to (existing["avatarColorSeed"] as? Number)?.toLong().let { it ?: 42L },
+            "homeroomTeacher" to (existing["homeroomTeacher"] as? String ?: ""),
+            "academicYear" to (existing["academicYear"] as? String ?: "2026"),
+            "qrToken" to (existing["qrToken"] as? String ?: ""),
+            "updatedAt" to updatedAt,
+            "isDeleted" to true
+        )
+
+        val cardSnapshot = getSchoolRef().collection("cards")
+            .whereEqualTo("studentId", studentId)
+            .get()
+            .await()
+
+        // Revoke every card belonging to the deleted student. Keep card documents
+        // for auditability; a deleted student must never retain an active credential.
+        for (chunk in cardSnapshot.documents.chunked(MAX_BATCH_WRITES - 1)) {
+            val batch = db.batch()
+            batch.set(studentRef, safeStudent)
+            for (cardDoc in chunk) {
+                batch.update(
+                    cardDoc.reference,
+                    mapOf(
+                        "status" to "DEACTIVATED",
+                        "deactivationDate" to updatedAt,
+                        "reason" to "Student record deleted",
+                        "updatedAt" to updatedAt,
+                        "isDeleted" to true
+                    )
+                )
+            }
+            batch.commit().await()
+        }
+        if (cardSnapshot.documents.isEmpty()) {
+            studentRef.set(safeStudent).await()
+        }
+
+        // The student is already safely soft-deleted and cards revoked. Remove the
+        // private photo as best effort; Storage authorization/network failures must
+        // not undo or block the completed access revocation.
+        val photoPath = existing["photoUrl"] as? String
+        if (!photoPath.isNullOrBlank() &&
+            photoPath.startsWith("schools/$schoolId/students/$studentId/")) {
+            try {
+                storageClient().reference.child(photoPath).delete().await()
+            } catch (_: Exception) {
+                // A later administrative cleanup can remove orphaned Storage objects.
+            }
+        }
         Result.success(Unit)
-    } catch (e: Exception) {
-        Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun updateRemoteCard(card: CardEntity): Result<Unit> = try {

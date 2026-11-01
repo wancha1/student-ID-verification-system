@@ -888,7 +888,7 @@ class RoomStudentRepository(
             type = com.example.model.NotificationType.EXEAT_PASS_ISSUED,
             message = "🎫 OFFICIAL EXEAT PASS: ${pass.passNumber} issued for ${pass.studentName} (${pass.reason.name.replace("_", " ")}). Destination: ${pass.destination}.",
             timestamp = System.currentTimeMillis(),
-            isDelivered = true
+            isDelivered = false
         )
         _guardianNotifications.value = listOf(notif) + _guardianNotifications.value
         Result.success(Unit)

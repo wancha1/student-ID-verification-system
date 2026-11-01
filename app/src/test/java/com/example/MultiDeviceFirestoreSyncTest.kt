@@ -178,11 +178,57 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
-    fun operationalRecordsUploadedOnOneDeviceArePulledToAnother() = runBlocking {
-        val adminEmail = "admin_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
+    fun realRegistrationFlowUploadsStudentAndInitialCardForSecondDevice() = runBlocking {
+        val adminEmail = "admin_registration_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug"
         signInAs(adminEmail, "ADMIN")
-        val backend = FirestoreCloudBackend(firestore, auth, schoolId)
+        val backendA = FirestoreCloudBackend(firestore, auth, schoolId)
+        val repositoryA = RoomStudentRepository(deviceADatabase, remoteCloudDataSource = backendA)
+        repositoryA.initialize()
 
+        val student = Student(
+            id = "STU-REAL-FLOW-${UUID.randomUUID().toString().take(8)}",
+            studentNumber = "LTC-2026-5533",
+            firstName = "Martha",
+            lastName = "Auma",
+            gradeClass = "Senior 5",
+            isDayScholar = true,
+            dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK,
+            feesStatus = FeeStatus.CLEARED,
+            outstandingAmount = 0.0,
+            accessStatus = AccessStatus.APPROVED
+        )
+
+        val registration = repositoryA.addStudent(student)
+        assertTrue("Local registration should complete: ${registration.exceptionOrNull()}", registration.isSuccess)
+
+        val cloudStudent = firestore.collection("schools").document(schoolId)
+            .collection("students").document(student.id).get().await()
+        assertTrue("The real registration flow must upload the student document", cloudStudent.exists())
+
+        val cloudCards = firestore.collection("schools").document(schoolId)
+            .collection("cards").whereEqualTo("studentId", student.id).get().await()
+        assertEquals("Registration must upload exactly one initial card", 1, cloudCards.size())
+
+        signInAs("gate_registration_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "GATE_OFFICER")
+        val backendB = FirestoreCloudBackend(firestore, auth, schoolId)
+        val managerB = SyncManager(deviceBDatabase, backendB)
+        val syncResult = managerB.syncNow()
+        assertTrue("Second device must pull the registered student and card: ${syncResult.exceptionOrNull()}", syncResult.isSuccess)
+
+        assertNotNull(
+            "Second device must cache the student from Firestore",
+            deviceBDatabase.studentDao().getStudentById(student.id)
+        )
+        assertNotNull(
+            "Second device must cache the initial ID card from Firestore",
+            deviceBDatabase.cardDao().getCardById(cloudCards.documents.single().id)
+        )
+    }
+
+    @Test
+    fun mealRecordsUploadedOnOneDeviceArePulledToAnother() = runBlocking {
+        signInAs("meal_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "MEAL_STAFF")
+        val backend = FirestoreCloudBackend(firestore, auth, schoolId)
         val meal = MealRecordEntity(
             id = "MEAL-SYNC-${UUID.randomUUID().toString().take(8)}",
             studentId = "STU-OPS-01",
@@ -196,92 +242,39 @@ class MultiDeviceFirestoreSyncTest : FirestoreEmulatorTestBase() {
             status = "SERVED",
             isSyncedToCloud = false
         )
-        val attendance = AttendanceRecordEntity(
-            id = "ATT-SYNC-${UUID.randomUUID().toString().take(8)}",
-            studentId = "STU-OPS-01",
-            studentNumber = "LTC-OPS-01",
-            studentName = "Test Student",
-            gradeClass = "Senior 4",
-            subject = "Mathematics",
-            sessionName = "Period 1",
-            lessonDate = "2026-10-22",
-            timestamp = System.currentTimeMillis(),
-            teacherName = "Test Teacher",
-            isPresent = true
-        )
-        val exception = ExamExceptionEntity(
-            id = "EXAM-SYNC-${UUID.randomUUID().toString().take(8)}",
-            studentId = "STU-OPS-01",
-            studentNumber = "LTC-OPS-01",
-            studentName = "Test Student",
-            examCode = "UACE-MATH-01",
-            requestedByBursar = "Test Bursar",
-            recommendationReason = "Test synchronization record",
-            isApproved = false,
-            requestedAt = System.currentTimeMillis()
-        )
+        assertTrue("Meal upload must succeed", backend.pushMealRecords(listOf(meal)).isSuccess)
 
-        assertTrue(backend.pushMealRecords(listOf(meal)).isSuccess)
-        assertTrue(backend.pushAttendanceRecords(listOf(attendance)).isSuccess)
-        signInAs("bursar_ops_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "BURSAR")
-        assertTrue(backend.pushExamExceptions(listOf(exception)).isSuccess)
         signInAs("admin_ops_reader_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
-
-        val managerOnDeviceB = SyncManager(deviceBDatabase, backend)
-        val syncResult = managerOnDeviceB.syncNow()
-        assertTrue("Operational records should sync without failure: ${syncResult.exceptionOrNull()}", syncResult.isSuccess)
-
+        val syncResult = SyncManager(deviceBDatabase, backend).syncNow()
+        assertTrue("Meal record should sync without failure: ${syncResult.exceptionOrNull()}", syncResult.isSuccess)
         assertEquals(meal.id, deviceBDatabase.mealRecordDao().observeAll().first().single().id)
-        assertEquals(attendance.id, deviceBDatabase.attendanceRecordDao().observeAll().first().single().id)
-        assertEquals(exception.id, deviceBDatabase.examExceptionDao().observeAll().first().single().id)
     }
 
     @Test
     fun malformedRemoteStudentFailsSyncInsteadOfBeingSilentlyDropped() = runBlocking {
         signInAs("admin_malformed_${UUID.randomUUID().toString().take(6)}@ltc.ac.ug", "ADMIN")
         val studentId = "STU-MALFORMED-${UUID.randomUUID().toString().take(8)}"
-        firestore.collection("schools")
-            .document(schoolId)
-            .collection("students")
-            .document(studentId)
-            .set(
-                mapOf(
-                    "id" to studentId,
-                    "studentNumber" to "LTC-2026-9999",
-                    "name" to 42,
-                    "updatedAt" to -1L,
-                    "isDeleted" to false
-                )
-            )
-            .await()
+        seedRawDocumentForTest(
+            "schools/$schoolId/students",
+            studentId,
+            """{"id":{"stringValue":"$studentId"},"studentNumber":{"stringValue":"LTC-2026-9999"},"name":{"integerValue":"42"},"updatedAt":{"integerValue":"-1"},"isDeleted":{"booleanValue":false}}"""
+        )
 
         val malformedCardId = "CARD-MALFORMED-${UUID.randomUUID().toString().take(8)}"
-        firestore.collection("schools")
-            .document(schoolId)
-            .collection("cards")
-            .document(malformedCardId)
-            .set(
-                mapOf(
-                    "id" to malformedCardId,
-                    "cardIdentifier" to 42,
-                    "status" to "ACTIVE",
-                    "updatedAt" to -1L,
-                    "isDeleted" to false
-                )
-            )
-            .await()
+        seedRawDocumentForTest(
+            "schools/$schoolId/cards",
+            malformedCardId,
+            """{"id":{"stringValue":"$malformedCardId"},"cardIdentifier":{"integerValue":"42"},"status":{"stringValue":"ACTIVE"},"updatedAt":{"integerValue":"-1"},"isDeleted":{"booleanValue":false}}"""
+        )
 
         val backend = FirestoreCloudBackend(firestore, auth, schoolId)
-        val studentsResult = backend.fetchStudentsUpdatedSince(-5L)
-        val cardsResult = backend.fetchCardsUpdatedSince(-5L)
-
         assertTrue(
-            "A malformed student must fail the pull so the sync watermark is not advanced",
-            studentsResult.isFailure
+            "Malformed student data must fail the pull without advancing the watermark",
+            backend.fetchStudentsUpdatedSince(-5L).isFailure
         )
         assertTrue(
-            "A malformed card must fail the pull so the sync watermark is not advanced",
-            cardsResult.isFailure
+            "Malformed card data must fail the pull without advancing the watermark",
+            backend.fetchCardsUpdatedSince(-5L).isFailure
         )
     }
 

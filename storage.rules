@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function activeLtcStaff(schoolId) {
+      return signedIn()
+        && request.auth.token.ltcSchoolId == schoolId
+        && request.auth.token.ltcActive == true
+        && request.auth.token.ltcRole
+          in ['ADMIN', 'HEAD_TEACHER', 'GATE_OFFICER', 'MEAL_STAFF'];
+    }
+
+    function canManageStudentPhotos(schoolId) {
+      return activeLtcStaff(schoolId)
+        && request.auth.token.ltcRole in ['ADMIN', 'HEAD_TEACHER'];
+    }
+
+    match /schools/{schoolId}/students/{studentId}/photo.jpg {
+      allow read: if activeLtcStaff(schoolId);
+
+      allow create, update: if canManageStudentPhotos(schoolId)
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+
+      allow delete: if canManageStudentPhotos(schoolId);
+    }
+
+    // Student photos are private. No public or unscoped object access.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

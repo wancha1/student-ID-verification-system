@@ -86,7 +86,9 @@ import com.example.ui.theme.SchoolPrimary
 fun GuardScannerScreen(
     onBarcodeDetected: (String) -> Unit,
     onCloseScanner: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    screenTitle: String = "GATE ACCESS SCANNER",
+    cameraPermissionMessage: String = "The QR scanner requires camera access to verify student badges at the gate."
 ) {
     BackHandler(onBack = onCloseScanner)
     val context = LocalContext.current
@@ -158,7 +160,7 @@ fun GuardScannerScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "The QR scanner requires camera access to verify student badges at the gate.",
+                    text = cameraPermissionMessage,
                     color = Color.White.copy(alpha = 0.8f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(16.dp)
@@ -210,7 +212,7 @@ fun GuardScannerScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "ALIGN QR IN FRAME",
+                        text = screenTitle,
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -266,7 +268,7 @@ fun GuardScannerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "FAST TEST BARCODES",
+                    text = "STUDENT ID VERIFICATION",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
