@@ -645,8 +645,8 @@ class LtcSystemVerificationTest {
             assertEquals(AccessStatus.RESTRICTED_FEES.name, updatedProfile?.accessStatus)
 
             val pendingChanges2 = database.pendingChangeDao().getPendingChanges()
-            assertEquals(3, pendingChanges2.size)
-            assertTrue(pendingChanges2.any { it.entityType == SyncEntityType.FEE_STATUS && it.recordId == studentId })
+            assertEquals("Fee mutations are retired from the V1 sync queue", 2, pendingChanges2.size)
+            assertFalse(pendingChanges2.any { it.entityType == SyncEntityType.FEE_STATUS && it.recordId == studentId })
 
             // 3. Verify atomic issueReplacementCard
             val replaceResult = repo.issueReplacementCard(studentId, initialCard.id, "Lost card at gate")
@@ -661,7 +661,7 @@ class LtcSystemVerificationTest {
             assertNotNull("New replacement card must be ACTIVE", newActiveCard)
 
             val pendingChanges3 = database.pendingChangeDao().getPendingChanges()
-            assertEquals(5, pendingChanges3.size) // 2 original + 1 fee + 2 replacement (1 status change + 1 create)
+            assertEquals(4, pendingChanges3.size) // 2 original + 2 replacement card changes
 
             // 4. Verify atomic reportCardLost
             val lostResult = repo.reportCardLost(studentId, newActiveCard!!.id, "Student lost replacement card")
@@ -670,7 +670,7 @@ class LtcSystemVerificationTest {
             assertEquals(CardStatus.LOST.name, lostCard?.status)
 
             val pendingChanges4 = database.pendingChangeDao().getPendingChanges()
-            assertEquals(6, pendingChanges4.size)
+            assertEquals(5, pendingChanges4.size)
 
             database.close()
         }
