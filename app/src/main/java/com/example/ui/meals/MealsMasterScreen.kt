@@ -347,6 +347,10 @@ fun MealsMasterScreen(
 
                 }
 
+        AnimatedVisibility(
+            visible = selectedMealsTab == "HISTORY" || readOnly,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 12 })
+        ) {
         // Serving History Section
         Column(
             modifier = Modifier
