@@ -1,6 +1,8 @@
 package com.example.data.sync
 
 import android.content.Context
+import android.net.Uri
+import java.io.File
 import com.example.R
 import com.example.data.FirestoreStudentRepository
 import com.example.data.local.AttendanceRecordEntity
@@ -17,6 +19,7 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -29,7 +32,9 @@ class FirestoreCloudBackend(
         FIRESTORE_DATABASE_ID
     ),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(FirebaseApp.getInstance()),
-    private val schoolId: String = "ltc_school_01"
+    private val schoolId: String = "ltc_school_01",
+    private val appContext: Context? = null,
+    private val storage: FirebaseStorage = FirebaseStorage.getInstance(FirebaseApp.getInstance())
 ) : RemoteCloudDataSource {
 
     constructor(context: Context) : this(
@@ -38,7 +43,8 @@ class FirestoreCloudBackend(
             requireAuthorizedLtcDatabaseId(context)
         ),
         FirebaseAuth.getInstance(FirebaseApp.getInstance()),
-        "ltc_school_01"
+        "ltc_school_01",
+        context.applicationContext
     )
 
     constructor(firestoreRepo: FirestoreStudentRepository) : this(
@@ -48,6 +54,72 @@ class FirestoreCloudBackend(
     )
 
     private fun getSchoolRef() = db.collection("schools").document(schoolId)
+
+    private fun studentPhotoObjectPath(studentId: String): String =
+        "schools/$schoolId/students/$studentId/photo.jpg"
+
+    /**
+     * Uploads a local passport photo and returns its private Storage object path.
+     * Existing Storage paths are idempotent; local file URIs never enter Firestore.
+     */
+    private suspend fun uploadStudentPhoto(student: StudentEntity): String {
+        val current = student.photoUrl?.trim().orEmpty()
+        if (current.isBlank()) return ""
+        if (current.startsWith("schools/$schoolId/students/")) return current
+        val context = appContext
+            ?: throw IllegalStateException("Android context is required to upload student photos.")
+        val parsed = Uri.parse(current)
+        val source = when (parsed.scheme) {
+            "file" -> File(parsed.path ?: "")
+            null, "" -> File(current)
+            else -> throw IllegalArgumentException("Unsupported local student photo URI scheme.")
+        }
+        if (!source.isFile || !source.canRead()) {
+            throw IllegalStateException("Student photo file is missing or unreadable for student ${student.id}.")
+        }
+        val objectPath = studentPhotoObjectPath(student.id)
+        storage.reference.child(objectPath)
+            .putFile(Uri.fromFile(source), com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType("image/jpeg")
+                .build())
+            .await()
+        return objectPath
+    }
+
+    /**
+     * Downloads a private Storage object into app-private cache for Coil/local UI use.
+     * Failure is isolated from roster sync so missing claims or a missing legacy object
+     * cannot block student records from synchronizing.
+     */
+    private suspend fun cacheStudentPhoto(studentId: String, objectPath: String?): String? {
+        if (objectPath.isNullOrBlank() || !objectPath.startsWith("schools/$schoolId/students/")) return null
+        val context = appContext ?: return null
+        return try {
+            val directory = File(context.filesDir, "student_photos")
+            if (!directory.exists()) directory.mkdirs()
+            val destination = File(directory, "cloud_${studentId.hashCode().toUInt().toString(16)}.jpg")
+            val reference = storage.reference.child(objectPath)
+            val metadata = reference.metadata.await()
+            if (!destination.exists() || destination.length() == 0L ||
+                destination.lastModified() < metadata.updatedTimeMillis) {
+                val temporary = File(directory, destination.name + ".download")
+                try {
+                    reference.getFile(temporary).await()
+                    if (!temporary.renameTo(destination)) {
+                        temporary.copyTo(destination, overwrite = true)
+                        temporary.delete()
+                    }
+                    destination.setLastModified(metadata.updatedTimeMillis)
+                } finally {
+                    if (temporary.exists()) temporary.delete()
+                }
+            }
+            Uri.fromFile(destination).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
 
     private suspend fun currentActiveStaffRole(): String? {
         val uid = auth.currentUser?.uid ?: return null
@@ -91,6 +163,13 @@ class FirestoreCloudBackend(
             emptyMap()
         }
 
+        // Cache private student photos locally. Photo download failures do not block
+        // roster synchronization; existing local photos are retained by SyncManager.
+        val cachedPhotoById = mutableMapOf<String, String?>()
+        for (doc in snapshot.documents) {
+            cachedPhotoById[doc.id] = cacheStudentPhoto(doc.id, doc.getString("photoUrl"))
+        }
+
         // Do not silently skip malformed records: a failed pull must keep the sync
         // cycle retryable instead of advancing the watermark past missing data.
         val list = snapshot.documents.map { doc ->
@@ -101,7 +180,7 @@ class FirestoreCloudBackend(
                 name = doc.getString("name") ?: "${doc.getString("firstName") ?: ""} ${doc.getString("lastName") ?: ""}".trim(),
                 firstName = doc.getString("firstName") ?: "",
                 lastName = doc.getString("lastName") ?: "",
-                photoUrl = doc.getString("photoUrl"),
+                photoUrl = cachedPhotoById[doc.id],
                 accessStatus = doc.getString("accessStatus") ?: "APPROVED",
                 gradeClass = doc.getString("gradeClass") ?: "",
                 isDayScholar = doc.getBoolean("isDayScholar") ?: true,
@@ -172,6 +251,10 @@ class FirestoreCloudBackend(
         // Admin writes the shared roster and private profile. Head Teacher writes
         // private profiles only; Firestore rules keep the shared roster Admin-only.
         for (chunk in students.chunked(200)) {
+            // Upload each local image before committing its Firestore object path.
+            val photoPaths = if (canWriteShared) {
+                chunk.associate { student -> student.id to uploadStudentPhoto(student) }
+            } else emptyMap()
             val batch = db.batch()
             for (student in chunk) {
                 if (canWriteShared) {
@@ -182,7 +265,7 @@ class FirestoreCloudBackend(
                         "name" to student.name,
                         "firstName" to student.firstName,
                         "lastName" to student.lastName,
-                        "photoUrl" to (student.photoUrl ?: ""),
+                        "photoUrl" to (photoPaths[student.id] ?: ""),
                         "accessStatus" to student.accessStatus,
                         "gradeClass" to student.gradeClass,
                         "isDayScholar" to student.isDayScholar,
