@@ -1,5 +1,8 @@
 package com.example.ui.meals
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,6 +90,7 @@ fun MealsMasterScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var manualInput by remember { mutableStateOf("") }
     var historySearchQuery by remember { mutableStateOf("") }
+    var selectedMealsTab by remember { mutableStateOf("SERVE") }
 
     val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
     val todayRecords = mealRecords.filter { it.mealDate == todayStr }
@@ -216,7 +220,7 @@ fun MealsMasterScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MealType.values().forEach { type ->
+                    MealType.values().filter { it.isEnabledForServing }.forEach { type ->
                         val isSelected = activeMealType == type
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -276,6 +280,35 @@ fun MealsMasterScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (!readOnly) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("SERVE" to "Serve Meal", "HISTORY" to "Serving History").forEach { (tab, label) ->
+                            val selected = selectedMealsTab == tab
+                            Surface(
+                                modifier = Modifier.weight(1f)
+                                    .clickable { selectedMealsTab = tab }
+                                    .testTag("meals_tab_${tab.lowercase()}"),
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) roleTheme.primaryColor else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, if (selected) roleTheme.primaryColor else MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Text(
+                                    text = label,
+                                    modifier = Modifier.padding(vertical = 11.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (!readOnly && selectedMealsTab == "SERVE") {
                 // Manual Student Entry Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -383,6 +416,7 @@ fun MealsMasterScreen(
                     }
                 }
             }
+        }
         }
     }
 
