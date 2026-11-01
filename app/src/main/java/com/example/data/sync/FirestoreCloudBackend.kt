@@ -685,6 +685,19 @@ class FirestoreCloudBackend(
         if (cardSnapshot.documents.isEmpty()) {
             studentRef.set(safeStudent).await()
         }
+
+        // The student is already safely soft-deleted and cards revoked. Remove the
+        // private photo as best effort; Storage authorization/network failures must
+        // not undo or block the completed access revocation.
+        val photoPath = existing["photoUrl"] as? String
+        if (!photoPath.isNullOrBlank() &&
+            photoPath.startsWith("schools/$schoolId/students/$studentId/")) {
+            try {
+                storage.reference.child(photoPath).delete().await()
+            } catch (_: Exception) {
+                // A later administrative cleanup can remove orphaned Storage objects.
+            }
+        }
         Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
