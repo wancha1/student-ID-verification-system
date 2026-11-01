@@ -15,6 +15,9 @@ enum class MealType(
     DINNER("Dinner", "18:00 - 20:00", "DinnerDining"),
     SPECIAL_SNACK("Evening Tea", "16:00 - 17:00", "Coffee");
 
+    /** Breakfast and evening tea are retained only for historical record compatibility. */
+    val isEnabledForServing: Boolean get() = this == LUNCH || this == DINNER;
+
     val label: String get() = displayName
     val timeWindow: String get() = operatingHours
 }
