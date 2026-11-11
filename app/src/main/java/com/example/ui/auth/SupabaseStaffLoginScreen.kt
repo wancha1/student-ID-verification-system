@@ -75,14 +75,25 @@ fun SupabaseStaffLoginScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val authenticator = remember(context) {
-        SupabaseStaffAuthenticator(SupabaseClientFactory.getInstance(context.applicationContext))
+    // A missing build-time configuration must not crash the entire application.
+    // Keep the login surface available and show an actionable configuration error.
+    val authenticatorResult = remember(context) {
+        runCatching {
+            SupabaseStaffAuthenticator(SupabaseClientFactory.getInstance(context.applicationContext))
+        }
     }
+    val authenticator = authenticatorResult.getOrNull()
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember {
+        mutableStateOf(
+            if (authenticator == null) {
+                "This build is not configured for Supabase. Contact the app administrator."
+            } else null
+        )
+    }
 
     val midnight = Color(0xFF071321)
     val deepBlue = Color(0xFF102941)
@@ -264,7 +275,9 @@ fun SupabaseStaffLoginScreen(
                                 isLoading = true
                                 errorMessage = null
                                 try {
-                                    val staff = authenticator.signIn(email, password)
+                                    val staff = requireNotNull(authenticator) {
+                                        "Supabase is not configured for this build."
+                                    }.signIn(email, password)
                                     password = ""
                                     onAuthenticated(
                                         staff.role,
@@ -299,7 +312,7 @@ fun SupabaseStaffLoginScreen(
                                 }
                             }
                         },
-                        enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
+                        enabled = authenticator != null && !isLoading && email.isNotBlank() && password.isNotBlank(),
                         shape = RoundedCornerShape(15.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF102941),
