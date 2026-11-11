@@ -30,7 +30,7 @@ object SupabaseClientFactory {
             "Supabase publishable key is not configured. Add it to the local environment; never use a service-role key in the Android app."
         }
 
-        val sessionManager = EncryptedSupabaseSessionManager(
+        val secureSessionManager = EncryptedSupabaseSessionManager(
             vault = EncryptedSessionVault(context.applicationContext)
         )
 
@@ -39,7 +39,7 @@ object SupabaseClientFactory {
             supabaseKey = publishableKey
         ) {
             install(Auth) {
-                sessionManager = sessionManager
+                sessionManager = secureSessionManager
                 autoLoadFromStorage = true
                 autoSaveToStorage = true
                 alwaysAutoRefresh = true
