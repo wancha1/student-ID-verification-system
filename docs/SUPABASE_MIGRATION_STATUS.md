@@ -86,7 +86,8 @@ Never put a Supabase service-role key in the Android app or in GitHub. Never tru
 - Four `staff_memberships` rows: created and active.
 - Student/photo/log data transfer: not started.
 - Supabase dependency foundation and local configuration placeholders: added.
-- Supabase client factory, Keystore-backed session persistence, Auth screen replacement and remote repository implementation: not yet added.
+- Added `EncryptedSessionVault.kt`: opaque session payloads are encrypted with AES-256-GCM; the AES key is generated and held by Android Keystore; ciphertext is stored in private app SharedPreferences; decryption failure clears the unusable session and requires fresh sign-in. This is a storage primitive only and is not yet connected to Supabase Auth.
+- Supabase client factory, SDK `SessionManager` adapter, Auth screen replacement and remote repository implementation: not yet added. Verify the exact Supabase Kotlin 3.5.0 `SessionManager` interface and compile the adapter before wiring it in.
 - CI workflow now includes `feat/**` push branches; no successful workflow run or Android build has yet been verified for this branch.
 - Latest Supabase security advisor check: one warning remains — Auth leaked-password protection is disabled. Enable it in Supabase Dashboard → Authentication → Settings → Password Security before production onboarding.
 - Firebase remains the active Android backend.
