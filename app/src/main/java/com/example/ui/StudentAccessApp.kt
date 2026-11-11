@@ -178,7 +178,7 @@ fun StudentAccessApp(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        viewModel.restoreFirebaseSession(context)
+        viewModel.restoreSupabaseSession(context)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
