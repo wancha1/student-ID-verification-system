@@ -75,6 +75,10 @@ class SupabaseStaffAuthenticator(
                 "This account is not provisioned as staff for Lira Town College."
             )
 
+        if (membership.schoolId != LTC_SCHOOL_ID || membership.userId != user.id) {
+            throw SecurityException("The returned staff membership does not match this authenticated account.")
+        }
+
         if (!membership.isActive) {
             throw SecurityException("This Lira Town College staff account is inactive.")
         }
