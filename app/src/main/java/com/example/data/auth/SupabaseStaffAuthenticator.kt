@@ -91,7 +91,7 @@ class SupabaseStaffAuthenticator(
 
         return AuthenticatedStaff(
             uid = user.id,
-            email = user.email ?: membership.email,
+            email = user.email ?: membership.email.orEmpty(),
             displayName = membership.fullName.ifBlank {
                 user.email ?: "LTC Staff"
             },
@@ -105,7 +105,7 @@ class SupabaseStaffAuthenticator(
         @SerialName("school_id") val schoolId: String,
         @SerialName("user_id") val userId: String,
         @SerialName("full_name") val fullName: String,
-        val email: String,
+        val email: String? = null,
         val role: String,
         @SerialName("is_active") val isActive: Boolean
     )
