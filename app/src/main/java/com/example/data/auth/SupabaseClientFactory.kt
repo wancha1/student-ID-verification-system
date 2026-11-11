@@ -16,7 +16,14 @@ import io.github.jan.supabase.storage.Storage
  */
 object SupabaseClientFactory {
 
-    fun create(context: Context): SupabaseClient {
+    @Volatile
+    private var instance: SupabaseClient? = null
+
+    fun getInstance(context: Context): SupabaseClient = instance ?: synchronized(this) {
+        instance ?: create(context.applicationContext).also { instance = it }
+    }
+
+    private fun create(context: Context): SupabaseClient {
         val url = BuildConfig.SUPABASE_URL.trim()
         val publishableKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY.trim()
 
