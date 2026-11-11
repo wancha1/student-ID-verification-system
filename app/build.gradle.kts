@@ -16,7 +16,8 @@ android {
 
   defaultConfig {
     applicationId = "com.aistudio.studentaccess.xpkz"
-    minSdk = 24
+    // Supabase Kotlin Android client requires API 26 (Android 8.0) or newer.
+    minSdk = 26
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
