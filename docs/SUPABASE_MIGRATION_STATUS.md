@@ -71,6 +71,9 @@ Never put a Supabase service-role key in the Android app or in GitHub. Never tru
 - Four Supabase Auth users: confirmed.
 - Four `staff_memberships` rows: created and active.
 - Student/photo/log data transfer: not started.
-- Supabase Kotlin SDK compatibility and dependency versions: under evaluation against this repository's Kotlin toolchain.
+- Supabase Kotlin SDK dependency foundation added: Supabase Kotlin 3.5.0 modules (Auth, PostgREST, Storage), Ktor Android 3.0.3, Kotlin serialization plugin; Kotlin compiler aligned to 2.2.21 per the Supabase Android quickstart compatibility example.
+- Supabase client factory, encrypted session persistence, Auth screen replacement and remote repository implementation: not yet added. The dependency change is not an application backend cutover.
+- CI workflow now includes `feat/**` push branches; no workflow run has yet been observed for this branch.
 - Android Supabase backend replacement: not yet implemented or built.
+- Latest Supabase security advisor check: one warning remains — Auth leaked-password protection is disabled. Enable it in Supabase Dashboard → Authentication → Settings → Password Security before production onboarding.
 - Firebase remains the active Android backend.
