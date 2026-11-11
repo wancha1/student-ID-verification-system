@@ -87,7 +87,9 @@ Never put a Supabase service-role key in the Android app or in GitHub. Never tru
 - Student/photo/log data transfer: not started.
 - Supabase dependency foundation and local configuration placeholders: added.
 - Added `EncryptedSessionVault.kt`: opaque session payloads are encrypted with AES-256-GCM; the AES key is generated and held by Android Keystore; ciphertext is stored in private app SharedPreferences; decryption failure clears the unusable session and requires fresh sign-in. This is a storage primitive only and is not yet connected to Supabase Auth.
-- Supabase client factory, SDK `SessionManager` adapter, Auth screen replacement and remote repository implementation: not yet added. Verify the exact Supabase Kotlin 3.5.0 `SessionManager` interface and compile the adapter before wiring it in.
+- Added `EncryptedSupabaseSessionManager.kt`, implementing the exact Supabase Kotlin 3.5.0 `SessionManager` contract (`saveSession`, `loadSession`, `deleteSession`). Session JSON uses `encodeDefaults = true` as required by the SDK's restoration guidance.
+- Added `SupabaseClientFactory.kt` to install Auth, PostgREST and Storage with the encrypted session manager, publishable-key-only configuration, automatic session load/save and refresh. It is not yet called by the app.
+- Important platform compatibility blocker: the Android app currently has `minSdk = 24`, while Supabase Kotlin installation documentation specifies Android API 26 minimum. Do not ship or merge the Supabase dependency integration until minimum supported Android version is deliberately resolved (raise minSdk to 26, or select a compatible alternative and validate it).
 - CI workflow now includes `feat/**` push branches; no successful workflow run or Android build has yet been verified for this branch.
 - Latest Supabase security advisor check: one warning remains — Auth leaked-password protection is disabled. Enable it in Supabase Dashboard → Authentication → Settings → Password Security before production onboarding.
 - Firebase remains the active Android backend.
