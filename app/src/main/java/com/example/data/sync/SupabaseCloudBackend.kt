@@ -60,7 +60,7 @@ class SupabaseCloudBackend(
         } else emptyMap()
 
         roster.map { row ->
-            val private = privateById[row.id]
+            val privateProfile = privateById[row.id]
             StudentEntity(
                 id = row.id,
                 studentNumber = row.studentNumber,
@@ -74,15 +74,15 @@ class SupabaseCloudBackend(
                 dayScholarType = row.dayScholarType ?: "DAY_SCHOLAR_WALK",
                 transportRoute = row.transportRoute.orEmpty(),
                 feesStatus = row.feeStatus,
-                outstandingAmount = private?.outstandingAmount ?: 0.0,
+                outstandingAmount = privateProfile?.outstandingAmount ?: 0.0,
                 gender = row.gender ?: "Male",
                 avatarColorSeed = row.avatarColorSeed ?: 42L,
-                guardianName = private?.guardianName.orEmpty(),
-                guardianPhone = private?.guardianPhone.orEmpty(),
-                emergencyContact = private?.emergencyContact.orEmpty(),
+                guardianName = privateProfile?.guardianName.orEmpty(),
+                guardianPhone = privateProfile?.guardianPhone.orEmpty(),
+                emergencyContact = privateProfile?.emergencyContact.orEmpty(),
                 homeroomTeacher = row.homeroomTeacher.orEmpty(),
                 academicYear = row.academicYear ?: "2026",
-                notes = private?.notes.orEmpty(),
+                notes = privateProfile?.notes.orEmpty(),
                 qrToken = row.qrToken.orEmpty(),
                 updatedAt = row.updatedAtMs,
                 isDeleted = row.isDeleted
