@@ -178,7 +178,9 @@ class SupabaseCloudBackend(
         }
         meals.forEach { meal ->
             client.from("meals").upsert(MealRow.from(meal, schoolId)) {
-                onConflict = "school_id,id"
+                // Database-level natural key prevents the same student receiving
+                // duplicate servings from two devices on the same meal date.
+                onConflict = "school_id,student_id,meal_type,meal_date"
             }
         }
     }
