@@ -205,18 +205,15 @@ class SupabaseCloudBackend(
                 eq("id", studentId)
             }
         }
-        client.from("student_private").upsert(
-            StudentPrivateRow(
-                schoolId = schoolId,
-                studentId = studentId,
-                guardianName = null,
-                guardianPhone = null,
-                emergencyContact = null,
-                notes = null,
-                outstandingAmount = outstandingAmount,
-                updatedAtMs = updatedAt
-            )
-        ) { onConflict = "school_id,student_id" }
+        client.from("student_private").update({
+            set("outstanding_amount", outstandingAmount)
+            set("updated_at_ms", updatedAt)
+        }) {
+            filter {
+                eq("school_id", schoolId)
+                eq("student_id", studentId)
+            }
+        }
     }
 
     override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = runCatching {
