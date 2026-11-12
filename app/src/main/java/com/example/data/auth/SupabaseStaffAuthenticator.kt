@@ -10,6 +10,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import com.example.model.UserRole
 
+data class AuthenticatedStaff(
+    val uid: String,
+    val email: String,
+    val displayName: String,
+    val role: UserRole,
+    val hasExplicitFinanceAccess: Boolean
+)
+
 /**
  * Supabase staff authentication for LTC V1.
  *
