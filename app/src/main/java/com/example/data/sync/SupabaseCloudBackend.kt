@@ -366,16 +366,23 @@ class SupabaseCloudBackend(
         @SerialName("is_deleted") val isDeleted: Boolean = false
     ) {
         companion object {
-            fun from(s: StudentEntity, school: String, photo: String?) = StudentRow(
-                schoolId = school, id = s.id, studentNumber = s.studentNumber, name = s.name,
-                firstName = s.firstName, lastName = s.lastName, photoPath = photo,
-                accessStatus = s.accessStatus, feeStatus = s.feesStatus, gradeClass = s.gradeClass, className = s.gradeClass,
-                isDayScholar = s.isDayScholar, dayScholarType = s.dayScholarType,
+            fun from(s: StudentEntity, school: String, photo: String?): StudentRow {
+                // Existing Room model stores the combined value (for example,
+                // "Senior 3-A"). Persist normalized class and stream columns too.
+                val classParts = s.gradeClass.split("-", limit = 2)
+                return StudentRow(
+                    schoolId = school, id = s.id, studentNumber = s.studentNumber, name = s.name,
+                    firstName = s.firstName, lastName = s.lastName, photoPath = photo,
+                    accessStatus = s.accessStatus, feeStatus = s.feesStatus, gradeClass = s.gradeClass,
+                    className = classParts.firstOrNull()?.trim(),
+                    stream = classParts.getOrNull(1)?.trim(),
+                    isDayScholar = s.isDayScholar, dayScholarType = s.dayScholarType,
                 transportRoute = s.transportRoute, gender = s.gender,
                 avatarColorSeed = s.avatarColorSeed, homeroomTeacher = s.homeroomTeacher,
                 academicYear = s.academicYear, qrToken = s.qrToken, updatedAtMs = s.updatedAt,
-                isDeleted = s.isDeleted
-            )
+                    isDeleted = s.isDeleted
+                )
+            }
         }
     }
 
