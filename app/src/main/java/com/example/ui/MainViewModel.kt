@@ -46,7 +46,6 @@ import com.example.util.FeedbackHelper
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import com.example.util.SecurityManager
-import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -388,7 +387,6 @@ class MainViewModel(
                 authenticator?.signOut()
             }
             // Clear any legacy Firebase session left on an upgraded installation.
-            runCatching { FirebaseAuth.getInstance().signOut() }
         }
     }
 
