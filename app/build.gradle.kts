@@ -7,6 +7,7 @@ plugins {
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+  alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -15,7 +16,8 @@ android {
 
   defaultConfig {
     applicationId = "com.aistudio.studentaccess.xpkz"
-    minSdk = 24
+    // Supabase Kotlin Android client requires API 26 (Android 8.0) or newer.
+    minSdk = 26
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
@@ -79,6 +81,11 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.E
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
+  implementation(platform(libs.supabase.bom))
+  implementation(libs.supabase.auth)
+  implementation(libs.supabase.postgrest)
+  implementation(libs.supabase.storage)
+  implementation(libs.ktor.client.android)
   implementation(libs.firebase.firestore)
   implementation(libs.firebase.auth)
   implementation(libs.firebase.storage)
