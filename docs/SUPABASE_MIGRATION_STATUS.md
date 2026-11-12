@@ -47,7 +47,7 @@
 3. Test real phone camera scanning, login/logout/session restoration, photo upload/download, offline queue, network recovery and multi-device meal idempotency.
 4. Verify class/stream mapping against the app's actual student model before loading the live school roster.
 5. Supabase Auth leaked-password protection is still disabled. Enable it in Dashboard → Authentication → Settings → Password Security before production onboarding.
-6. Security advisor reports the intentionally policy-free private invitation-plan table and duplicate indexes. The former is intentional; review and remove only verified duplicate indexes in a tracked migration.
+6. The intentionally policy-free private invitation-plan table is reported as an informational RLS finding; this is deliberate because client roles have no grants. Duplicate standalone student/card unique indexes were removed in migration `20261112000400_remove_duplicate_school_identifier_indexes`; the equivalent unique constraints remain.
 7. Do not merge PR #44 or call this production-ready until the checks above pass.
 
 ## Current status
