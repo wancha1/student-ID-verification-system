@@ -46,17 +46,37 @@ class SupabaseCloudBackend(
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = runCatching {
         val role = activeRole()
-        val roster = client.from("students").select {
-            filter {
-                eq("school_id", schoolId)
-                gt("updated_at_ms", timestamp)
+        // Supabase/PostgREST applies a row cap. Page explicitly so a school
+        // with 3,000+ students is never silently truncated at the API limit.
+        val roster = buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("students").select {
+                    filter {
+                        eq("school_id", schoolId)
+                        gt("updated_at_ms", timestamp)
+                    }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<StudentRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
             }
-        }.decodeList<StudentRow>()
+        }
 
         val privateById = if (role == "ADMIN" || role == "HEAD_TEACHER") {
-            client.from("student_private").select {
-                filter { eq("school_id", schoolId) }
-            }.decodeList<StudentPrivateRow>().associateBy { it.studentId }
+            buildList {
+                var offset = 0L
+                while (true) {
+                    val page = client.from("student_private").select {
+                        filter { eq("school_id", schoolId) }
+                        range(offset..(offset + PAGE_SIZE - 1))
+                    }.decodeList<StudentPrivateRow>()
+                    addAll(page)
+                    if (page.size < PAGE_SIZE) break
+                    offset += PAGE_SIZE
+                }
+            }.associateBy { it.studentId }
         } else emptyMap()
 
         roster.map { row ->
@@ -92,12 +112,21 @@ class SupabaseCloudBackend(
 
     override suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>> = runCatching {
         activeRole()
-        client.from("cards").select {
-            filter {
-                eq("school_id", schoolId)
-                gt("updated_at_ms", timestamp)
+        buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("cards").select {
+                    filter {
+                        eq("school_id", schoolId)
+                        gt("updated_at_ms", timestamp)
+                    }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<CardRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
             }
-        }.decodeList<CardRow>().map { it.toEntity() }
+        }.map { it.toEntity() }
     }
 
     override suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>> =
@@ -108,9 +137,18 @@ class SupabaseCloudBackend(
 
     override suspend fun fetchAllRemoteMealRecords(): Result<List<MealRecordEntity>> = runCatching {
         activeRole()
-        client.from("meals").select {
-            filter { eq("school_id", schoolId) }
-        }.decodeList<MealRow>().map { it.toEntity() }
+        buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("meals").select {
+                    filter { eq("school_id", schoolId) }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<MealRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
+            }
+        }.map { it.toEntity() }
     }
 
     // These modules are intentionally excluded from LTC V1 remote sync.
@@ -236,11 +274,18 @@ class SupabaseCloudBackend(
 
     override suspend fun refreshStudentPhotos(): Result<Map<String, String>> = runCatching {
         activeRole()
-        val rows = client.from("students").select {
-            filter {
-                eq("school_id", schoolId)
+        val rows = buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("students").select {
+                    filter { eq("school_id", schoolId) }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<StudentRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
             }
-        }.decodeList<StudentRow>()
+        }
         rows.filter { !it.photoPath.isNullOrBlank() }.mapNotNull { row ->
             val local = downloadPhotoToCache(row.photoPath, row.id)
             if (local.isNullOrBlank()) null else row.id to local
