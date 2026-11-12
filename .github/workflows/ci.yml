@@ -108,13 +108,15 @@ jobs:
           arch: x86_64
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          disable-animations: true
+          # Avoid runner-side settings writes that caused ADB broken-pipe failures.
+          disable-animations: false
           script: gradle --no-daemon connectedDebugAndroidTest
       - name: Upload debug APK
-        if: success()
+        # Preserve the compiled APK even if the emulator smoke test fails.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ltc-debug-apk-firebase-config-check
+          name: ltc-debug-apk-ci-build-not-release
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 7
