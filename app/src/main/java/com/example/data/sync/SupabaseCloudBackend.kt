@@ -239,10 +239,9 @@ class SupabaseCloudBackend(
         val rows = client.from("students").select {
             filter {
                 eq("school_id", schoolId)
-                neq("photo_path", null)
             }
         }.decodeList<StudentRow>()
-        rows.mapNotNull { row ->
+        rows.filter { !it.photoPath.isNullOrBlank() }.mapNotNull { row ->
             val local = downloadPhotoToCache(row.photoPath, row.id)
             if (local.isNullOrBlank()) null else row.id to local
         }.toMap()
@@ -265,7 +264,7 @@ class SupabaseCloudBackend(
             "Student photo must be between 1 byte and 5 MB."
         }
         val path = "$schoolId/${student.id}/photo.jpg"
-        client.storage.from(PHOTO_BUCKET).upload(path, bytes, upsert = true)
+        client.storage.from(PHOTO_BUCKET).upload(path, bytes) { upsert = true }
         return path
     }
 
