@@ -487,5 +487,6 @@ class SupabaseCloudBackend(
         const val LTC_SCHOOL_ID = "ltc_school_01"
         const val PHOTO_BUCKET = "student-photos"
         const val MAX_PHOTO_BYTES = 5 * 1024 * 1024
+        const val PAGE_SIZE = 500L
     }
 }
