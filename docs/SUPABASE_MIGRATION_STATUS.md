@@ -1,100 +1,59 @@
 # Supabase Migration — LTC V1
 
-## Source of truth
-- Android source branch: `fix/ltc-production-reliability`
-- Migration work branch: `feat/supabase-backend-migration`
-- Do not use `main` as the migration source until it is reconciled with the development branch.
+## Target and operating model
+- Supabase project: `uobhtoqbenrgpzlwbsco` (eu-central-1).
+- School tenant: `ltc_school_01` (Lira Town College).
+- Room remains the on-device source of truth and durable offline queue. Supabase is the remote backend.
+- This is an intentional clean start. No Firebase student records are being imported, and the existing Firebase project/data are not deleted.
 
-## Supabase target
-- Project: School access
-- Project ref: `uobhtoqbenrgpzlwbsco`
-- Region: `eu-central-1`
-- School row: `ltc_school_01` / Lira Town College / LTC
-- Keep Room as the local offline database. Supabase is the remote backend.
-- Supabase is now selected by the production Room repository for cloud sync. Firebase SDKs and legacy adapter/test sources are still present in the repository and Gradle build; they are not yet fully removed from the build graph.
+## V1 cloud scope
+- Authenticated staff membership and role resolution.
+- `students`, leadership-only `student_private`, `cards`, `gate_logs`, and `meals`.
+- Private Storage bucket `student-photos`, canonical path `<school_id>/<student_id>/photo.jpg`.
+- Private `school-exports` bucket reserved for server-generated exports; no direct client policy.
+- Attendance and exam-exception records remain local-only and are deliberately excluded from V1 cloud sync.
 
-## V1 data scope
-- `schools`
-- `staff_memberships`
-- `students`
-- `student_private`
-- `cards`
-- `gate_logs`
-- `meals`
-- private `student-photos` Storage bucket
+## Android implementation
+- Production `RoomStudentRepository` now constructs `SupabaseCloudBackend`.
+- `SupabaseStaffAuthenticator` handles Supabase sign-in/session restoration and resolves role only from the authenticated user's active `staff_memberships` row for `ltc_school_01`.
+- `EncryptedSupabaseSessionManager` stores the Supabase session through the Android Keystore-backed encrypted session vault.
+- Supabase Kotlin SDK 3.5.0 Auth, PostgREST and Storage are configured with a publishable key only. Never embed a service-role/secret key in Android or GitHub.
+- Backend operations cover student/private-profile sync, card sync, gate audit uploads, meal upserts, fee updates, soft deletion, and private photo upload/download.
+- Roster, card, meal and photo queries now use paginated PostgREST range requests to avoid the default row cap truncating schools with 1,000+ records.
+- Meal upload uses the database natural key `school_id,student_id,meal_type,meal_date` to prevent duplicate servings across devices.
+- Room remains responsible for offline persistence and retry/outbox orchestration. Live multi-device and offline-recovery acceptance is still required.
 
-Attendance and exam-exceptions are not included in the active V1 cloud-sync scope. Do not add them to this migration without a separate product decision.
+## Firebase removal
+- Firebase SDK dependencies and BOM removed from the Android app.
+- Google Services Gradle plugin and its root plugin declaration removed.
+- `google-services.json` and the Firebase Android resource configuration removed.
+- Legacy Firestore repository/backend/auth/model/error adapter sources and Firebase emulator-dependent Android unit tests removed.
+- Instrumented smoke test no longer initializes or asserts Firebase.
+- CI no longer installs Firebase emulator tooling or runs Firebase emulator/security-rule jobs; it builds Android variants, runs Android unit tests, and runs emulator smoke tests.
+- Firebase archival docs/rules/scripts may remain in the repository as historical material; they are not part of the Android runtime or build graph. Existing Firebase project/data are untouched.
 
-## Staff onboarding
-The four Auth users have been confirmed in `auth.users` and linked to active rows in `public.staff_memberships` for school `ltc_school_01`.
+## Supabase schema and security changes applied
+- Enabled RLS on `private.staff_invitation_plan` and revoked client-role grants; no client policies by design.
+- Created private `student-photos` and `school-exports` buckets.
+- Replaced student-photo policies with school-membership and role-based access.
+- Added gate audit fields needed to retain full verification context.
+- Added student/card/meal uniqueness constraints and a database trigger preventing reactivation of revoked/deleted cards.
+- Added `students.fee_status` and leadership-only `student_private.outstanding_amount`.
+- Marked the LTC clean-start privacy migration complete only after confirming the school student roster was empty.
 
-| Email | Role | Profile name |
-|---|---|---|
-| `wanchaaaron@gmail.com` | `ADMIN` | wancha |
-| `aaronwancha@gmail.com` | `HEAD_TEACHER` | aaron |
-| `introvertcorner85@gmail.com` | `GATE_OFFICER` | introvert |
-| `darklordlucian85@gmail.com` | `MEAL_STAFF` | dark |
+## Outstanding validation and manual security action
+1. CI must pass on the latest PR commit, including debug/release compilation, unit tests and Android emulator smoke test.
+2. Test Supabase RLS using separate ADMIN, HEAD_TEACHER, GATE_OFFICER and MEAL_STAFF accounts, including wrong-school and inactive-membership denial.
+3. Test real phone camera scanning, login/logout/session restoration, photo upload/download, offline queue, network recovery and multi-device meal idempotency.
+4. Verify class/stream mapping against the app's actual student model before loading the live school roster.
+5. Supabase Auth leaked-password protection is still disabled. Enable it in Dashboard → Authentication → Settings → Password Security before production onboarding.
+6. Security advisor reports the intentionally policy-free private invitation-plan table and duplicate indexes. The former is intentional; review and remove only verified duplicate indexes in a tracked migration.
+7. Do not merge PR #44 or call this production-ready until the checks above pass.
 
-The names above are the exact short names supplied by the project owner. Replace them with full staff names if these are only usernames.
-
-The restricted table `private.staff_invitation_plan` records the onboarding state and has no grants for anon or authenticated clients. The four records are marked `ACCOUNT_LINKED`.
-
-Never put a Supabase service-role key in the Android app or in GitHub. Never trust a role supplied by the Android client or user-editable JWT metadata. The Android app must fetch the signed-in user's active membership from the protected server-side membership table and let RLS enforce authorization.
-
-## Android code findings
-- The migration branch was created from `fix/ltc-production-reliability`.
-- `RoomStudentRepository` is the production repository and now constructs `SupabaseCloudBackend`.
-- `SyncManager` already depends on the `RemoteCloudDataSource` abstraction and owns the durable Room outbox, retries, sync watermark, and conflict handling.
-- `RemoteCloudDataSource` currently includes legacy attendance/exam-exception methods. The V1 Supabase implementation must not sync those datasets.
-- `FirebaseStaffAuthenticator` currently signs in with Firebase Auth and reads the trusted staff profile from Firestore. It must be replaced by Supabase Auth plus a server-validated `staff_memberships` lookup.
-- `MainViewModel` and `FirebaseStaffLoginScreen` are directly coupled to Firebase authentication. Auth migration must update the restore-session and login call paths together, not just replace the authenticator class.
-- `SupabaseCloudBackend` now implements private Supabase photo upload/download using `<school_id>/<student_id>/photo.jpg` in the private `student-photos` bucket. Legacy Firebase Storage adapter source remains for deletion after CI confirms no production references.
-- Firebase dependencies and `google-services.json` remain temporarily because legacy Firebase adapter classes and emulator tests still compile against them. Production authentication and the production Room cloud adapter now use Supabase; complete SDK removal is a separate cleanup after tests are migrated.
-- The Android app has not yet been switched to Supabase. No production backend cutover has occurred.
-
-## Build configuration
-- Supabase Kotlin SDK dependencies are present: Supabase Kotlin 3.5.0 Auth, PostgREST and Storage; Ktor Android 3.0.3; Kotlin serialization plugin; Kotlin 2.2.21.
-- The Secrets Gradle Plugin reads `.env` and falls back to `.env.example`; `.env` is ignored by Git.
-- `.env.example` contains the project URL and a placeholder publishable key. The placeholder is not a usable credential; a developer build must supply the actual publishable key locally.
-- The app enables BuildConfig generation. Confirm generated Supabase BuildConfig fields with a real CI build before adding client code that references them.
-
-## Auth session security finding
-- Supabase Kotlin Auth defaults to `SettingsSessionManager` when no custom manager is supplied.
-- The SDK troubleshooting guidance explicitly allows a custom `SessionManager` to store tokens in encrypted preferences or another protected platform store. The default manager is not documented as encrypted storage.
-- Therefore, do not ship Auth with the default manager as though tokens were encrypted. Implement and test a custom Android `SessionManager` backed by Android Keystore encryption before enabling persistent staff sessions.
-- Preserve `autoLoadFromStorage`, `autoSaveToStorage` and automatic refresh behaviour only after secure storage is implemented and tested. Do not log access tokens, refresh tokens, passwords or full session objects.
-- Session restoration must still revalidate the active membership from Supabase before granting an app role. If membership validation fails due to network loss, keep the user unauthorised and present a retry path; do not infer a role from cached profile data.
-
-## Cutover requirements
-1. Add a Supabase client using a publishable key only; keep URL/key in local build configuration, never hardcode a secret key.
-2. Implement a custom Android Keystore-backed Auth `SessionManager`, and test save/load/delete plus key invalidation.
-3. Implement Supabase Auth sign-in and session restoration.
-4. Derive app roles only from `staff_memberships` for the authenticated user and fixed school ID `ltc_school_01`.
-5. Implement a Supabase-backed `RemoteCloudDataSource` for students, cards, gate logs and meals, preserving the existing Room outbox and retry semantics.
-6. Map sensitive student fields to `student_private`; do not expose them through the ordinary student DTO or broad staff reads.
-7. Replace Firebase Storage photo upload/download with private Supabase Storage paths: `<school_id>/<student_id>/<filename>`.
-8. Preserve offline QR scanning, signature verification, card revocation monotonicity, idempotent log uploads and last-write-wins rules.
-9. Verify school isolation and role-specific RLS using separate authenticated test accounts.
-10. Run Android unit tests, instrumented tests and a clean GitHub Actions build.
-11. Do not remove Firebase configuration or switch production endpoints until the full acceptance checklist passes.
-
-## Status
-- Supabase schema and core RLS migration: applied.
-- RLS auto-enable function public execute grant: revoked.
-- LTC school row: created and active.
-- Four Supabase Auth users: confirmed.
-- Four `staff_memberships` rows: created and active.
-- Firebase data import: intentionally abandoned by owner; this is a clean Supabase start, not a Firebase data transfer. Existing Firebase records are not copied or deleted.
-- Supabase student/card/gate/meal adapter: implemented in `SupabaseCloudBackend.kt`; requires CI compilation and live acceptance tests.
-- Private student photo upload/download: implemented against the private `student-photos` bucket; requires device validation.
-- Private `school-exports` bucket created for future server-generated reports; no direct client access policy is granted.
-- Schema hardening: private invitation-plan RLS enabled with no client grants; full gate audit fields added; unique student/card/meal constraints added; revoked card reactivation blocked by database trigger.
-- Fee sync: fee decision is stored on the roster; monetary balance is stored in leadership-only `student_private`.
-- Supabase dependency foundation and encrypted session integration: added.
-- Added `EncryptedSessionVault.kt`: opaque session payloads are encrypted with AES-256-GCM; the AES key is generated and held by Android Keystore; ciphertext is stored in private app SharedPreferences; decryption failure clears the unusable session and requires fresh sign-in. This is a storage primitive only and is not yet connected to Supabase Auth.
-- Added `EncryptedSupabaseSessionManager.kt`, implementing the exact Supabase Kotlin 3.5.0 `SessionManager` contract (`saveSession`, `loadSession`, `deleteSession`). Session JSON uses `encodeDefaults = true` as required by the SDK's restoration guidance.
-- Added `SupabaseClientFactory.kt` to install Auth, PostgREST and Storage with the encrypted session manager, publishable-key-only configuration, automatic session load/save and refresh. It is not yet called by the app.
-- Important platform compatibility blocker: the Android app currently has `minSdk = 24`, while Supabase Kotlin installation documentation specifies Android API 26 minimum. Do not ship or merge the Supabase dependency integration until minimum supported Android version is deliberately resolved (raise minSdk to 26, or select a compatible alternative and validate it).
-- CI workflow now includes `feat/**` push branches; no successful workflow run or Android build has yet been verified for this branch.
-- Latest Supabase security advisor check: one warning remains — Auth leaked-password protection is disabled. Enable it in Supabase Dashboard → Authentication → Settings → Password Security before production onboarding.
-- Production repository now points to Supabase. Firebase libraries and legacy source/test references remain and must be removed after CI is green.
+## Current status
+- Database schema/buckets/security hardening: applied to the Supabase project.
+- Android production cloud backend: switched to Supabase in PR #44.
+- Firebase Android runtime/build integration: removed in the PR branch; no Firebase project/data deletion performed.
+- CI: previous run failed on two Supabase photo API compile errors; those calls have been corrected. A fresh run for the Firebase-free, paginated backend is pending/running.
+- APK: no verified APK artifact from the corrected build yet.
+- PR #44 remains draft and unmerged.
