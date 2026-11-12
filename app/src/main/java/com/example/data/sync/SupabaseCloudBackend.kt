@@ -73,8 +73,8 @@ class SupabaseCloudBackend(
                 isDayScholar = row.isDayScholar,
                 dayScholarType = row.dayScholarType ?: "DAY_SCHOLAR_WALK",
                 transportRoute = row.transportRoute.orEmpty(),
-                feesStatus = "CLEARED",
-                outstandingAmount = 0.0,
+                feesStatus = row.feeStatus,
+                outstandingAmount = private?.outstandingAmount ?: 0.0,
                 gender = row.gender ?: "Male",
                 avatarColorSeed = row.avatarColorSeed ?: 42L,
                 guardianName = private?.guardianName.orEmpty(),
@@ -142,6 +142,7 @@ class SupabaseCloudBackend(
                     guardianPhone = student.guardianPhone.takeIf { it.isNotBlank() },
                     emergencyContact = student.emergencyContact.takeIf { it.isNotBlank() },
                     notes = student.notes.takeIf { it.isNotBlank() },
+                    outstandingAmount = student.outstandingAmount,
                     updatedAtMs = student.updatedAt
                 )
             ) { onConflict = "school_id,student_id" }
@@ -193,9 +194,30 @@ class SupabaseCloudBackend(
         newStatus: FeeStatus,
         outstandingAmount: Double,
         updatedAt: Long
-    ): Result<Unit> = Result.failure(
-        UnsupportedOperationException("Fee balances are not part of the current Supabase LTC schema; they must not be silently discarded.")
-    )
+    ): Result<Unit> = runCatching {
+        if (activeRole() != "ADMIN") throw SecurityException("Only an administrator can update fee status.")
+        client.from("students").update({
+            set("fee_status", newStatus.name)
+            set("updated_at_ms", updatedAt)
+        }) {
+            filter {
+                eq("school_id", schoolId)
+                eq("id", studentId)
+            }
+        }
+        client.from("student_private").upsert(
+            StudentPrivateRow(
+                schoolId = schoolId,
+                studentId = studentId,
+                guardianName = null,
+                guardianPhone = null,
+                emergencyContact = null,
+                notes = null,
+                outstandingAmount = outstandingAmount,
+                updatedAtMs = updatedAt
+            )
+        ) { onConflict = "school_id,student_id" }
+    }
 
     override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = runCatching {
         if (activeRole() != "ADMIN") throw SecurityException("Only an administrator can deactivate student records.")
@@ -285,6 +307,7 @@ class SupabaseCloudBackend(
         @SerialName("last_name") val lastName: String? = null,
         @SerialName("photo_path") val photoPath: String? = null,
         @SerialName("access_status") val accessStatus: String = "APPROVED",
+        @SerialName("fee_status") val feeStatus: String = "CLEARED",
         @SerialName("grade_class") val gradeClass: String = "",
         @SerialName("class_name") val className: String? = null,
         val stream: String? = null,
@@ -303,7 +326,7 @@ class SupabaseCloudBackend(
             fun from(s: StudentEntity, school: String, photo: String?) = StudentRow(
                 schoolId = school, id = s.id, studentNumber = s.studentNumber, name = s.name,
                 firstName = s.firstName, lastName = s.lastName, photoPath = photo,
-                accessStatus = s.accessStatus, gradeClass = s.gradeClass, className = s.gradeClass,
+                accessStatus = s.accessStatus, feeStatus = s.feesStatus, gradeClass = s.gradeClass, className = s.gradeClass,
                 isDayScholar = s.isDayScholar, dayScholarType = s.dayScholarType,
                 transportRoute = s.transportRoute, gender = s.gender,
                 avatarColorSeed = s.avatarColorSeed, homeroomTeacher = s.homeroomTeacher,
@@ -321,6 +344,7 @@ class SupabaseCloudBackend(
         @SerialName("guardian_phone") val guardianPhone: String?,
         @SerialName("emergency_contact") val emergencyContact: String?,
         val notes: String?,
+        @SerialName("outstanding_amount") val outstandingAmount: Double = 0.0,
         @SerialName("updated_at_ms") val updatedAtMs: Long
     )
 
