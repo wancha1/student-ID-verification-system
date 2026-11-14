@@ -77,7 +77,6 @@ import java.util.UUID
 @Composable
 fun StudentFormDialog(
     initialStudent: Student? = null,
-    canManageFees: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (Student) -> Unit
 ) {
@@ -93,8 +92,6 @@ fun StudentFormDialog(
     var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "+256 772 ") }
     var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "Mr. Obua Denis") }
     var notes by remember { mutableStateOf(initialStudent?.notes ?: "") }
-    var feeStatus by remember { mutableStateOf(initialStudent?.feesStatus ?: FeeStatus.CLEARED) }
-    var outstandingAmount by remember { mutableStateOf(initialStudent?.outstandingAmount?.toString() ?: "0.00") }
 
     // Passport Photo state from device
     var photoUrl by remember { mutableStateOf(initialStudent?.photoUrl) }
@@ -448,59 +445,6 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                     )
                 }
 
-                if (canManageFees) {
-                    // Fee Status Selector
-                    Text(
-                        text = "FEES & GATE ACCESS PERMISSION",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        letterSpacing = 0.5.sp
-                    )
-    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = feeStatus == FeeStatus.CLEARED,
-                            onClick = {
-                                feeStatus = FeeStatus.CLEARED
-                                outstandingAmount = "0.00"
-                            },
-                            label = { Text("CLEARED (Access OK)") },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.testTag("form_fee_cleared")
-                        )
-    
-                        FilterChip(
-                            selected = feeStatus == FeeStatus.OUTSTANDING,
-                            onClick = {
-                                feeStatus = FeeStatus.OUTSTANDING
-                                if (outstandingAmount.toDoubleOrNull() == 0.0) outstandingAmount = "450000.00"
-                            },
-                            label = { Text("OUTSTANDING") },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.testTag("form_fee_outstanding")
-                        )
-                    }
-    
-                    if (feeStatus == FeeStatus.OUTSTANDING) {
-                        OutlinedTextField(
-                            value = outstandingAmount,
-                            onValueChange = { outstandingAmount = it },
-                            label = { Text("Outstanding Balance (UGX)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            singleLine = true,
-                            modifier = Modifier
-                                .testTag("input_form_outstanding_amount")
-                                .fillMaxWidth()
-                        )
-                    }
-    
-    
-                }
-
                 // Transport Route
                 OutlinedTextField(
                     value = transportRoute,
@@ -591,10 +535,8 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         isDayScholar = true,
                         dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
                         transportRoute = transportRoute.trim(),
-                        feesStatus = if (canManageFees) feeStatus else (initialStudent?.feesStatus ?: FeeStatus.CLEARED),
-                        outstandingAmount = if (canManageFees) {
-                            if (feeStatus == FeeStatus.CLEARED) 0.0 else (outstandingAmount.toDoubleOrNull() ?: 450000.0)
-                        } else (initialStudent?.outstandingAmount ?: 0.0),
+                        feesStatus = initialStudent?.feesStatus ?: FeeStatus.CLEARED,
+                        outstandingAmount = initialStudent?.outstandingAmount ?: 0.0,
                         gender = initialStudent?.gender ?: "Not specified",
                         avatarColorSeed = colorSeed,
                         photoUrl = photoUrl,
