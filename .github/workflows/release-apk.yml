@@ -98,12 +98,10 @@ jobs:
 
       - name: Build production release APK
         env:
-          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          KEYSTORE_PATH: ${{ runner.temp }}/ltc-release.jks
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          VERSION_CODE: ${{ env.VERSION_CODE }}
-          VERSION_NAME: ${{ env.VERSION_NAME }}
         run: gradle --no-daemon --no-build-cache assembleRelease
 
       - name: Verify APK alignment, package identity, and signature
