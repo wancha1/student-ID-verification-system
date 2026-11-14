@@ -560,7 +560,7 @@ fun StudentDetailScreen(
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
 
-        // Fee status changes belong to the Bursar.
+        // Fee status changes require explicit finance authorization on an Admin account.
         if (canManageFees) item {
             Card(
                 shape = RoundedCornerShape(20.dp),
