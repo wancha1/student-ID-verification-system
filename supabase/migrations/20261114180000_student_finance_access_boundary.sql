@@ -23,7 +23,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $fn$
   SELECT EXISTS (
     SELECT 1
@@ -59,7 +59,7 @@ CREATE OR REPLACE FUNCTION private.sync_finance_fee_status_to_student()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, private, pg_temp
+SET search_path = pg_catalog, public, private, pg_temp
 AS $fn$
 BEGIN
   UPDATE public.students
@@ -75,6 +75,9 @@ DROP TRIGGER IF EXISTS sync_finance_fee_status_to_student ON public.student_fina
 CREATE TRIGGER sync_finance_fee_status_to_student
   AFTER INSERT OR UPDATE OF fee_status ON public.student_finances
   FOR EACH ROW EXECUTE FUNCTION private.sync_finance_fee_status_to_student();
+
+-- Trigger functions are invoked by their table triggers, not exposed as RPC helpers.
+REVOKE ALL ON FUNCTION private.sync_finance_fee_status_to_student() FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION private.guard_student_fee_status()
 RETURNS trigger
@@ -100,6 +103,8 @@ DROP TRIGGER IF EXISTS enforce_student_fee_status_permission ON public.students;
 CREATE TRIGGER enforce_student_fee_status_permission
   BEFORE INSERT OR UPDATE OF fee_status ON public.students
   FOR EACH ROW EXECUTE FUNCTION private.guard_student_fee_status();
+
+REVOKE ALL ON FUNCTION private.guard_student_fee_status() FROM PUBLIC, anon, authenticated;
 
 -- Remove monetary balances from the leadership-readable private profile.
 ALTER TABLE public.student_private
