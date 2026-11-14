@@ -111,7 +111,7 @@ class SupabaseStaffAuthenticator(
                 user.email ?: "LTC Staff"
             },
             role = role,
-            hasExplicitFinanceAccess = false
+            hasExplicitFinanceAccess = role == UserRole.ADMINISTRATOR && membership.hasFinanceAccess
         )
     }
 
@@ -122,7 +122,8 @@ class SupabaseStaffAuthenticator(
         @SerialName("full_name") val fullName: String,
         val email: String? = null,
         val role: String,
-        @SerialName("is_active") val isActive: Boolean
+        @SerialName("is_active") val isActive: Boolean,
+        @SerialName("has_finance_access") val hasFinanceAccess: Boolean = false
     )
 
     private companion object {
