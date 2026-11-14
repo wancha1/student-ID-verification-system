@@ -13,6 +13,7 @@ import com.example.data.local.StudentEntity
 import com.example.data.local.SyncEntityType
 import com.example.data.local.SyncOperationType
 import com.example.model.AccessStatus
+import com.example.model.AuthUser
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
