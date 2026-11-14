@@ -644,7 +644,6 @@ fun AdminDashboardScreen(
     if (user.role == UserRole.ADMINISTRATOR && showAddStudentDialog) {
         StudentFormDialog(
             initialStudent = null,
-            canManageFees = user.hasPermission(StaffPermission.MANAGE_FEES),
             onDismiss = { showAddStudentDialog = false },
             onSave = { newStudent ->
                 onAddStudent(newStudent)
