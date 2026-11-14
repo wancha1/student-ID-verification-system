@@ -253,7 +253,7 @@ class SupabaseCloudBackend(
 
     override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> = runCatching {
         if (attendance.isEmpty()) return@runCatching
-        if (activeRole() !in setOf("ADMIN", "HEAD_TEACHER", "TEACHER")) {
+        if (activeRole() !in setOf("ADMIN", "HEAD_TEACHER", "TEACHER", "DIRECTOR_OF_STUDIES")) {
             throw SecurityException("Only teaching staff can upload attendance.")
         }
         attendance.forEach { record ->
