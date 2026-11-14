@@ -331,7 +331,6 @@ private fun StudentSuccessVerificationView(
                                 fontWeight = FontWeight.Black,
                                 color = if (isApproved) ApprovedGreenText else RejectedRedText
                             )
-                            }
                         }
                     }
 
