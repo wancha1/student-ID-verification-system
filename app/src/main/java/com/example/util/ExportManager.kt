@@ -72,14 +72,13 @@ object ExportManager {
     private fun generateStudentsCsv(students: List<Student>): String {
         val sb = StringBuilder()
         sb.append("\uFEFF") // UTF-8 BOM for Excel
-        sb.append("Student Number,Full Name,Class,Transport Route,Fees Status,Outstanding (UGX),Access Status,Guardian Name,Guardian Phone,Homeroom Teacher,Unique QR Code\n")
+        sb.append("Student Number,Full Name,Class,Transport Route,Fees Status,Access Status,Guardian Name,Guardian Phone,Homeroom Teacher,Unique QR Code\n")
         for (s in students) {
             sb.append(escapeCsv(s.studentNumber)).append(",")
             sb.append(escapeCsv(s.fullName)).append(",")
             sb.append(escapeCsv(s.gradeClass)).append(",")
             sb.append(escapeCsv(s.transportRoute)).append(",")
             sb.append(escapeCsv(s.feesStatus.name)).append(",")
-            sb.append(s.outstandingAmount).append(",")
             sb.append(escapeCsv(s.accessStatus.name)).append(",")
             sb.append(escapeCsv(s.guardianName)).append(",")
             sb.append(escapeCsv(s.guardianPhone)).append(",")
@@ -133,7 +132,6 @@ object ExportManager {
                     <td>${escapeHtml(s.fullName)}</td>
                     <td>${escapeHtml(s.gradeClass)}</td>
                     <td class="$feeClass">${s.feesStatus.name}</td>
-                    <td>UGX ${String.format(Locale.US, "%,.0f", s.outstandingAmount)}</td>
                     <td>${escapeHtml(s.transportRoute)}</td>
                     <td>${escapeHtml(s.guardianName)}</td>
                     <td>${escapeHtml(s.guardianPhone)}</td>
