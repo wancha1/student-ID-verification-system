@@ -147,7 +147,7 @@ data class AuthUser(
      * Administrator only has MANAGE_FEES if hasExplicitFinanceAccess is true.
      */
     fun hasPermission(permission: StaffPermission): Boolean {
-        if (permission == StaffPermission.MANAGE_FEES && role == ADMINISTRATOR && hasExplicitFinanceAccess) {
+        if (permission == StaffPermission.MANAGE_FEES && role == UserRole.ADMINISTRATOR && hasExplicitFinanceAccess) {
             return true
         }
         return permissions.contains(permission)
