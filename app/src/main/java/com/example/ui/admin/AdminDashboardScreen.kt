@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AuthUser
 import com.example.model.FeeStatus
+import com.example.model.StaffPermission
 import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.model.SyncInfo
@@ -643,6 +644,7 @@ fun AdminDashboardScreen(
     if (user.role == UserRole.ADMINISTRATOR && showAddStudentDialog) {
         StudentFormDialog(
             initialStudent = null,
+            canManageFees = user.hasPermission(StaffPermission.MANAGE_FEES),
             onDismiss = { showAddStudentDialog = false },
             onSave = { newStudent ->
                 onAddStudent(newStudent)
@@ -655,6 +657,7 @@ fun AdminDashboardScreen(
     if (user.role == UserRole.ADMINISTRATOR && studentToEdit != null) {
         StudentFormDialog(
             initialStudent = studentToEdit,
+            canManageFees = user.hasPermission(StaffPermission.MANAGE_FEES),
             onDismiss = { studentToEdit = null },
             onSave = { updatedStudent ->
                 onEditStudent(updatedStudent)
