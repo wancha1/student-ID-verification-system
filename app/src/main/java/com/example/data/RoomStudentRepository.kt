@@ -1081,7 +1081,7 @@ class RoomStudentRepository(
             return instance ?: synchronized(this) {
                 instance ?: run {
                     val db = AppDatabase.getInstance(context.applicationContext)
-                    val prodBackend = com.example.data.sync.FirestoreCloudBackend(context.applicationContext)
+                    val prodBackend = com.example.data.sync.SupabaseCloudBackend(context.applicationContext)
                     RoomStudentRepository(db, remoteCloudDataSource = prodBackend).also { repo ->
                         instance = repo
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
