@@ -656,7 +656,6 @@ fun AdminDashboardScreen(
     if (user.role == UserRole.ADMINISTRATOR && studentToEdit != null) {
         StudentFormDialog(
             initialStudent = studentToEdit,
-            canManageFees = user.hasPermission(StaffPermission.MANAGE_FEES),
             onDismiss = { studentToEdit = null },
             onSave = { updatedStudent ->
                 onEditStudent(updatedStudent)
