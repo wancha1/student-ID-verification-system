@@ -50,7 +50,7 @@
 3. Test real phone camera scanning, login/logout/session restoration, photo upload/download, offline queue, network recovery and multi-device meal idempotency.
 4. Verify class/stream mapping against the app's actual student model before loading the live school roster.
 5. Exercise attendance creation/correction, exam exception submission and approval, and role denial with real authenticated staff sessions.
-5. Supabase Auth leaked-password protection is still disabled. Enable it in Dashboard → Authentication → Settings → Password Security before production onboarding.
+5. Supabase Auth leaked-password protection is unavailable on the current Free plan. Record as a plan limitation; reconsider if the project moves to Pro. Do not treat this dashboard toggle as a release blocker by itself.
 6. The intentionally policy-free private invitation-plan table is reported as an informational RLS finding; this is deliberate because client roles have no grants. Duplicate standalone student/card unique indexes were removed in migration `20261112000400_remove_duplicate_school_identifier_indexes`; the equivalent unique constraints remain.
 7. Do not merge PR #44 or call this production-ready until the checks above pass.
 
@@ -62,7 +62,7 @@
 - The public application tables have RLS enabled.
 - The `student-photos` and `school-exports` buckets are private. Student photos are limited to JPEG, PNG, or WebP and 5 MiB.
 - Read-only role-helper checks returned true for each of the four active roles in the LTC tenant and false for a different school ID.
-- The security advisor reports no critical finding. It still reports leaked-password protection disabled and one intentional informational RLS-without-policy finding on the private invitation-plan table.
+- The security advisor reports no critical finding. It reports leaked-password protection disabled (expected on the current Free plan) and one intentional informational RLS-without-policy finding on the private invitation-plan table.
 
 ### Privilege hardening applied to production
 - Migration `20261114143342_restrict_authenticated_table_privileges` removed broad table grants from `anon` and `authenticated`, then granted only the SELECT/INSERT/UPDATE operations used by the Android app.
@@ -80,12 +80,13 @@
 - Additional legacy/future role values remain in the database schema and source models, but the production authenticator rejects them until their role permissions, interfaces, RLS rules, and tests are completed.
 
 ### Remaining release blockers
-1. Enable Supabase Auth leaked-password protection in Dashboard → Authentication → Settings → Password Security.
+1. Complete the finance-permission boundary before enabling fee-balance management: the current app authenticator always returns `hasExplicitFinanceAccess = false`, while the outstanding balance is stored in `student_private`, which is readable by both Admin and Head Teacher. Move balances behind a dedicated finance-only table/RLS boundary and grant explicit access per Admin account, or disable balance management in V1.
 2. Complete authenticated RLS integration tests with real test accounts, including wrong-school and inactive membership denial for every operation.
 3. Complete two-device physical acceptance: QR scan, meal duplicate prevention, offline queue, network recovery, photo sync, logout, and membership revocation.
 4. Verify the school roster import process before loading real student data. The clean-start Supabase database currently has no student records.
 5. Generate the permanent owner-controlled Android signing key on a trusted computer, store encrypted backups, and configure the four GitHub Actions signing secrets.
 6. Run the Production APK workflow and verify its artifact signature against the owner's recorded certificate fingerprint.
-7. Do not declare the product production-ready until all blockers above have passed.
+7. Leaked-password protection remains unavailable on the Free plan; document this limitation and enforce strong password policy, email verification, and authentication rate limits where supported.
+8. Do not declare the product production-ready until all blockers above have passed.
 
 The historical Firebase migration notes above describe the staged transition. The current Android branch uses Supabase; the Firebase project and its historical data have not been deleted.
