@@ -83,7 +83,7 @@ CREATE OR REPLACE FUNCTION private.guard_student_fee_status()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, private, pg_temp
+SET search_path = pg_catalog, public, private, pg_temp
 AS $fn$
 BEGIN
   IF TG_OP = 'INSERT' THEN
