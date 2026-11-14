@@ -95,7 +95,10 @@ class SupabaseStaffAuthenticator(
         val role = when (membership.role.trim().uppercase()) {
             "ADMIN" -> UserRole.ADMINISTRATOR
             "HEAD_TEACHER" -> UserRole.HEAD_TEACHER_MANAGEMENT
-            "GATE_OFFICER" -> UserRole.GATE_STAFF
+            "BURSAR" -> UserRole.BURSAR_FINANCE
+            "TEACHER", "DIRECTOR_OF_STUDIES" -> UserRole.TEACHERS
+            "EXAM_STAFF" -> UserRole.EXAMINATION_STAFF
+            "GATE_OFFICER", "SECURITY_HEAD" -> UserRole.GATE_STAFF
             "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
             else -> throw SecurityException(
                 "The LTC staff profile has an unsupported role."
