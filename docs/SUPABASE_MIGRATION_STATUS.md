@@ -23,7 +23,8 @@
 - Supabase Auth maps BURSAR, TEACHER, DIRECTOR_OF_STUDIES, and EXAM_STAFF to the app's existing role screens; database membership constraints and RLS role lists include those staff roles.
 - Roster, card, meal and photo queries now use paginated PostgREST range requests to avoid the default row cap truncating schools with 1,000+ records.
 - Meal upload uses the database natural key `school_id,student_id,meal_type,meal_date` to prevent duplicate servings across devices.
-- Room remains responsible for offline persistence and retry/outbox orchestration. Live multi-device and offline-recovery acceptance is still required.
+- Room remains responsible for offline persistence and retry/outbox orchestration. SyncManager now uploads unsynced attendance and exam exceptions, marks confirmed uploads, pulls remote records, and resolves conflicts using the record timestamps.
+- Live multi-device and offline-recovery acceptance is still required.
 
 ## Firebase removal
 - Firebase SDK dependencies and BOM removed from the Android app.
@@ -57,7 +58,7 @@
 - Database schema/buckets/security hardening: applied to the Supabase project, including attendance and exam-exception tables and expanded staff-role constraints.
 - Android production cloud backend: switched to Supabase in PR #44.
 - Firebase Android runtime/build integration: removed in the PR branch; no Firebase project/data deletion performed.
-- CI: previous run failed on two Supabase photo API compile errors; those calls have been corrected. A fresh run for the Firebase-free, paginated backend is pending/running.
+- CI: earlier compile failures were fixed. The latest attendance/exam sync and role-mapping changes still require a fresh CI build and tests.
 - APK: no verified APK artifact from the corrected build yet.
 - PR #44 remains draft and unmerged.
 
