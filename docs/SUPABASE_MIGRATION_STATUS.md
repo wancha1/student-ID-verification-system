@@ -77,6 +77,7 @@
 
 ### V1 role boundary
 - V1 supports ADMIN, HEAD_TEACHER, GATE_OFFICER, and MEAL_STAFF.
+- Fee management is an optional capability on an active ADMIN membership, not a fifth staff role. See `ROLE_ACCESS_MATRIX.md` for provisioning and verification.
 - Additional legacy/future role values remain in the database schema and source models, but the production authenticator rejects them until their role permissions, interfaces, RLS rules, and tests are completed.
 
 ### Remaining release blockers
