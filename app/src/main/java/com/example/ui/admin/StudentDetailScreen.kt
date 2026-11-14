@@ -1036,7 +1036,6 @@ fun StudentDetailScreen(
     if (showEditDialog) {
         StudentFormDialog(
             initialStudent = student,
-            canManageFees = canManageFees,
             onDismiss = { showEditDialog = false },
             onSave = { updated ->
                 onUpdateStudentDetails(updated)
