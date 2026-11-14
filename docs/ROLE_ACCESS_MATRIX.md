@@ -30,3 +30,27 @@ Do not provision reserved roles for a live V1 deployment. Enabling any additiona
 ## Security boundary
 
 Hiding a button or screen is not authorization. Every write and sensitive read must remain protected by Supabase RLS and explicit backend role checks. Physical-device acceptance must verify that one role cannot perform another role's operations.
+
+## Finance permission (Admin capability, not a fifth role)
+
+Fee-balance management is an optional capability on an active `ADMIN` membership. It is **not** a separate Bursar login in V1.
+
+- Default for every membership: `has_finance_access = false`.
+- Only an active `ADMIN` membership with `has_finance_access = true` receives the `MANAGE_FEES` permission.
+- Monetary balances live in `public.student_finances`, which has RLS policies requiring the explicit finance capability.
+- Guardian contacts and notes remain in `student_private`; the outstanding balance is no longer stored there.
+- Gate Officers receive only the operational `fee_status` needed for access decisions. Gate scan messages do not display monetary balances.
+- The database trigger prevents a client from changing a student's fee status without explicit finance permission, even if a request bypasses the Android UI.
+
+After the finance migration is applied, an authorized project owner can grant the capability to a specific Admin by updating that Admin's membership row in the Supabase SQL Editor:
+
+```sql
+UPDATE public.staff_memberships
+SET has_finance_access = true
+WHERE school_id = 'ltc_school_01'
+  AND user_id = '<AUTH_USER_UUID>'
+  AND role = 'ADMIN'
+  AND is_active = true;
+```
+
+Replace `<AUTH_USER_UUID>` with the exact Supabase Auth user UUID for the approved Admin. Do not grant the capability to every Admin by default. To revoke it, set the flag to `false`.
