@@ -115,7 +115,6 @@ object ExportManager {
                     <th>Full Name</th>
                     <th>Class</th>
                     <th>Fees Status</th>
-                    <th>Outstanding</th>
                     <th>Transport Route</th>
                     <th>Guardian Name</th>
                     <th>Guardian Phone</th>
