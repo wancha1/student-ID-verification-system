@@ -56,7 +56,7 @@ $keystore = "$env:USERPROFILE\LTC-Production-Signing\ltc-release.jks"
 [Convert]::ToBase64String([IO.File]::ReadAllBytes($keystore)) | Set-Clipboard
 ```
 
-In GitHub, open **Settings → Secrets and variables → Actions → New repository secret**. Add:
+In GitHub, open **Settings → Environments → production** and add these as **environment secrets** (the release workflow explicitly targets the `production` environment). Add:
 
 | Secret name | Value |
 |---|---|
@@ -69,7 +69,7 @@ Paste each value directly into GitHub's secret form. Never paste secret values i
 
 ## 5. Build the production APK
 
-Open **Actions → Production APK → Run workflow** in the repository. The workflow:
+After the release workflow has been merged into the repository's default branch, open **Actions → Production APK → Run workflow** and select that default branch. The workflow:
 - Requires all four signing secrets.
 - Decodes the keystore into the runner's temporary directory.
 - Verifies that the alias exists.
