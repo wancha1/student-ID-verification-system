@@ -8,17 +8,19 @@
 
 ## V1 cloud scope
 - Authenticated staff membership and role resolution.
-- `students`, leadership-only `student_private`, `cards`, `gate_logs`, and `meals`.
+- `students`, leadership-only `student_private`, `cards`, `gate_logs`, `meals`, `attendance_records`, and `exam_exceptions`.
 - Private Storage bucket `student-photos`, canonical path `<school_id>/<student_id>/photo.jpg`.
 - Private `school-exports` bucket reserved for server-generated exports; no direct client policy.
-- Attendance and exam-exception records remain local-only and are deliberately excluded from V1 cloud sync.
+- Attendance and exam-exception records sync to dedicated school-scoped Postgres tables. Attendance is writable by teaching staff and leadership; bursars submit pending exam exceptions; leadership approves them.
 
 ## Android implementation
 - Production `RoomStudentRepository` now constructs `SupabaseCloudBackend`.
 - `SupabaseStaffAuthenticator` handles Supabase sign-in/session restoration and resolves role only from the authenticated user's active `staff_memberships` row for `ltc_school_01`.
 - `EncryptedSupabaseSessionManager` stores the Supabase session through the Android Keystore-backed encrypted session vault.
 - Supabase Kotlin SDK 3.5.0 Auth, PostgREST and Storage are configured with a publishable key only. Never embed a service-role/secret key in Android or GitHub.
-- Backend operations cover student/private-profile sync, card sync, gate audit uploads, meal upserts, fee updates, soft deletion, and private photo upload/download.
+- Backend operations cover student/private-profile sync, card sync, gate audit uploads, meal upserts, attendance sync, exam-exception request/approval sync, fee updates, soft deletion, and private photo upload/download.
+- Student class and stream values are persisted separately in Supabase and reassembled for the current Room model.
+- Supabase Auth maps BURSAR, TEACHER, DIRECTOR_OF_STUDIES, and EXAM_STAFF to the app's existing role screens; database membership constraints and RLS role lists include those staff roles.
 - Roster, card, meal and photo queries now use paginated PostgREST range requests to avoid the default row cap truncating schools with 1,000+ records.
 - Meal upload uses the database natural key `school_id,student_id,meal_type,meal_date` to prevent duplicate servings across devices.
 - Room remains responsible for offline persistence and retry/outbox orchestration. Live multi-device and offline-recovery acceptance is still required.
@@ -46,12 +48,13 @@
 2. Test Supabase RLS using separate ADMIN, HEAD_TEACHER, GATE_OFFICER and MEAL_STAFF accounts, including wrong-school and inactive-membership denial.
 3. Test real phone camera scanning, login/logout/session restoration, photo upload/download, offline queue, network recovery and multi-device meal idempotency.
 4. Verify class/stream mapping against the app's actual student model before loading the live school roster.
+5. Exercise attendance creation/correction, exam exception submission and approval, and role denial with real authenticated staff sessions.
 5. Supabase Auth leaked-password protection is still disabled. Enable it in Dashboard → Authentication → Settings → Password Security before production onboarding.
 6. The intentionally policy-free private invitation-plan table is reported as an informational RLS finding; this is deliberate because client roles have no grants. Duplicate standalone student/card unique indexes were removed in migration `20261112000400_remove_duplicate_school_identifier_indexes`; the equivalent unique constraints remain.
 7. Do not merge PR #44 or call this production-ready until the checks above pass.
 
 ## Current status
-- Database schema/buckets/security hardening: applied to the Supabase project.
+- Database schema/buckets/security hardening: applied to the Supabase project, including attendance and exam-exception tables and expanded staff-role constraints.
 - Android production cloud backend: switched to Supabase in PR #44.
 - Firebase Android runtime/build integration: removed in the PR branch; no Firebase project/data deletion performed.
 - CI: previous run failed on two Supabase photo API compile errors; those calls have been corrected. A fresh run for the Firebase-free, paginated backend is pending/running.
