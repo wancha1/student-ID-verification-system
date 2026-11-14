@@ -23,7 +23,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = pg_catalog, public, pg_temp
+SET search_path = ''
 AS $fn$
   SELECT EXISTS (
     SELECT 1
@@ -59,7 +59,7 @@ CREATE OR REPLACE FUNCTION private.sync_finance_fee_status_to_student()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public, private, pg_temp
+SET search_path = ''
 AS $fn$
 BEGIN
   UPDATE public.students
@@ -83,7 +83,7 @@ CREATE OR REPLACE FUNCTION private.guard_student_fee_status()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public, private, pg_temp
+SET search_path = ''
 AS $fn$
 BEGIN
   IF TG_OP = 'INSERT' THEN
