@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.model.FeeStatus
 import com.example.model.UserRole
+import com.example.model.StaffPermission
 import com.example.ui.admin.AdminDashboardScreen
 import com.example.ui.admin.HeadTeacherDashboardScreen
 import com.example.ui.admin.AdminScanLogsScreen
@@ -1111,7 +1112,7 @@ fun StudentAccessApp(
                                         viewModel.updateFeeStatus(selectedStudentDetail!!.id, newStatus, amount)
                                     },
                                     canManageStudentRecords = user.role == UserRole.ADMINISTRATOR,
-                                    canManageFees = user.role == UserRole.BURSAR_FINANCE,
+                                    canManageFees = user.hasPermission(StaffPermission.MANAGE_FEES),
                                     onUpdateStudentDetails = { updated ->
                                         viewModel.updateStudentDetails(updated)
                                     },
