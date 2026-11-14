@@ -24,7 +24,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS $$
+AS $fn$
   SELECT EXISTS (
     SELECT 1
     FROM public.staff_memberships m
@@ -34,7 +34,7 @@ AS $$
       AND m.is_active = true
       AND m.has_finance_access = true
   );
-$$;
+$fn$;
 
 REVOKE ALL ON FUNCTION private.has_finance_access(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION private.has_finance_access(text) TO authenticated;
@@ -81,7 +81,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, private, pg_temp
-AS $$
+AS $fn$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.fee_status <> 'CLEARED'
@@ -94,7 +94,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$;
+$fn$;
 
 DROP TRIGGER IF EXISTS enforce_student_fee_status_permission ON public.students;
 CREATE TRIGGER enforce_student_fee_status_permission
