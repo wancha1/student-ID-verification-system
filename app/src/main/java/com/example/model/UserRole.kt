@@ -25,7 +25,7 @@ enum class StaffPermission {
  * Version 1 authenticates four roles: Administrator, Head Teacher, Gate Staff,
  * and Meal-Serving Staff. Legacy enum entries remain temporarily so older
  * screens and local database records compile during the staged feature removal.
- * FirebaseStaffAuthenticator and MainViewModel reject all legacy roles.
+ * SupabaseStaffAuthenticator and MainViewModel reject all legacy roles.
  */
 enum class UserRole(
     val title: String,
