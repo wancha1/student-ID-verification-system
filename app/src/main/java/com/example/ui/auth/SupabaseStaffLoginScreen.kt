@@ -1,5 +1,7 @@
 package com.example.ui.auth
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
@@ -27,6 +29,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -87,6 +91,7 @@ fun SupabaseStaffLoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var showRecoveryOptions by remember { mutableStateOf(false) }
     var errorMessage by remember {
         mutableStateOf(
             if (authenticator == null) {
@@ -279,6 +284,70 @@ fun SupabaseStaffLoginScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = { showRecoveryOptions = true },
+                            enabled = !isLoading
+                        ) {
+                            Text("Forgot password?", color = Color(0xFF805D20), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (showRecoveryOptions) {
+                        AlertDialog(
+                            onDismissRequest = { showRecoveryOptions = false },
+                            title = {
+                                Text("Account recovery", color = Color(0xFF142236), fontWeight = FontWeight.Bold)
+                            },
+                            text = {
+                                Text(
+                                    "Contact the LTC administrator for help restoring access. Do not send your password. Include your staff name and account email.",
+                                    color = Color(0xFF526273)
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showRecoveryOptions = false
+                                    val message = Uri.encode(
+                                        "Hello LTC Administrator, I need assistance recovering access to my staff account. " +
+                                            "My account email is: ${email.trim().ifBlank { "not provided" }}. " +
+                                            "Please help me reset or restore access. I will not send my password."
+                                    )
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/256772604777?text=$message"))
+                                    )
+                                }) {
+                                    Text("WhatsApp admin")
+                                }
+                            },
+                            dismissButton = {
+                                Row {
+                                    TextButton(onClick = {
+                                        showRecoveryOptions = false
+                                        val subject = Uri.encode("LTC staff account recovery")
+                                        val body = Uri.encode(
+                                            "Hello LTC Administrator,\n\nI need assistance recovering access to my staff account. " +
+                                                "My account email is: ${email.trim().ifBlank { "not provided" }}.\n\n" +
+                                                "Please help me reset or restore access. I will not send my password."
+                                        )
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:Wanchaaaron@gmail.com?subject=$subject&body=$body"))
+                                        )
+                                    }) {
+                                        Text("Email admin")
+                                    }
+                                    TextButton(onClick = { showRecoveryOptions = false }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            },
+                            containerColor = Color(0xFFFCFDFE)
+                        )
+                    }
 
                     if (errorMessage != null) {
                         Surface(
