@@ -57,3 +57,9 @@
 - CI: previous run failed on two Supabase photo API compile errors; those calls have been corrected. A fresh run for the Firebase-free, paginated backend is pending/running.
 - APK: no verified APK artifact from the corrected build yet.
 - PR #44 remains draft and unmerged.
+
+## Build-fix checkpoint — 2026-11-14
+
+- Restored the shared `AuthenticatedStaff` data model in the Supabase authenticator after removal of the Firebase authenticator.
+- Added the explicit 500-row PostgREST page size used by bounded pagination in the Supabase cloud backend.
+- These changes require a fresh CI build before they can be considered verified.
