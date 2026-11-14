@@ -6,7 +6,7 @@ package com.example.model
  */
 enum class StaffPermission {
     MANAGE_STUDENTS,       // Register, update, delete student records; issue/revoke cards
-    MANAGE_FEES,           // Update fee clearance status and outstanding balances (Bursar)
+    MANAGE_FEES,           // Update fee clearance status and balances (explicitly authorized Admin)
     VERIFY_GATE_ACCESS,    // QR barcode gate scanning and day scholar pass checks
     SERVE_MEALS,           // Dining hall meal issuance and double-serving prevention
     EXAM_CLEARANCE,        // View/check examination clearance
