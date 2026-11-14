@@ -54,16 +54,38 @@
 6. The intentionally policy-free private invitation-plan table is reported as an informational RLS finding; this is deliberate because client roles have no grants. Duplicate standalone student/card unique indexes were removed in migration `20261112000400_remove_duplicate_school_identifier_indexes`; the equivalent unique constraints remain.
 7. Do not merge PR #44 or call this production-ready until the checks above pass.
 
-## Current status
-- Database schema/buckets/security hardening: applied to the Supabase project, including attendance and exam-exception tables and expanded staff-role constraints.
-- Android production cloud backend: switched to Supabase in PR #44.
-- Firebase Android runtime/build integration: removed in the PR branch; no Firebase project/data deletion performed.
-- CI: earlier compile failures were fixed. The latest attendance/exam sync and role-mapping changes still require a fresh CI build and tests.
-- APK: no verified APK artifact from the corrected build yet.
-- PR #44 remains draft and unmerged.
+## Latest production-readiness checkpoint — 2026-11-14
 
-## Build-fix checkpoint — 2026-11-14
+### Live Supabase checks
+- Project `uobhtoqbenrgpzlwbsco` is `ACTIVE_HEALTHY` in `eu-central-1`.
+- The live LTC school row is `ltc_school_01`; four active memberships exist for ADMIN, HEAD_TEACHER, GATE_OFFICER, and MEAL_STAFF.
+- The public application tables have RLS enabled.
+- The `student-photos` and `school-exports` buckets are private. Student photos are limited to JPEG, PNG, or WebP and 5 MiB.
+- Read-only role-helper checks returned true for each of the four active roles in the LTC tenant and false for a different school ID.
+- The security advisor reports no critical finding. It still reports leaked-password protection disabled and one intentional informational RLS-without-policy finding on the private invitation-plan table.
 
-- Restored the shared `AuthenticatedStaff` data model in the Supabase authenticator after removal of the Firebase authenticator.
-- Added the explicit 500-row PostgREST page size used by bounded pagination in the Supabase cloud backend.
-- These changes require a fresh CI build before they can be considered verified.
+### Privilege hardening applied to production
+- Migration `20261114143342_restrict_authenticated_table_privileges` removed broad table grants from `anon` and `authenticated`, then granted only the SELECT/INSERT/UPDATE operations used by the Android app.
+- Verified after migration: `authenticated` has no DELETE or TRUNCATE privilege on the public application tables; `anon` has no SELECT or TRUNCATE privilege.
+- Migration `20261114143436_restrict_future_table_privileges` removed broad default table privileges for future public-schema tables created by the current `postgres` migration owner.
+- The separate `supabase_admin` default ACL could not be changed by the connected migration role. Any future public table created under that role must receive explicit least-privilege grants and an RLS review before exposure.
+
+### Android CI
+- Commit `d50a81add0340058603e8617e54996d02c57b3ac` (login contrast and password assistance) passed GitHub Actions run [#1083](https://github.com/wancha1/student-ID-verification-system/actions/runs/43602479156).
+- The successful run completed Android compile/release compilation, unit tests, and Android emulator smoke tests.
+- This is automated emulator validation, not physical-device acceptance.
+
+### V1 role boundary
+- V1 supports ADMIN, HEAD_TEACHER, GATE_OFFICER, and MEAL_STAFF.
+- Additional legacy/future role values remain in the database schema and source models, but the production authenticator rejects them until their role permissions, interfaces, RLS rules, and tests are completed.
+
+### Remaining release blockers
+1. Enable Supabase Auth leaked-password protection in Dashboard → Authentication → Settings → Password Security.
+2. Complete authenticated RLS integration tests with real test accounts, including wrong-school and inactive membership denial for every operation.
+3. Complete two-device physical acceptance: QR scan, meal duplicate prevention, offline queue, network recovery, photo sync, logout, and membership revocation.
+4. Verify the school roster import process before loading real student data. The clean-start Supabase database currently has no student records.
+5. Generate the permanent owner-controlled Android signing key on a trusted computer, store encrypted backups, and configure the four GitHub Actions signing secrets.
+6. Run the Production APK workflow and verify its artifact signature against the owner's recorded certificate fingerprint.
+7. Do not declare the product production-ready until all blockers above have passed.
+
+The historical Firebase migration notes above describe the staged transition. The current Android branch uses Supabase; the Firebase project and its historical data have not been deleted.
