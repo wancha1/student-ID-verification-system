@@ -1672,6 +1672,23 @@ class LtcSystemVerificationTest {
         assertFalse(UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.VERIFY_GATE_ACCESS))
         assertFalse(UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.RECORD_MEALS))
 
+        val adminWithoutFinance = AuthUser(
+            role = UserRole.ADMINISTRATOR,
+            name = "Admin",
+            station = "Admin",
+            hasExplicitFinanceAccess = false
+        )
+        val adminWithFinance = adminWithoutFinance.copy(hasExplicitFinanceAccess = true)
+        val headTeacherWithInvalidFinanceFlag = AuthUser(
+            role = UserRole.HEAD_TEACHER_MANAGEMENT,
+            name = "Head Teacher",
+            station = "Management",
+            hasExplicitFinanceAccess = true
+        )
+        assertFalse(adminWithoutFinance.hasPermission(StaffPermission.MANAGE_FEES))
+        assertTrue(adminWithFinance.hasPermission(StaffPermission.MANAGE_FEES))
+        assertFalse(headTeacherWithInvalidFinanceFlag.hasPermission(StaffPermission.MANAGE_FEES))
+
         runBlocking {
             val repository = MockStudentRepository()
             val student = Student(
