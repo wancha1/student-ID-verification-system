@@ -331,13 +331,6 @@ private fun StudentSuccessVerificationView(
                                 fontWeight = FontWeight.Black,
                                 color = if (isApproved) ApprovedGreenText else RejectedRedText
                             )
-                            if (!isApproved && student.outstandingAmount > 0) {
-                                Text(
-                                    text = "Due: UGX ${String.format(Locale.US, "%,.0f", student.outstandingAmount)}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = RejectedRedText
-                                )
                             }
                         }
                     }
