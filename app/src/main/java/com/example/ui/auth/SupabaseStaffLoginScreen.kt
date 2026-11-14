@@ -1,5 +1,7 @@
 package com.example.ui.auth
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
@@ -36,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -216,8 +219,18 @@ fun SupabaseStaffLoginScreen(
                         ),
                         shape = RoundedCornerShape(15.dp),
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color(0xFF142236),
+                            unfocusedTextColor = Color(0xFF142236),
+                            disabledTextColor = Color(0xFF627286),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            disabledContainerColor = Color(0xFFF4F6F8),
                             focusedBorderColor = Color(0xFFB88B3B),
+                            unfocusedBorderColor = Color(0xFF9AA8B6),
                             focusedLabelColor = Color(0xFF8D6827),
+                            unfocusedLabelColor = Color(0xFF526477),
+                            focusedPlaceholderColor = Color(0xFF718096),
+                            unfocusedPlaceholderColor = Color(0xFF718096),
                             cursorColor = Color(0xFF8D6827)
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -247,12 +260,39 @@ fun SupabaseStaffLoginScreen(
                         ),
                         shape = RoundedCornerShape(15.dp),
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color(0xFF142236),
+                            unfocusedTextColor = Color(0xFF142236),
+                            disabledTextColor = Color(0xFF627286),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            disabledContainerColor = Color(0xFFF4F6F8),
                             focusedBorderColor = Color(0xFFB88B3B),
+                            unfocusedBorderColor = Color(0xFF9AA8B6),
                             focusedLabelColor = Color(0xFF8D6827),
+                            unfocusedLabelColor = Color(0xFF526477),
+                            focusedPlaceholderColor = Color(0xFF718096),
+                            unfocusedPlaceholderColor = Color(0xFF718096),
                             cursorColor = Color(0xFF8D6827)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    TextButton(
+                        onClick = {
+                            val supportIntent = Intent(
+                                Intent.ACTION_SENDTO,
+                                Uri.parse("mailto:Wanchaaaron@gmail.com?subject=LTC%20Student%20Access%20-%20Password%20Assistance&body=Hello%20LTC%20administrator,%0A%0AI%20need%20help%20accessing%20my%20staff%20account.%0AStaff%20email:%20${Uri.encode(email)}")
+                            )
+                            runCatching { context.startActivity(supportIntent) }
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text(
+                            "Forgot password? Contact administrator",
+                            color = Color(0xFF8D6827),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
 
                     if (errorMessage != null) {
                         Surface(
