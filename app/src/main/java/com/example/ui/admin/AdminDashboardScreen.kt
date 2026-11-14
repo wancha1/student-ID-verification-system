@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AuthUser
 import com.example.model.FeeStatus
+import com.example.model.StaffPermission
 import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.model.SyncInfo
@@ -536,8 +537,8 @@ fun AdminDashboardScreen(
                                     )
                                 }
 
-                                // Fee changes are restricted to the Bursar role.
-                                if (user.role == UserRole.BURSAR_FINANCE) {
+                                // Fee changes require explicit finance permission on an Admin account.
+                                if (user.hasPermission(StaffPermission.MANAGE_FEES)) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = if (isCleared) ApprovedGreenLight else RejectedRedLight,

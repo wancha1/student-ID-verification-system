@@ -101,7 +101,7 @@ fun StudentDetailScreen(
     onBack: () -> Unit,
     onUpdateFeeStatus: (FeeStatus, Double) -> Unit,
     canManageStudentRecords: Boolean = true,
-    canManageFees: Boolean = true,
+    canManageFees: Boolean = false,
     onUpdateStudentDetails: (Student) -> Unit,
     onDeleteStudent: (String) -> Unit,
     onReportCardLost: (studentId: String, cardId: String, reason: String) -> Unit = { _, _, _ -> },
@@ -560,7 +560,7 @@ fun StudentDetailScreen(
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
 
-        // Fee status changes belong to the Bursar.
+        // Fee status changes require explicit finance authorization on an Admin account.
         if (canManageFees) item {
             Card(
                 shape = RoundedCornerShape(20.dp),

@@ -31,9 +31,9 @@ class SupabaseCloudBackend(
     private val schoolId: String = LTC_SCHOOL_ID
 ) : RemoteCloudDataSource {
 
-    private suspend fun activeRole(): String {
+    private suspend fun activeMembership(): MembershipRow {
         val user = client.auth.retrieveUserForCurrentSession()
-        val membership = client.from("staff_memberships").select {
+        return client.from("staff_memberships").select {
             filter {
                 eq("school_id", schoolId)
                 eq("user_id", user.id)
@@ -41,7 +41,13 @@ class SupabaseCloudBackend(
             }
         }.decodeSingleOrNull<MembershipRow>()
             ?: throw SecurityException("Active LTC staff membership is required.")
-        return membership.role
+    }
+
+    private suspend fun activeRole(): String = activeMembership().role
+
+    private suspend fun hasFinanceAccess(): Boolean {
+        val membership = activeMembership()
+        return membership.role == "ADMIN" && membership.hasFinanceAccess
     }
 
     override suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>> = runCatching {
@@ -79,8 +85,25 @@ class SupabaseCloudBackend(
             }.associateBy { it.studentId }
         } else emptyMap()
 
+        // Monetary balances are fetched only for an explicitly authorized Admin.
+        val financeById = if (role == "ADMIN" && hasFinanceAccess()) {
+            buildList {
+                var offset = 0L
+                while (true) {
+                    val page = client.from("student_finances").select {
+                        filter { eq("school_id", schoolId) }
+                        range(offset..(offset + PAGE_SIZE - 1))
+                    }.decodeList<StudentFinanceRow>()
+                    addAll(page)
+                    if (page.size < PAGE_SIZE) break
+                    offset += PAGE_SIZE
+                }
+            }.associateBy { it.studentId }
+        } else emptyMap()
+
         roster.map { row ->
             val privateProfile = privateById[row.id]
+            val financeProfile = financeById[row.id]
             StudentEntity(
                 id = row.id,
                 studentNumber = row.studentNumber,
@@ -97,7 +120,7 @@ class SupabaseCloudBackend(
                 dayScholarType = row.dayScholarType ?: "DAY_SCHOLAR_WALK",
                 transportRoute = row.transportRoute.orEmpty(),
                 feesStatus = row.feeStatus,
-                outstandingAmount = privateProfile?.outstandingAmount ?: 0.0,
+                outstandingAmount = financeProfile?.outstandingAmount ?: 0.0,
                 gender = row.gender ?: "Male",
                 avatarColorSeed = row.avatarColorSeed ?: 42L,
                 guardianName = privateProfile?.guardianName.orEmpty(),
@@ -208,7 +231,6 @@ class SupabaseCloudBackend(
                     guardianPhone = student.guardianPhone.takeIf { it.isNotBlank() },
                     emergencyContact = student.emergencyContact.takeIf { it.isNotBlank() },
                     notes = student.notes.takeIf { it.isNotBlank() },
-                    outstandingAmount = student.outstandingAmount,
                     updatedAtMs = student.updatedAt
                 )
             ) { onConflict = "school_id,student_id" }
@@ -285,25 +307,16 @@ class SupabaseCloudBackend(
         outstandingAmount: Double,
         updatedAt: Long
     ): Result<Unit> = runCatching {
-        if (activeRole() != "ADMIN") throw SecurityException("Only an administrator can update fee status.")
-        client.from("students").update({
-            set("fee_status", newStatus.name)
-            set("updated_at_ms", updatedAt)
-        }) {
-            filter {
-                eq("school_id", schoolId)
-                eq("id", studentId)
-            }
-        }
-        client.from("student_private").update({
-            set("outstanding_amount", outstandingAmount)
-            set("updated_at_ms", updatedAt)
-        }) {
-            filter {
-                eq("school_id", schoolId)
-                eq("student_id", studentId)
-            }
-        }
+        if (activeRole() != "ADMIN" || !hasFinanceAccess()) throw SecurityException("Explicit finance permission is required to update fee status.")
+        client.from("student_finances").upsert(
+            StudentFinanceRow(
+                schoolId = schoolId,
+                studentId = studentId,
+                outstandingAmount = outstandingAmount,
+                feeStatus = newStatus.name,
+                updatedAtMs = updatedAt
+            )
+        ) { onConflict = "school_id,student_id" }
     }
 
     override suspend fun deleteRemoteStudent(studentId: String, updatedAt: Long): Result<Unit> = runCatching {
@@ -387,7 +400,8 @@ class SupabaseCloudBackend(
         @SerialName("school_id") val schoolId: String,
         @SerialName("user_id") val userId: String,
         val role: String,
-        @SerialName("is_active") val isActive: Boolean
+        @SerialName("is_active") val isActive: Boolean,
+        @SerialName("has_finance_access") val hasFinanceAccess: Boolean = false
     )
 
     @Serializable
@@ -444,7 +458,15 @@ class SupabaseCloudBackend(
         @SerialName("guardian_phone") val guardianPhone: String?,
         @SerialName("emergency_contact") val emergencyContact: String?,
         val notes: String?,
-        @SerialName("outstanding_amount") val outstandingAmount: Double = 0.0,
+        @SerialName("updated_at_ms") val updatedAtMs: Long
+    )
+
+    @Serializable
+    private data class StudentFinanceRow(
+        @SerialName("school_id") val schoolId: String,
+        @SerialName("student_id") val studentId: String,
+        @SerialName("outstanding_amount") val outstandingAmount: Double,
+        @SerialName("fee_status") val feeStatus: String,
         @SerialName("updated_at_ms") val updatedAtMs: Long
     )
 
