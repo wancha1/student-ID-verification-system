@@ -92,16 +92,15 @@ class SupabaseStaffAuthenticator(
             throw SecurityException("This Lira Town College staff account is inactive.")
         }
 
+        // V1 deliberately exposes only the four approved staff roles. Legacy or
+        // future roles must not create a Supabase session that the UI later rejects.
         val role = when (membership.role.trim().uppercase()) {
             "ADMIN" -> UserRole.ADMINISTRATOR
             "HEAD_TEACHER" -> UserRole.HEAD_TEACHER_MANAGEMENT
-            "BURSAR" -> UserRole.BURSAR_FINANCE
-            "TEACHER", "DIRECTOR_OF_STUDIES" -> UserRole.TEACHERS
-            "EXAM_STAFF" -> UserRole.EXAMINATION_STAFF
-            "GATE_OFFICER", "SECURITY_HEAD" -> UserRole.GATE_STAFF
+            "GATE_OFFICER" -> UserRole.GATE_STAFF
             "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
             else -> throw SecurityException(
-                "The LTC staff profile has an unsupported role."
+                "This LTC staff role is not enabled in Version 1."
             )
         }
 
