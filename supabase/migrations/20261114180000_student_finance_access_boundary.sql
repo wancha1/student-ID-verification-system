@@ -60,7 +60,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, private, pg_temp
-AS $
+AS $fn$
 BEGIN
   UPDATE public.students
   SET fee_status = NEW.fee_status,
@@ -69,7 +69,7 @@ BEGIN
     AND id = NEW.student_id;
   RETURN NEW;
 END;
-$;
+$fn$;
 
 DROP TRIGGER IF EXISTS sync_finance_fee_status_to_student ON public.student_finances;
 CREATE TRIGGER sync_finance_fee_status_to_student
