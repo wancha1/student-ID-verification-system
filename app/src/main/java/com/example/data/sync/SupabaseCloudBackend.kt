@@ -308,20 +308,12 @@ class SupabaseCloudBackend(
         updatedAt: Long
     ): Result<Unit> = runCatching {
         if (activeRole() != "ADMIN" || !hasFinanceAccess()) throw SecurityException("Explicit finance permission is required to update fee status.")
-        client.from("students").update({
-            set("fee_status", newStatus.name)
-            set("updated_at_ms", updatedAt)
-        }) {
-            filter {
-                eq("school_id", schoolId)
-                eq("id", studentId)
-            }
-        }
         client.from("student_finances").upsert(
             StudentFinanceRow(
                 schoolId = schoolId,
                 studentId = studentId,
                 outstandingAmount = outstandingAmount,
+                feeStatus = newStatus.name,
                 updatedAtMs = updatedAt
             )
         ) { onConflict = "school_id,student_id" }
@@ -474,6 +466,7 @@ class SupabaseCloudBackend(
         @SerialName("school_id") val schoolId: String,
         @SerialName("student_id") val studentId: String,
         @SerialName("outstanding_amount") val outstandingAmount: Double,
+        @SerialName("fee_status") val feeStatus: String,
         @SerialName("updated_at_ms") val updatedAtMs: Long
     )
 
