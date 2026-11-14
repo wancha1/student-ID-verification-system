@@ -22,8 +22,8 @@ import java.io.File
  * Supabase is the only production cloud backend for LTC V1.
  *
  * Room remains the offline source of truth on-device. This adapter owns remote
- * roster, private profile, card, gate-log, meal and private-photo operations.
- * Attendance and exam-exception tables are deliberately outside V1 cloud scope.
+ * roster, private profile, card, gate-log, meal, attendance, exam-exception
+ * and private-photo operations.
  */
 class SupabaseCloudBackend(
     private val context: Context,
@@ -89,7 +89,10 @@ class SupabaseCloudBackend(
                 lastName = row.lastName.orEmpty(),
                 photoUrl = downloadPhotoToCache(row.photoPath, row.id),
                 accessStatus = row.accessStatus,
-                gradeClass = row.gradeClass,
+                gradeClass = listOfNotNull(
+                    row.className?.takeIf { it.isNotBlank() },
+                    row.stream?.takeIf { it.isNotBlank() }
+                ).joinToString("-").ifBlank { row.gradeClass },
                 isDayScholar = row.isDayScholar,
                 dayScholarType = row.dayScholarType ?: "DAY_SCHOLAR_WALK",
                 transportRoute = row.transportRoute.orEmpty(),
@@ -151,12 +154,37 @@ class SupabaseCloudBackend(
         }.map { it.toEntity() }
     }
 
-    // These modules are intentionally excluded from LTC V1 remote sync.
-    override suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>> =
-        Result.success(emptyList())
+    override suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>> = runCatching {
+        activeRole()
+        buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("attendance_records").select {
+                    filter { eq("school_id", schoolId) }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<AttendanceRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
+            }
+        }.map { it.toEntity() }
+    }
 
-    override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> =
-        Result.success(emptyList())
+    override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> = runCatching {
+        activeRole()
+        buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("exam_exceptions").select {
+                    filter { eq("school_id", schoolId) }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<ExamExceptionRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
+            }
+        }.map { it.toEntity() }
+    }
 
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = runCatching {
         if (students.isEmpty()) return@runCatching
@@ -223,11 +251,33 @@ class SupabaseCloudBackend(
         }
     }
 
-    override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> =
-        Result.success(Unit)
+    override suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit> = runCatching {
+        if (attendance.isEmpty()) return@runCatching
+        if (activeRole() !in setOf("ADMIN", "HEAD_TEACHER", "TEACHER")) {
+            throw SecurityException("Only teaching staff can upload attendance.")
+        }
+        attendance.forEach { record ->
+            client.from("attendance_records").upsert(AttendanceRow.from(record, schoolId)) {
+                onConflict = "school_id,student_id,lesson_date,session_name"
+            }
+        }
+    }
 
-    override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> =
-        Result.success(Unit)
+    override suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit> = runCatching {
+        if (exceptions.isEmpty()) return@runCatching
+        val role = activeRole()
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "BURSAR")) {
+            throw SecurityException("Only the bursar or school leadership can sync exam exceptions.")
+        }
+        if (role == "BURSAR" && exceptions.any { it.isApproved }) {
+            throw SecurityException("A bursar can submit requests but cannot approve exam exceptions.")
+        }
+        exceptions.forEach { record ->
+            client.from("exam_exceptions").upsert(ExamExceptionRow.from(record, schoolId)) {
+                onConflict = "school_id,student_id,exam_code"
+            }
+        }
+    }
 
     override suspend fun updateRemoteFeeStatus(
         studentId: String,
@@ -479,6 +529,68 @@ class SupabaseCloudBackend(
             fun from(m: MealRecordEntity, school: String) = MealRow(
                 school, m.id, m.studentId, m.studentNumber, m.studentName, m.gradeClass,
                 m.mealType, m.mealDate, m.status, m.notes, m.serverName, m.timestamp
+            )
+        }
+    }
+
+    @Serializable
+    private data class AttendanceRow(
+        @SerialName("school_id") val schoolId: String,
+        val id: String,
+        @SerialName("student_id") val studentId: String,
+        @SerialName("student_number") val studentNumber: String,
+        @SerialName("student_name") val studentName: String,
+        @SerialName("grade_class") val gradeClass: String,
+        val subject: String,
+        @SerialName("session_name") val sessionName: String,
+        @SerialName("lesson_date") val lessonDate: String,
+        @SerialName("timestamp_ms") val timestamp: Long,
+        @SerialName("teacher_name") val teacherName: String,
+        @SerialName("is_present") val isPresent: Boolean,
+        val notes: String,
+        @SerialName("is_correction") val isCorrection: Boolean,
+        @SerialName("corrected_by") val correctedBy: String?,
+        @SerialName("updated_at_ms") val updatedAt: Long
+    ) {
+        fun toEntity() = AttendanceRecordEntity(
+            id, studentId, studentNumber, studentName, gradeClass, subject, sessionName,
+            lessonDate, timestamp, teacherName, isPresent, notes, isCorrection, correctedBy, true
+        )
+        companion object {
+            fun from(a: AttendanceRecordEntity, school: String) = AttendanceRow(
+                school, a.id, a.studentId, a.studentNumber, a.studentName, a.gradeClass,
+                a.subject, a.sessionName, a.lessonDate, a.timestamp, a.teacherName,
+                a.isPresent, a.notes, a.isCorrection, a.correctedBy, a.timestamp
+            )
+        }
+    }
+
+    @Serializable
+    private data class ExamExceptionRow(
+        @SerialName("school_id") val schoolId: String,
+        val id: String,
+        @SerialName("student_id") val studentId: String,
+        @SerialName("student_number") val studentNumber: String,
+        @SerialName("student_name") val studentName: String,
+        @SerialName("exam_code") val examCode: String,
+        @SerialName("requested_by_bursar") val requestedByBursar: String,
+        @SerialName("recommendation_reason") val recommendationReason: String,
+        @SerialName("is_approved") val isApproved: Boolean,
+        @SerialName("approved_by_head_teacher") val approvedByHeadTeacher: String?,
+        @SerialName("requested_at_ms") val requestedAt: Long,
+        @SerialName("approved_at_ms") val approvedAt: Long?,
+        @SerialName("updated_at_ms") val updatedAt: Long
+    ) {
+        fun toEntity() = ExamExceptionEntity(
+            id, studentId, studentNumber, studentName, examCode, requestedByBursar,
+            recommendationReason, isApproved, approvedByHeadTeacher, requestedAt, approvedAt, true
+        )
+        companion object {
+            fun from(e: ExamExceptionEntity, school: String) = ExamExceptionRow(
+                school, e.id, e.studentId, e.studentNumber, e.studentName, e.examCode,
+                e.requestedByBursar, e.recommendationReason, e.isApproved,
+                e.approvedByHeadTeacher, e.requestedAt, e.approvedAt,
+                e.approvedAt ?: e.requestedAt
             )
         }
     }
