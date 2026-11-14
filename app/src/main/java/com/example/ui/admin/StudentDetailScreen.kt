@@ -101,7 +101,7 @@ fun StudentDetailScreen(
     onBack: () -> Unit,
     onUpdateFeeStatus: (FeeStatus, Double) -> Unit,
     canManageStudentRecords: Boolean = true,
-    canManageFees: Boolean = true,
+    canManageFees: Boolean = false,
     onUpdateStudentDetails: (Student) -> Unit,
     onDeleteStudent: (String) -> Unit,
     onReportCardLost: (studentId: String, cardId: String, reason: String) -> Unit = { _, _, _ -> },
@@ -1036,6 +1036,7 @@ fun StudentDetailScreen(
     if (showEditDialog) {
         StudentFormDialog(
             initialStudent = student,
+            canManageFees = canManageFees,
             onDismiss = { showEditDialog = false },
             onSave = { updated ->
                 onUpdateStudentDetails(updated)
