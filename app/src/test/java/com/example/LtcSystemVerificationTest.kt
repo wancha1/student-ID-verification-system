@@ -290,7 +290,7 @@ class LtcSystemVerificationTest {
             viewModel.updateFeeStatus(targetStudent.id, FeeStatus.OUTSTANDING, 500000.0)
             assertTrue(
                 "Gate Officer cannot modify fee status",
-                viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true
+                viewModel.userFeedbackMessage.value?.contains("explicit finance authorization") == true
             )
 
             val newStudent = targetStudent.copy(id = "unauthorized-add-01", studentNumber = "LTC-2026-9999")
