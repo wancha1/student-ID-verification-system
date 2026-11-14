@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.student_finances (
   school_id text NOT NULL,
   student_id text NOT NULL,
   outstanding_amount numeric(12,2) NOT NULL DEFAULT 0 CHECK (outstanding_amount >= 0),
+  fee_status text NOT NULL DEFAULT 'CLEARED' CHECK (fee_status IN ('CLEARED','OUTSTANDING')),
   updated_at_ms bigint NOT NULL,
   PRIMARY KEY (school_id, student_id),
   FOREIGN KEY (school_id, student_id)
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.student_finances (
 );
 
 ALTER TABLE public.student_finances ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.student_finances FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.student_finances TO authenticated;
 
 CREATE OR REPLACE FUNCTION private.has_finance_access(p_school_id text)
@@ -52,6 +54,27 @@ CREATE POLICY "finance admins can update student balances"
   ON public.student_finances FOR UPDATE TO authenticated
   USING (private.has_finance_access(school_id))
   WITH CHECK (private.has_finance_access(school_id));
+
+CREATE OR REPLACE FUNCTION private.sync_finance_fee_status_to_student()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, private, pg_temp
+AS $
+BEGIN
+  UPDATE public.students
+  SET fee_status = NEW.fee_status,
+      updated_at_ms = NEW.updated_at_ms
+  WHERE school_id = NEW.school_id
+    AND id = NEW.student_id;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS sync_finance_fee_status_to_student ON public.student_finances;
+CREATE TRIGGER sync_finance_fee_status_to_student
+  AFTER INSERT OR UPDATE OF fee_status ON public.student_finances
+  FOR EACH ROW EXECUTE FUNCTION private.sync_finance_fee_status_to_student();
 
 CREATE OR REPLACE FUNCTION private.guard_student_fee_status()
 RETURNS trigger
