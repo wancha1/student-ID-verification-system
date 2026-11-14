@@ -537,8 +537,8 @@ fun AdminDashboardScreen(
                                     )
                                 }
 
-                                // Fee changes are restricted to the Bursar role.
-                                if (user.role == UserRole.BURSAR_FINANCE) {
+                                // Fee changes require explicit finance permission on an Admin account.
+                                if (user.hasPermission(StaffPermission.MANAGE_FEES)) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = if (isCleared) ApprovedGreenLight else RejectedRedLight,
