@@ -109,3 +109,11 @@ Do not change the Android `applicationId` after the first production release. Ch
 - Rotate GitHub secrets if repository access changes or a secret is exposed.
 - Never generate a replacement key merely because the original is inconvenient to access.
 - If the key is lost, future APKs signed with a different key will not update existing installations.
+
+
+## Current owner-controlled signing status — 2026-11-15
+The owner reports that the permanent JKS exists at `%USERPROFILE%\\LTC-Production-Signing\\ltc-release.jks`, alias `ltc-release`, and that all four required secrets are configured in the GitHub `production` environment. Secret values must remain private.
+
+**Verification is pending.** The repository's Production APK workflow is present on the release candidate branch, not yet on the default branch. No production-signed APK has been produced or verified against the owner's recorded SHA-256 certificate fingerprint. The latest successful CI artifact is a debug build and must not be distributed as a production release.
+
+Current release gate: PR #49 is open/unmerged. Once the release chain is approved and merged, run **Actions → Production APK → Run workflow**, then verify the artifact with `apksigner verify --verbose --print-certs` and compare the fingerprint to the owner's secure record. Record the APK SHA-256, package ID and version code before distribution.
