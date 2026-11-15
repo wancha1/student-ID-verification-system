@@ -40,9 +40,10 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_EXPECTED_CERT_SHA256 }}
         run: |
           set -euo pipefail
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_EXPECTED_CERT_SHA256; do
             if [[ -z "${!name:-}" ]]; then
               echo "::error::Required GitHub Actions secret $name is missing."
               exit 1
@@ -52,10 +53,21 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
           test -s "$KEYSTORE_PATH"
-          keytool -list -v -storetype JKS \
+          CERT_INFO="$(keytool -list -v -storetype JKS \
             -keystore "$KEYSTORE_PATH" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+            -alias "$ANDROID_KEY_ALIAS")"
+          EXPECTED_CERT="$(printf '%s' "$ANDROID_EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          KEY_CERT="$(printf '%s\n' "$CERT_INFO" | awk '/SHA256:/{print $2; exit}' | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ ! "$EXPECTED_CERT" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::ANDROID_EXPECTED_CERT_SHA256 must contain a 64-character SHA-256 fingerprint."
+            exit 1
+          fi
+          if [[ "$KEY_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::The permanent keystore certificate does not match the owner's expected SHA-256 fingerprint."
+            exit 1
+          fi
+          echo "Permanent keystore certificate fingerprint matches the protected expected value."
           echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
           echo "KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
 
@@ -106,6 +118,8 @@ jobs:
 
       - name: Verify APK alignment, package identity, and signature
         shell: bash
+        env:
+          ANDROID_EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_EXPECTED_CERT_SHA256 }}
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/release/app-release.apk"
@@ -116,7 +130,15 @@ jobs:
           test -x "$BUILD_TOOLS/zipalign"
           test -x "$BUILD_TOOLS/aapt"
           "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          SIGNATURE_INFO="$("$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK")"
+          printf '%s\n' "$SIGNATURE_INFO"
+          EXPECTED_CERT="$(printf '%s' "$ANDROID_EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          APK_CERT="$(printf '%s\n' "$SIGNATURE_INFO" | awk '/certificate SHA-256 digest:/{print $NF; exit}' | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$APK_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::The APK signing certificate does not match the owner's expected SHA-256 fingerprint."
+            exit 1
+          fi
+          echo "APK certificate fingerprint matches the protected expected value."
           "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -F "package: name='com.aistudio.studentaccess.xpkz'"
           sha256sum "$APK"
 
