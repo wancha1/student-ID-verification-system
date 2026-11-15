@@ -30,6 +30,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+      - name: Validate Supabase real-token test script syntax
+        run: bash -n scripts/supabase-real-token-smoke.sh
       - name: Generate ephemeral debug keystore
         run: |
           keytool -genkeypair -v \
