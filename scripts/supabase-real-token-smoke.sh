@@ -64,7 +64,7 @@ check_finance_boundary() {
     -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' \
     -H 'Prefer: return=minimal' \
-    --data '{"school_id":"ltc_school_01","student_id":"__ltc_authz_probe_nonexistent__","outstanding_amount":1,"fee_status":"PENDING","updated_at_ms":1}')"
+    --data '{"school_id":"ltc_school_01","student_id":"__ltc_authz_probe_nonexistent__","outstanding_amount":1,"fee_status":"OUTSTANDING","updated_at_ms":1}')"
 
   if [[ "$role" == "ADMIN" ]]; then
     [[ "$code" == "409" ]] || {
