@@ -3,7 +3,6 @@ package com.example
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.firebase.FirebaseApp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -13,18 +12,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ExampleInstrumentedTest {
   @Test
-  fun applicationIdAndFirebaseConfigurationAreCorrect() {
+  fun applicationIdIsCorrect() {
     val appContext = InstrumentationRegistry.getInstrumentation().targetContext
     assertEquals(BuildConfig.APPLICATION_ID, appContext.packageName)
 
-    // FirebaseInitProvider must initialize the default app from packaged resources.
-    val firebaseApp = FirebaseApp.getInstance()
-    assertNotNull(firebaseApp.options)
-    assertEquals("gen-lang-client-0207053136", firebaseApp.options.projectId)
-    assertEquals(
-      "1:863997008927:android:87c2ce91560390f176892a",
-      firebaseApp.options.applicationId
-    )
   }
 
   @Test

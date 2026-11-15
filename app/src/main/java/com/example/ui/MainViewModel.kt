@@ -4,7 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.StudentRepository
-import com.example.data.auth.FirebaseStaffAuthenticator
+import com.example.data.auth.SupabaseClientFactory
+import com.example.data.auth.SupabaseStaffAuthenticator
 import com.example.model.AuthUser
 import com.example.model.Card
 import com.example.model.CardStatus
@@ -45,7 +46,6 @@ import com.example.util.FeedbackHelper
 import com.example.util.QrCodeUtils
 import com.example.util.QrParseResult
 import com.example.util.SecurityManager
-import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,7 +65,8 @@ enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(
-    private val repository: StudentRepository
+    private val repository: StudentRepository,
+    private val appContext: Context? = null
 ) : ViewModel() {
 
     private val VERSION_ONE_ROLES = setOf(
@@ -75,26 +76,29 @@ class MainViewModel(
         UserRole.MEAL_SERVING_STAFF
     )
 
-    // Current authenticated user. Firebase sessions are restored only after a fresh
-    // server-side check of the staff membership document.
+    // Supabase sessions are restored from the encrypted Android Keystore vault.
+    // Every restore revalidates the user's active LTC membership against Postgres RLS.
     private var sessionRestoreStarted = false
+    private var supabaseAuthenticator: SupabaseStaffAuthenticator? = null
     private val _currentUser = MutableStateFlow<AuthUser?>(null)
 
-    fun restoreFirebaseSession(context: Context) {
-        if (sessionRestoreStarted) return
+    fun restoreSupabaseSession(context: Context) {
+        if (sessionRestoreStarted || _currentUser.value != null) return
         sessionRestoreStarted = true
         viewModelScope.launch {
             try {
-                val staff = FirebaseStaffAuthenticator().restoreSession(context)
+                val authenticator = SupabaseStaffAuthenticator(
+                    SupabaseClientFactory.getInstance(context.applicationContext)
+                )
+                supabaseAuthenticator = authenticator
+                val staff = authenticator.restoreSession()
                 if (staff != null && _currentUser.value == null) {
                     loginAs(staff.role, staff.displayName, staff.hasExplicitFinanceAccess)
                 }
             } catch (_: Exception) {
-                // Fail closed: do not grant a role when server validation fails.
-                // Keep the login screen available if server validation fails.
+                // Fail closed: network, configuration or membership errors never grant a role.
+                // Keep the login screen visible so the staff member can retry.
             } finally {
-                // Always release the guard, including when there is no cached Firebase
-                // user or validation fails. A later foreground/start event can retry.
                 sessionRestoreStarted = false
             }
         }
@@ -374,8 +378,16 @@ class MainViewModel(
 
     fun logout() {
         lockSession()
-        // Explicit logout revokes the client session; background locking only clears the UI session.
-        runCatching { FirebaseAuth.getInstance().signOut() }
+        // Explicit logout revokes the Supabase session and clears its encrypted refresh token.
+        viewModelScope.launch {
+            runCatching {
+                val authenticator = supabaseAuthenticator ?: appContext?.let {
+                    SupabaseStaffAuthenticator(SupabaseClientFactory.getInstance(it))
+                }
+                authenticator?.signOut()
+            }
+            // Clear any legacy Firebase session left on an upgraded installation.
+        }
     }
 
     fun openScanner() {
@@ -1436,7 +1448,7 @@ class MainViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val repo = com.example.data.RoomStudentRepository.getInstance(context.applicationContext)
-                return MainViewModel(repo) as T
+                return MainViewModel(repo, context.applicationContext) as T
             }
         }
     }

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "feat/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "fix/**"]
   workflow_dispatch:
 
 concurrency:
@@ -30,8 +30,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
-      - name: Install Firebase emulator tooling
-        run: npm install --no-save firebase-tools
       - name: Generate ephemeral debug keystore
         run: |
           keytool -genkeypair -v \
@@ -65,41 +63,9 @@ jobs:
           KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
             STORE_PASSWORD="$STORE_PASSWORD" \
             KEY_PASSWORD="$STORE_PASSWORD" \
-            gradle --no-daemon --no-build-cache processDebugGoogleServices processReleaseGoogleServices assembleDebug assembleRelease
-      - name: Verify Firebase resources are packaged in both APK variants
-        run: |
-          set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-          test -n "$AAPT" || { echo "Android aapt tool not found under $SDK_ROOT/build-tools" >&2; exit 1; }
-
-          for VARIANT in debug release; do
-            APK="app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
-            test -f "$APK" || { echo "Missing APK: $APK" >&2; exit 1; }
-            RESOURCE_DUMP="$(mktemp)"
-            "$AAPT" dump --values resources "$APK" > "$RESOURCE_DUMP"
-
-            for EXPECTED in 'gen-lang-client-0207053136' '1:863997008927:android:87c2ce91560390f176892a'; do
-              if ! grep -Fq "$EXPECTED" "$RESOURCE_DUMP"; then
-                echo "Expected Firebase value missing from compiled $VARIANT APK resources: $EXPECTED" >&2
-                grep -n -E 'google_app_id|project_id|google_api_key|Firebase' "$RESOURCE_DUMP" | head -80 >&2 || true
-                rm -f "$RESOURCE_DUMP"
-                exit 1
-              fi
-            done
-
-            for RESOURCE_NAME in google_app_id project_id; do
-              if ! grep -Fq "$RESOURCE_NAME" "$RESOURCE_DUMP"; then
-                echo "Firebase resource name missing from compiled $VARIANT APK: $RESOURCE_NAME" >&2
-                rm -f "$RESOURCE_DUMP"
-                exit 1
-              fi
-            done
-            rm -f "$RESOURCE_DUMP"
-            echo "Verified Firebase project/app IDs and resource names in compiled $VARIANT APK."
-          done
-      - name: Run unit tests with Firebase Auth and Firestore emulators
-        run: npx firebase-tools emulators:exec --only firestore,auth --project demo-no-project "gradle --no-daemon testDebugUnitTest --stacktrace"
+            gradle --no-daemon --no-build-cache assembleDebug assembleRelease
+      - name: Run Android unit tests
+        run: gradle --no-daemon testDebugUnitTest --stacktrace
       - name: Run device smoke tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -108,13 +74,15 @@ jobs:
           arch: x86_64
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          disable-animations: true
+          # Avoid runner-side settings writes that caused ADB broken-pipe failures.
+          disable-animations: false
           script: gradle --no-daemon connectedDebugAndroidTest
       - name: Upload debug APK
-        if: success()
+        # Preserve the compiled APK even if the emulator smoke test fails.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ltc-debug-apk-firebase-config-check
+          name: ltc-debug-apk-ci-build-not-release
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 7
@@ -127,25 +95,3 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  firestore-rules:
-    name: Firestore security rules tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - name: Install rules-test dependencies
-        run: npm install --no-save firebase @firebase/rules-unit-testing firebase-tools
-      - name: Run Firestore emulator tests
-        run: npx firebase-tools emulators:exec --only firestore --project demo-no-project "node --test firestore.test.js"
-      - name: Validate Firebase provisioning and migration script syntax
-        run: |
-          node --check scripts/provision-ltc-staff.cjs
-          node --check scripts/migrate-ltc-staff-claims.cjs
-      - name: Run Storage emulator tests
-        run: npx firebase-tools emulators:exec --only storage --project demo-no-project "node --test storage.test.js"

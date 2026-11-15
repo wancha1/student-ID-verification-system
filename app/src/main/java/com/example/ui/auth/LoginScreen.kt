@@ -6,14 +6,14 @@ import com.example.model.UserRole
 
 /**
  * Compatibility wrapper retained for callers using the historical LoginScreen name.
- * Authentication and role resolution are delegated to FirebaseStaffLoginScreen.
+ * Authentication and role resolution are delegated to SupabaseStaffLoginScreen.
  */
 @Composable
 fun LoginScreen(
     onSelectRole: (UserRole, String?, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    FirebaseStaffLoginScreen(
+    SupabaseStaffLoginScreen(
         onAuthenticated = onSelectRole,
         modifier = modifier
     )

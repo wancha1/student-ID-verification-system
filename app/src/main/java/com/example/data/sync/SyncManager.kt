@@ -56,6 +56,8 @@ class SyncManager(
     private suspend fun calculatePendingCount(): Int {
         return database.scanLogDao().getUnsyncedLogsCount() +
                 database.mealRecordDao().getUnsynced().size +
+                database.attendanceRecordDao().getUnsynced().size +
+                database.examExceptionDao().getUnsynced().size +
                 database.pendingChangeDao().getPendingCount()
     }
 
@@ -116,8 +118,25 @@ class SyncManager(
                     }
                 }
 
-                // Version 1 does not synchronize attendance or examination records.
-                // These modules are intentionally disabled until a later release.
+                // 3. Upload unsynced classroom attendance records.
+                val unsyncedAttendance = database.attendanceRecordDao().getUnsynced()
+                if (unsyncedAttendance.isNotEmpty()) {
+                    val result = remoteCloudDataSource.pushAttendanceRecords(unsyncedAttendance)
+                    if (result.isSuccess) {
+                        database.attendanceRecordDao().markSynced(unsyncedAttendance.map { it.id })
+                        logsUploadedCount += unsyncedAttendance.size
+                    }
+                }
+
+                // 4. Upload bursar requests / leadership approvals for exam exceptions.
+                val unsyncedExceptions = database.examExceptionDao().getUnsynced()
+                if (unsyncedExceptions.isNotEmpty()) {
+                    val result = remoteCloudDataSource.pushExamExceptions(unsyncedExceptions)
+                    if (result.isSuccess) {
+                        database.examExceptionDao().markSynced(unsyncedExceptions.map { it.id })
+                        logsUploadedCount += unsyncedExceptions.size
+                    }
+                }
 
                 // Dispatch local outbox mutations before pulling remote state, so a remote
                 // snapshot cannot overwrite a local change that has not yet been uploaded.
@@ -218,7 +237,7 @@ class SyncManager(
                     }
                 }
 
-                // V1 pulls meal history only. Attendance and examination are outside this release.
+                // 7. Pull shared meal, attendance and exam-exception records.
                 val remoteMealsResult = remoteCloudDataSource.fetchAllRemoteMealRecords()
                 if (remoteMealsResult.isFailure) {
                     throw remoteMealsResult.exceptionOrNull()
@@ -236,6 +255,40 @@ class SyncManager(
                                 gradeClass = remoteMeal.gradeClass.ifBlank { local?.gradeClass.orEmpty() },
                                 isSyncedToCloud = true
                             )
+                        )
+                    }
+                }
+
+                val remoteAttendanceResult = remoteCloudDataSource.fetchAllRemoteAttendanceRecords()
+                if (remoteAttendanceResult.isFailure) {
+                    throw remoteAttendanceResult.exceptionOrNull()
+                        ?: IllegalStateException("Failed to fetch remote attendance records")
+                }
+                for (remoteRecord in remoteAttendanceResult.getOrThrow()) {
+                    val local = database.attendanceRecordDao().findAttendance(
+                        remoteRecord.studentId, remoteRecord.lessonDate, remoteRecord.sessionName
+                    )
+                    if (local == null || remoteRecord.timestamp >= local.timestamp) {
+                        database.attendanceRecordDao().insertOrUpdate(
+                            remoteRecord.copy(isSyncedToCloud = true)
+                        )
+                    }
+                }
+
+                val remoteExceptionsResult = remoteCloudDataSource.fetchAllRemoteExamExceptions()
+                if (remoteExceptionsResult.isFailure) {
+                    throw remoteExceptionsResult.exceptionOrNull()
+                        ?: IllegalStateException("Failed to fetch remote exam exceptions")
+                }
+                for (remoteRecord in remoteExceptionsResult.getOrThrow()) {
+                    val local = database.examExceptionDao().findException(
+                        remoteRecord.studentId, remoteRecord.examCode
+                    )
+                    val remoteUpdatedAt = remoteRecord.approvedAt ?: remoteRecord.requestedAt
+                    val localUpdatedAt = local?.let { it.approvedAt ?: it.requestedAt } ?: Long.MIN_VALUE
+                    if (local == null || remoteUpdatedAt >= localUpdatedAt) {
+                        database.examExceptionDao().insertOrUpdate(
+                            remoteRecord.copy(isSyncedToCloud = true)
                         )
                     }
                 }
