@@ -76,3 +76,10 @@ The workflow uses the same public Supabase URL and publishable client key alread
 - `TEST_MEAL_STAFF_EMAIL`, `TEST_MEAL_STAFF_PASSWORD`
 
 Use the four already provisioned LTC staff accounts and their current passwords. The workflow is manual and does not run as part of ordinary CI. It cannot be dispatched until the workflow file is available on the default branch. The test validates the existing active accounts; an inactive-membership denial test still requires a separately provisioned, school-approved inactive test account or a controlled temporary deactivation window.
+
+## Latest security-advisor snapshot — 2026-11-15
+The live Supabase security advisor currently reports:
+- INFO: `private.staff_invitation_plan` has RLS enabled and no policies. This is an intentionally private, inaccessible table; do not add client policies merely to silence the advisory.
+- WARN: leaked-password protection is disabled on the current Free plan. Enable it if/when the project is upgraded to a plan that supports the control; in the meantime enforce strong unique staff passwords and protect accounts with operational controls.
+
+The real-token smoke script was corrected to use the database's permitted `OUTSTANDING` fee-status value for its deliberately non-existent student probe. This probe creates no student or finance record: the Admin should reach a foreign-key rejection, while roles without finance permission should be rejected by RLS.
