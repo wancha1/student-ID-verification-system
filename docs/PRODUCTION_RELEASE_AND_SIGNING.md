@@ -64,15 +64,17 @@ In GitHub, open **Settings → Environments → production** and add these as **
 | `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
 | `ANDROID_KEY_ALIAS` | `ltc-release` |
 | `ANDROID_KEY_PASSWORD` | Private-key password |
+| `ANDROID_EXPECTED_CERT_SHA256` | SHA-256 fingerprint of the permanent signing certificate (64 hexadecimal characters; colons optional) |
 
 Paste each value directly into GitHub's secret form. Never paste secret values into repository files, workflow YAML, chat, or logs.
 
 ## 5. Build the production APK
 
 After the release workflow has been merged into the repository's default branch, open **Actions → Production APK → Run workflow** and select that default branch. The workflow:
-- Requires all four signing secrets.
+- Requires all five signing secrets.
 - Decodes the keystore into the runner's temporary directory.
-- Verifies that the alias exists.
+- Verifies that the alias exists and that the keystore certificate matches `ANDROID_EXPECTED_CERT_SHA256`.
+- Verifies again that the built APK is signed by that exact certificate.
 - Runs Android unit tests and emulator smoke tests.
 - Builds the release APK using the permanent signing key.
 - Checks APK alignment and signature validity.
