@@ -27,6 +27,8 @@ interface RemoteCloudDataSource {
     suspend fun pushMealRecords(meals: List<MealRecordEntity>): Result<Unit>
     suspend fun pushAttendanceRecords(attendance: List<AttendanceRecordEntity>): Result<Unit>
     suspend fun pushExamExceptions(exceptions: List<ExamExceptionEntity>): Result<Unit>
+    /** Downloads all available cloud student photos for existing-device backfill. */
+    suspend fun refreshStudentPhotos(): Result<Map<String, String>> = Result.success(emptyMap())
     suspend fun fetchAllRemoteStudents(): Result<List<StudentEntity>>
     suspend fun fetchAllRemoteCards(): Result<List<CardEntity>>
     suspend fun updateRemoteFeeStatus(studentId: String, newStatus: FeeStatus, outstandingAmount: Double, updatedAt: Long): Result<Unit>

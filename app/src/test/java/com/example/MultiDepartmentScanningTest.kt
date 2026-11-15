@@ -502,7 +502,7 @@ class MultiDepartmentScanningTest {
             syncManager = syncManager
         )
         assertTrue(deniedMeals is DepartmentVerificationResult.PermissionDenied)
-        assertEquals(StaffPermission.SERVE_MEALS, (deniedMeals as DepartmentVerificationResult.PermissionDenied).requiredPermission)
+        assertEquals(StaffPermission.RECORD_MEALS, (deniedMeals as DepartmentVerificationResult.PermissionDenied).requiredPermission)
     }
 
     @Test

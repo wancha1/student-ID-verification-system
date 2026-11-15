@@ -142,20 +142,14 @@ class RoomStudentProfileDatabaseTest {
 
         database.pendingChangeDao().enqueueChange(change)
 
-        val pending = database.pendingChangeDao().getPendingChanges()
-        assertEquals(1, pending.size)
-        assertEquals(changeId, pending[0].changeId)
-        assertEquals(com.example.data.local.SyncItemStatus.PENDING, pending[0].status)
-        assertEquals(1, database.pendingChangeDao().getPendingCount())
-
-        // Mark as synced
-        val now = System.currentTimeMillis()
-        database.pendingChangeDao().markSynced(changeId, now)
-
+        // Retired fee mutations remain stored for compatibility, but V1 does not
+        // retry them or report them as active synchronization work.
+        assertTrue(database.pendingChangeDao().getPendingChanges().none { it.changeId == changeId })
         assertEquals(0, database.pendingChangeDao().getPendingCount())
-        val syncedItem = database.pendingChangeDao().getChangeById(changeId)
-        assertNotNull(syncedItem)
-        assertEquals(com.example.data.local.SyncItemStatus.SYNCED, syncedItem?.status)
+
+        val retainedItem = database.pendingChangeDao().getChangeById(changeId)
+        assertNotNull(retainedItem)
+        assertEquals(com.example.data.local.SyncItemStatus.PENDING, retainedItem?.status)
     }
 
     @Test
@@ -206,9 +200,12 @@ class RoomStudentProfileDatabaseTest {
         repo.updateFeeStatus(student.id, FeeStatus.CLEARED, 0.0)
 
         val pending = database.pendingChangeDao().getPendingChanges()
-        assertTrue("Pending changes queue must contain offline student and fee mutations", pending.size >= 3)
-        assertTrue(pending.any { it.entityType == com.example.data.local.SyncEntityType.STUDENT && it.operationType == com.example.data.local.SyncOperationType.CREATE })
-        assertTrue(pending.any { it.entityType == com.example.data.local.SyncEntityType.FEE_STATUS && it.operationType == com.example.data.local.SyncOperationType.STATUS_CHANGE })
+        assertTrue("Student creation must remain queued for V1 synchronization", pending.any {
+            it.entityType == com.example.data.local.SyncEntityType.STUDENT &&
+                it.operationType == com.example.data.local.SyncOperationType.CREATE
+        })
+        assertTrue("Retired fee mutations must not be retried in Version 1",
+            pending.none { it.entityType == com.example.data.local.SyncEntityType.FEE_STATUS })
     }
     
     @Test
@@ -227,10 +224,13 @@ class RoomStudentProfileDatabaseTest {
         )
 
         val retryable = database.pendingChangeDao().getPendingChanges()
-        assertEquals(1, retryable.size)
-        assertEquals(changeId, retryable.single().changeId)
-        assertEquals(com.example.data.local.SyncItemStatus.FAILED, retryable.single().status)
-        assertEquals(1, database.pendingChangeDao().getPendingCount())
+        assertTrue("Retired fee mutations must not be retried in Version 1",
+            retryable.none { it.changeId == changeId })
+        assertEquals(0, database.pendingChangeDao().getPendingCount())
+
+        val retainedItem = database.pendingChangeDao().getChangeById(changeId)
+        assertNotNull(retainedItem)
+        assertEquals(com.example.data.local.SyncItemStatus.FAILED, retainedItem?.status)
     }
 
 }

@@ -87,7 +87,8 @@ fun RequirementsMasterScreen(
     onUpdateNotes: (studentId: String, notes: String) -> Unit,
     onOpenScanner: () -> Unit,
     onExport: (format: ExportFormat) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     var selectedFilter by remember { mutableStateOf("ALL") }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -155,7 +156,7 @@ fun RequirementsMasterScreen(
                                     Text(
                                         text = roleTheme.stationBadge,
                                         color = roleTheme.badgeTextColor,
-                                        fontSize = 8.5.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                     )
@@ -169,8 +170,8 @@ fun RequirementsMasterScreen(
                         }
                     }
 
-                    // Action Buttons: Scan QR & Export
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Read-only leadership view omits scanning and record-changing actions.
+                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = onOpenScanner,
                             modifier = Modifier.testTag("button_req_scan_qr"),
@@ -327,7 +328,8 @@ fun RequirementsMasterScreen(
                         student = student,
                         onToggle = { itemKey -> onToggleRequirement(req.studentId, itemKey) },
                         onMarkAll = { onMarkAllCleared(req.studentId) },
-                        onEditNotes = { editingStudentRequirement = req }
+                        onEditNotes = { if (!readOnly) editingStudentRequirement = req },
+                        readOnly = readOnly
                     )
                 }
             }
@@ -406,7 +408,7 @@ private fun ReqStatCard(
             )
             Text(
                 text = title,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -421,7 +423,8 @@ private fun StudentRequirementCard(
     onToggle: (String) -> Unit,
     onMarkAll: () -> Unit,
     onEditNotes: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isCleared = requirement.isFullyCleared
@@ -498,7 +501,7 @@ private fun StudentRequirementCard(
                         Text(
                             text = if (isCleared) "CLEARED (7/7)" else "PENDING ($clearedCount/7)",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = if (isCleared) Color(0xFF16A34A) else Color(0xFFD97706)
                         )
                     }
@@ -524,12 +527,12 @@ private fun StudentRequirementCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded },
+                    .then(if (readOnly) Modifier.clickable { expanded = !expanded } else Modifier.clickable { expanded = !expanded }),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (expanded) "Hide Checklist" else "View / Toggle 7 Clearance Items",
+                    text = if (expanded) "Hide Checklist" else if (readOnly) "View 7 Clearance Items" else "View / Toggle 7 Clearance Items",
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFF0284C7),
                     fontWeight = FontWeight.SemiBold
@@ -552,43 +555,50 @@ private fun StudentRequirementCard(
                         label = "School Uniform Complete",
                         description = "Approved blazer, tie, socks, and standard black footwear",
                         checked = requirement.uniformComplete,
-                        onCheckedChange = { onToggle("uniform") }
+                        onCheckedChange = { if (!readOnly) onToggle("uniform") },
+                        enabled = !readOnly
                     )
                     ReqCheckItem(
                         label = "Sports Kit & PE Gear",
                         description = "LTC track jacket, house t-shirt, and running shoes",
                         checked = requirement.sportsKitComplete,
-                        onCheckedChange = { onToggle("sports") }
+                        onCheckedChange = { if (!readOnly) onToggle("sports") },
+                        enabled = !readOnly
                     )
                     ReqCheckItem(
                         label = "Textbooks & Exercise Books",
                         description = "Required term syllabi books submitted to academic master",
                         checked = requirement.textbooksSubmitted,
-                        onCheckedChange = { onToggle("textbooks") }
+                        onCheckedChange = { if (!readOnly) onToggle("textbooks") },
+                        enabled = !readOnly
                     )
                     ReqCheckItem(
                         label = "Medical Clearance Form",
                         description = "Doctor's allergy & emergency consent signature verified",
                         checked = requirement.medicalFormSigned,
-                        onCheckedChange = { onToggle("medical") }
+                        onCheckedChange = { if (!readOnly) onToggle("medical") },
+                        enabled = !readOnly
                     )
                     ReqCheckItem(
                         label = "Digital School ID Card",
                         description = "Photo captured and active NFC/QR smart card issued",
                         checked = requirement.schoolIdIssued,
-                        onCheckedChange = { onToggle("idCard") }
+                        onCheckedChange = { if (!readOnly) onToggle("idCard") },
+                        enabled = !readOnly
                     )
                     ReqCheckItem(
                         label = "Code of Conduct / Rules Signed",
                         description = "Guardian and student academy policies acknowledgment",
                         checked = requirement.rulesAgreementSigned,
-                        onCheckedChange = { onToggle("rules") }
+                        onCheckedChange = { if (!readOnly) onToggle("rules") },
+                        enabled = !readOnly
                     )
                     ReqCheckItem(
                         label = "Bus Transit Pass Cleared",
                         description = "Day scholar transport route assigned & approved",
                         checked = requirement.busPassCleared,
-                        onCheckedChange = { onToggle("busPass") }
+                        onCheckedChange = { if (!readOnly) onToggle("busPass") },
+                        enabled = !readOnly
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -609,7 +619,7 @@ private fun StudentRequirementCard(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f)
                                 )
-                                IconButton(onClick = onEditNotes, modifier = Modifier.size(28.dp)) {
+                                if (!readOnly) IconButton(onClick = onEditNotes, modifier = Modifier.size(28.dp)) {
                                     Icon(Icons.Default.Edit, contentDescription = "Edit notes", modifier = Modifier.size(16.dp))
                                 }
                             }
@@ -618,7 +628,7 @@ private fun StudentRequirementCard(
                     }
 
                     // Bottom Row: Mark All Cleared / Edit Notes
-                    Row(
+                    if (!readOnly) Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
@@ -653,18 +663,20 @@ private fun ReqCheckItem(
     label: String,
     description: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .then(if (enabled) Modifier.clickable { onCheckedChange(!checked) } else Modifier)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = CheckboxDefaults.colors(
                 checkedColor = Color(0xFF16A34A)
             )
@@ -681,7 +693,7 @@ private fun ReqCheckItem(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp
+                fontSize = 12.sp
             )
         }
     }

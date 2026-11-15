@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Creates one LTC staff profile for an existing Firebase Authentication user.
+ * Creates one LTC staff profile and matching Firebase Auth custom claims for an existing user.
  *
  * Run only from a trusted workstation/server with Firebase Admin SDK Application
  * Default Credentials and explicit school-owner authorization. This script never
@@ -23,8 +23,7 @@ const PROJECT_ID = "gen-lang-client-0207053136";
 const DATABASE_ID = "ai-studio-android-oakridge-c82a4d82-3596-4f68-a7ca-a7d4c71aaaba";
 const SCHOOL_ID = "ltc_school_01";
 const ALLOWED_ROLES = new Set([
-  "ADMIN", "HEAD_TEACHER", "BURSAR", "GATE_OFFICER", "SECURITY_HEAD",
-  "MATRON_PATRON", "MEAL_STAFF", "DIRECTOR_OF_STUDIES", "TEACHER", "EXAM_STAFF"
+  "ADMIN", "HEAD_TEACHER", "GATE_OFFICER", "MEAL_STAFF"
 ]);
 
 function argument(name) {
@@ -69,8 +68,24 @@ async function main() {
       email: user.email,
       role,
       active: true,
-      hasExplicitFinanceAccess: false
     });
+
+    // Cloud Storage rules cannot query LTC's named Firestore database. Mirror the
+    // minimum school membership/role state into trusted Auth claims instead.
+    // Preserve unrelated claims owned by other trusted services.
+    try {
+      await auth.setCustomUserClaims(uid, {
+        ...(user.customClaims || {}),
+        ltcSchoolId: SCHOOL_ID,
+        ltcRole: role,
+        ltcActive: true,
+      });
+    } catch (error) {
+      // Do not leave a staff profile that appears provisioned while Storage
+      // authorization claims are missing. The operation is safe to retry.
+      await ref.delete();
+      throw new Error(`Staff profile creation was rolled back because LTC claims could not be set: ${error.message || error}`);
+    }
 
     console.log(JSON.stringify({
       result: "CREATED",
@@ -79,7 +94,8 @@ async function main() {
       schoolId: SCHOOL_ID,
       uid,
       email: user.email,
-      role
+      role,
+      storageClaims: "SET"
     }, null, 2));
   } finally {
     await app.delete();

@@ -133,6 +133,34 @@ abstract class FirestoreEmulatorTestBase {
     }
   }
 
+
+  /**
+   * Seeds deliberately malformed documents through the emulator owner bypass.
+   * Use only for negative parsing/security tests; production rules remain strict.
+   */
+  protected fun seedRawDocumentForTest(collectionPath: String, documentId: String, fieldsJson: String) {
+    require(collectionPath.split("/").size % 2 == 1) { "Expected a collection path" }
+    require(!documentId.contains("/")) { "Document ID must be a single path segment" }
+    val url = URL("http://127.0.0.1:8085/v1/projects/demo-no-project/databases/$databaseId/documents/$collectionPath?documentId=$documentId")
+    val connection = (url.openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      setRequestProperty("Authorization", "Bearer owner")
+      setRequestProperty("Content-Type", "application/json")
+      doOutput = true
+    }
+    try {
+      val payload = """{"fields":$fieldsJson}"""
+      connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+      val code = connection.responseCode
+      if (code !in 200..299) {
+        val detail = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "no response body"
+        throw IllegalStateException("Raw test document seeding failed (HTTP $code): $detail")
+      }
+    } finally {
+      connection.disconnect()
+    }
+  }
+
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
     withTimeout(AUTH_TIMEOUT_MS) {
       try {

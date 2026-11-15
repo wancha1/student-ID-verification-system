@@ -1,10 +1,15 @@
 package com.example.ui.meals
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.roleGlassBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,11 +86,13 @@ fun MealsMasterScreen(
     onManualServe: (studentNumber: String) -> Unit,
     onDismissScanOutcome: () -> Unit,
     onExport: (format: ExportFormat) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     var showExportDialog by remember { mutableStateOf(false) }
     var manualInput by remember { mutableStateOf("") }
     var historySearchQuery by remember { mutableStateOf("") }
+    var selectedMealsTab by remember { mutableStateOf("SERVE") }
 
     val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
     val todayRecords = mealRecords.filter { it.mealDate == todayStr }
@@ -106,7 +113,8 @@ fun MealsMasterScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .animateContentSize()
+            .roleGlassBackground(roleTheme.primaryColor)
     ) {
         // Meals Master Header
         Surface(
@@ -141,7 +149,7 @@ fun MealsMasterScreen(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Meals Master",
+                                    text = "Dining Services",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -151,7 +159,7 @@ fun MealsMasterScreen(
                                     Text(
                                         text = roleTheme.stationBadge,
                                         color = roleTheme.badgeTextColor,
-                                        fontSize = 8.5.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                     )
@@ -165,8 +173,20 @@ fun MealsMasterScreen(
                         }
                     }
 
-                    // Action Buttons: Scan QR & Export
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Leadership can review and export; meal staff use the dedicated bottom navigation.
+                    if (readOnly) {
+                        OutlinedButton(
+                            onClick = { showExportDialog = true },
+                            modifier = Modifier.testTag("button_meals_export"),
+                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = onOpenScanner,
                             modifier = Modifier.testTag("button_meals_scan_qr"),
@@ -181,22 +201,9 @@ fun MealsMasterScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Meal QR", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
 
-                        OutlinedButton(
-                            onClick = { showExportDialog = true },
-                            modifier = Modifier.testTag("button_meals_export"),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
                     }
                 }
 
@@ -215,14 +222,14 @@ fun MealsMasterScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MealType.values().forEach { type ->
+                    MealType.values().filter { it.isEnabledForServing }.forEach { type ->
                         val isSelected = activeMealType == type
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = if (isSelected) Color(0xFFE11D48) else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onSelectMealType(type) }
+                                .then(if (readOnly) Modifier else Modifier.clickable { onSelectMealType(type) })
                                 .testTag("button_meal_session_${type.name.lowercase()}")
                         ) {
                             Column(
@@ -237,7 +244,7 @@ fun MealsMasterScreen(
                                 )
                                 Text(
                                     text = type.timeWindow,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                     color = if (isSelected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
                             }
@@ -274,6 +281,36 @@ fun MealsMasterScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                if (!readOnly) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("SERVE" to "Serve Meal", "HISTORY" to "Serving History").forEach { (tab, label) ->
+                            val selected = selectedMealsTab == tab
+                            Surface(
+                                modifier = Modifier.weight(1f)
+                                    .clickable { selectedMealsTab = tab }
+                                    .testTag("meals_tab_${tab.lowercase()}"),
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) roleTheme.primaryColor else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, if (selected) roleTheme.primaryColor else MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Text(
+                                    text = label,
+                                    modifier = Modifier.padding(vertical = 11.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (!readOnly && selectedMealsTab == "SERVE") {
                 // Manual Student Entry Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -310,6 +347,12 @@ fun MealsMasterScreen(
             }
         }
 
+                }
+
+        AnimatedVisibility(
+            visible = selectedMealsTab == "HISTORY" || readOnly,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 12 })
+        ) {
         // Serving History Section
         Column(
             modifier = Modifier
@@ -380,17 +423,10 @@ fun MealsMasterScreen(
                 }
             }
         }
+        }
     }
 
-    // Outcome Dialog (Scan Result / Double Serving Alert)
-    mealScanOutcome?.let { outcome ->
-        MealOutcomeDialog(
-            outcome = outcome,
-            onDismiss = onDismissScanOutcome
-        )
-    }
-
-    // Multi-Format Export Dialog
+    // Export remains available in read-only management review.
     if (showExportDialog) {
         MultiFormatExportDialog(
             datasetTitle = "Dining Hall Meal Serving Records",
@@ -402,6 +438,15 @@ fun MealsMasterScreen(
             }
         )
     }
+
+    // Outcome Dialog (Scan Result / Double Serving Alert)
+    mealScanOutcome?.let { outcome ->
+        MealOutcomeDialog(
+            outcome = outcome,
+            onDismiss = onDismissScanOutcome
+        )
+    }
+
 }
 
 @Composable
@@ -494,7 +539,7 @@ private fun MealRecordRow(
                     text = "Served by ${record.serverName}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    fontSize = 10.sp
+                    fontSize = 11.sp
                 )
             }
 
@@ -506,7 +551,7 @@ private fun MealRecordRow(
                     Text(
                         text = record.mealType.label.uppercase(),
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFE11D48)
                     )

@@ -2,6 +2,7 @@ package com.example.ui.auth
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -49,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -105,28 +107,11 @@ fun FirebaseStaffLoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(14.dp))
-            Box(
-                modifier = Modifier
-                    .size(76.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFFF5DFA5), champagne, Color(0xFFB88B3B))
-                        )
-                    )
-                    .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(24.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Icon(
-                        imageVector = Icons.Default.School,
-                        contentDescription = null,
-                        tint = midnight,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Text("LTC", color = midnight, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                }
-            }
+            Image(
+                painter = painterResource(id = R.drawable.ltc_school_crest),
+                contentDescription = "Lira Town College crest",
+                modifier = Modifier.size(92.dp)
+            )
             Spacer(Modifier.height(22.dp))
             Text(
                 text = "LIRA TOWN COLLEGE",

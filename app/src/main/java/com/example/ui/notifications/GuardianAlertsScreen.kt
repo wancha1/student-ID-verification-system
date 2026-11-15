@@ -1,5 +1,8 @@
 package com.example.ui.notifications
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -83,9 +87,12 @@ import java.util.Locale
 fun GuardianAlertsScreen(
     notifications: List<GuardianNotification>,
     onBack: () -> Unit,
-    onSendCustomAlert: (studentName: String, guardianPhone: String, message: String) -> Unit,
+    onSendCustomAlert: (studentName: String, guardianPhone: String, message: String) -> Boolean,
+    readOnly: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var launchError by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("ALL") }
     var selectedNotificationForPreview by remember { mutableStateOf<GuardianNotification?>(null) }
     var showSendCustomDialog by remember { mutableStateOf(false) }
@@ -107,12 +114,12 @@ fun GuardianAlertsScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Guardian SMS & Alerts",
+                            text = "Guardian WhatsApp Alerts",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
                         )
                         Text(
-                            text = "${notifications.size} live dispatch notices",
+                            text = "${notifications.size} recorded alert notices",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
@@ -134,11 +141,11 @@ fun GuardianAlertsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            if (!readOnly) FloatingActionButton(
                 onClick = { showSendCustomDialog = true },
                 containerColor = SchoolPrimary,
                 contentColor = Color.White,
-                modifier = Modifier.testTag("fab_send_guardian_sms")
+                modifier = Modifier.testTag("fab_send_guardian_whatsapp")
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -146,7 +153,7 @@ fun GuardianAlertsScreen(
                 ) {
                     Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Send SMS Alert", fontWeight = FontWeight.Bold)
+                    Text("Message on WhatsApp", fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -158,6 +165,19 @@ fun GuardianAlertsScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "WhatsApp handoff: review the prepared message in WhatsApp and tap Send. LTC cannot confirm delivery from this screen.",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
             // Filter Chips
             Row(
                 modifier = Modifier
@@ -217,7 +237,7 @@ fun GuardianAlertsScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "When students scan their badges at gate terminals, automated SMS alerts to parents/guardians are generated and stored here.",
+                            text = "Guardian alert records appear here. To contact a guardian, prepare a WhatsApp message and send it from WhatsApp.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -260,7 +280,7 @@ fun GuardianAlertsScreen(
                         tint = SchoolPrimary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Guardian SMS Preview", fontWeight = FontWeight.Bold)
+                    Text("Guardian Alert Preview", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
@@ -290,10 +310,10 @@ fun GuardianAlertsScreen(
                                     )
                                 }
                                 Text(
-                                    text = "SMS DELIVERED",
+                                    text = if (notif.isDelivered) "DELIVERY CONFIRMED" else "NOT CONFIRMED",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 9.5.sp,
-                                    color = ApprovedGreen
+                                    color = if (notif.isDelivered) ApprovedGreen else MaterialTheme.colorScheme.error
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
@@ -309,6 +329,16 @@ fun GuardianAlertsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    Text(
+                        text = if (notif.isDelivered) {
+                            "Delivery confirmed for ${notif.guardianName}."
+                        } else {
+                            "This record does not confirm that a message was sent or delivered. Check WhatsApp directly."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (notif.isDelivered) ApprovedGreen else MaterialTheme.colorScheme.error
+                    )
                     Text(
                         text = "Recipient: ${notif.guardianName} (Guardian of ${notif.studentName})",
                         style = MaterialTheme.typography.bodySmall,
@@ -335,15 +365,15 @@ fun GuardianAlertsScreen(
         )
     }
 
-    // Compose Custom SMS Dialog
-    if (showSendCustomDialog) {
+    // Compose WhatsApp message handoff dialog
+    if (showSendCustomDialog && !readOnly) {
         var studentNameInput by remember { mutableStateOf("") }
         var phoneInput by remember { mutableStateOf("+256 ") }
         var messageInput by remember { mutableStateOf("Dear Parent, this is an official gate security update from Lira Town College (LTC).") }
 
         AlertDialog(
             onDismissRequest = { showSendCustomDialog = false },
-            title = { Text("Send Custom SMS Notice", fontWeight = FontWeight.Bold) },
+            title = { Text("Message Guardian on WhatsApp", fontWeight = FontWeight.Bold) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -369,7 +399,7 @@ fun GuardianAlertsScreen(
                     OutlinedTextField(
                         value = messageInput,
                         onValueChange = { messageInput = it },
-                        label = { Text("SMS Message Body") },
+                        label = { Text("WhatsApp Message") },
                         maxLines = 4,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -380,20 +410,52 @@ fun GuardianAlertsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (studentNameInput.isNotBlank() && phoneInput.isNotBlank()) {
-                            onSendCustomAlert(studentNameInput, phoneInput, messageInput)
-                            showSendCustomDialog = false
+                        val digits = phoneInput.filter { it.isDigit() }
+                        val internationalNumber = when {
+                            digits.startsWith("256") -> digits
+                            digits.startsWith("0") -> "256" + digits.drop(1)
+                            else -> digits
+                        }
+                        if (studentNameInput.isNotBlank() && internationalNumber.length >= 10 && messageInput.isNotBlank()) {
+                            val preparedMessage = "Dear Parent/Guardian, regarding ${studentNameInput.trim()}:\n\n${messageInput.trim()}\n\nLira Town College (LTC)"
+                            if (onSendCustomAlert(studentNameInput.trim(), internationalNumber, preparedMessage)) {
+                                try {
+                                    val whatsappUri = Uri.parse(
+                                        "https://wa.me/$internationalNumber?text=${Uri.encode(preparedMessage)}"
+                                    )
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, whatsappUri))
+                                    launchError = null
+                                    showSendCustomDialog = false
+                                } catch (_: ActivityNotFoundException) {
+                                    launchError = "Could not open WhatsApp. Please install WhatsApp or open it manually."
+                                } catch (_: Exception) {
+                                    launchError = "Could not open WhatsApp. Check the guardian's number and try again."
+                                }
+                            }
+                        } else {
+                            launchError = "Enter a student name, valid guardian number, and message."
                         }
                     },
-                    modifier = Modifier.testTag("button_confirm_send_sms")
+                    modifier = Modifier.testTag("button_confirm_send_whatsapp")
                 ) {
-                    Text("Send Notice")
+                    Text("Open WhatsApp")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSendCustomDialog = false }) {
                     Text("Cancel")
                 }
+            }
+        )
+    }
+
+    launchError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { launchError = null },
+            title = { Text("WhatsApp not opened") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { launchError = null }) { Text("OK") }
             }
         )
     }

@@ -62,7 +62,7 @@ object QrCodeGenerator {
 
             // Draw centered LTC emblem
             val canvas = Canvas(bitmap)
-            val emblemRadius = width * 0.022f // Diameter = 4.4% of QR width to preserve data modules
+            val emblemRadius = width * 0.010f // Diameter = 2% of QR width; keep the central overlay minimal for reliable decoding
             val centerX = width / 2f
             val centerY = height / 2f
 

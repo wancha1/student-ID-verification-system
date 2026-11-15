@@ -280,77 +280,42 @@ class LtcSystemVerificationTest {
             repository.addStudent(targetStudent)
             val viewModel = MainViewModel(repository)
 
-            // Initial launch requires login
-            assertFalse(viewModel.currentUser.value != null && viewModel.currentUser.value?.role == UserRole.ADMINISTRATOR)
+            assertNull("Application starts without an authenticated user", viewModel.currentUser.value)
 
-            // Log in as Gate Keeper (Guard post)
-            viewModel.loginAs(UserRole.GATE_KEEPER)
-            assertEquals(UserRole.GATE_KEEPER, viewModel.currentUser.value?.role)
+            // Gate Officer: operational access only; no student administration or finance.
+            viewModel.loginAs(UserRole.GATE_STAFF)
+            assertEquals(UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
 
-            // 1. Guard attempts to modify fee status -> Blocked!
             viewModel.updateFeeStatus(targetStudent.id, FeeStatus.OUTSTANDING, 500000.0)
             assertTrue(
-                "Guard modification of fees must be denied",
+                "Gate Officer cannot modify fee status",
                 viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true
             )
 
-            // 2. Guard attempts to register new student -> Blocked!
-            var registerCallbackCalled = false
-            var registerSuccess = false
-            val newStudent = Student(
-                id = "unauthorized-add-01",
-                studentNumber = "LTC-2026-9999",
-                firstName = "Hacker",
-                lastName = "Attempt",
-                gradeClass = "Senior 1"
-            )
-            viewModel.registerNewStudent(newStudent) { success, _ ->
-                registerCallbackCalled = true
-                registerSuccess = success
-            }
-            assertTrue(registerCallbackCalled)
-            assertFalse("Guard registration of students must be blocked", registerSuccess)
+            val newStudent = targetStudent.copy(id = "unauthorized-add-01", studentNumber = "LTC-2026-9999")
+            var gateRegistrationSucceeded = false
+            viewModel.registerNewStudent(newStudent) { success, _ -> gateRegistrationSucceeded = success }
+            assertFalse("Gate Officer cannot register students", gateRegistrationSucceeded)
 
-            // 3. Guard attempts to delete student -> Blocked!
             viewModel.deleteStudentRecord(targetStudent.id)
             assertTrue(
-                "Guard deletion of students must be denied",
-                viewModel.userFeedbackMessage.value?.contains("requires Administrator privileges") == true
+                "Gate Officer cannot delete students",
+                viewModel.userFeedbackMessage.value?.contains("Administrator privileges") == true
             )
 
-            // 4. Authenticate as Administrator without explicit finance clearance -> Fee modification is blocked!
-            viewModel.loginAs(UserRole.ADMINISTRATOR, hasFinancePermission = false)
+            // Meal Staff: meal operations only; no student administration.
+            viewModel.loginAs(UserRole.MEAL_SERVING_STAFF)
+            assertEquals(UserRole.MEAL_SERVING_STAFF, viewModel.currentUser.value?.role)
+            var mealStaffRegistrationSucceeded = false
+            viewModel.registerNewStudent(newStudent) { success, _ -> mealStaffRegistrationSucceeded = success }
+            assertFalse("Meal Staff cannot register students", mealStaffRegistrationSucceeded)
+
+            // Admin is the only V1 role allowed to register shared student records.
+            viewModel.loginAs(UserRole.ADMINISTRATOR)
             assertEquals(UserRole.ADMINISTRATOR, viewModel.currentUser.value?.role)
-
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue(
-                "Administrator without explicit finance clearance must be blocked from fee updates per least privilege",
-                viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true
-            )
-
-            // 5. Authenticate with explicit finance clearance (or as Bursar) -> Allowed!
-            viewModel.loginAs(UserRole.ADMINISTRATOR, hasFinancePermission = true)
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue(
-                "Administrator with explicit finance clearance must succeed",
-                viewModel.userFeedbackMessage.value?.contains("CLEARED") == true
-            )
-
-            // 6. Authenticate as Bursar / Finance directly -> Fee modification allowed, registration blocked
-            viewModel.loginAs(UserRole.BURSAR_FINANCE)
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.OUTSTANDING, 150000.0)
-            assertTrue(
-                "Bursar modification must succeed",
-                viewModel.userFeedbackMessage.value?.contains("OUTSTANDING") == true
-            )
-            var bursarRegisterCalled = false
-            var bursarRegisterSuccess = false
-            viewModel.registerNewStudent(newStudent) { success, _ ->
-                bursarRegisterCalled = true
-                bursarRegisterSuccess = success
-            }
-            assertTrue(bursarRegisterCalled)
-            assertFalse("Bursar must not be permitted to register students (reserved for Admin)", bursarRegisterSuccess)
+            var adminRegistrationSucceeded = false
+            viewModel.registerNewStudent(newStudent) { success, _ -> adminRegistrationSucceeded = success }
+            assertTrue("Administrator can register students", adminRegistrationSucceeded)
         }
     }
 
@@ -680,8 +645,8 @@ class LtcSystemVerificationTest {
             assertEquals(AccessStatus.RESTRICTED_FEES.name, updatedProfile?.accessStatus)
 
             val pendingChanges2 = database.pendingChangeDao().getPendingChanges()
-            assertEquals(3, pendingChanges2.size)
-            assertTrue(pendingChanges2.any { it.entityType == SyncEntityType.FEE_STATUS && it.recordId == studentId })
+            assertEquals("Fee mutations are retired from the V1 sync queue", 2, pendingChanges2.size)
+            assertFalse(pendingChanges2.any { it.entityType == SyncEntityType.FEE_STATUS && it.recordId == studentId })
 
             // 3. Verify atomic issueReplacementCard
             val replaceResult = repo.issueReplacementCard(studentId, initialCard.id, "Lost card at gate")
@@ -696,7 +661,7 @@ class LtcSystemVerificationTest {
             assertNotNull("New replacement card must be ACTIVE", newActiveCard)
 
             val pendingChanges3 = database.pendingChangeDao().getPendingChanges()
-            assertEquals(5, pendingChanges3.size) // 2 original + 1 fee + 2 replacement (1 status change + 1 create)
+            assertEquals(4, pendingChanges3.size) // 2 original + 2 replacement card changes
 
             // 4. Verify atomic reportCardLost
             val lostResult = repo.reportCardLost(studentId, newActiveCard!!.id, "Student lost replacement card")
@@ -705,7 +670,7 @@ class LtcSystemVerificationTest {
             assertEquals(CardStatus.LOST.name, lostCard?.status)
 
             val pendingChanges4 = database.pendingChangeDao().getPendingChanges()
-            assertEquals(6, pendingChanges4.size)
+            assertEquals(5, pendingChanges4.size)
 
             database.close()
         }
@@ -1698,10 +1663,18 @@ class LtcSystemVerificationTest {
     }
 
     @Test
-    fun testLeastPrivilegeSevenRoleDutyEnforcement() {
+    fun testLeastPrivilegeFourRoleV1DutyEnforcement() {
+        assertTrue(UserRole.ADMINISTRATOR.defaultPermissions.contains(StaffPermission.MANAGE_STUDENTS))
+        assertTrue(UserRole.GATE_STAFF.defaultPermissions.contains(StaffPermission.VERIFY_GATE_ACCESS))
+        assertFalse(UserRole.GATE_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
+        assertTrue(UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.RECORD_MEALS))
+        assertFalse(UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
+        assertFalse(UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.VERIFY_GATE_ACCESS))
+        assertFalse(UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.RECORD_MEALS))
+
         runBlocking {
             val repository = MockStudentRepository()
-            val targetStudent = Student(
+            val student = Student(
                 id = "sec-stu-01",
                 studentNumber = "LTC-2026-0777",
                 firstName = "Joan",
@@ -1711,75 +1684,29 @@ class LtcSystemVerificationTest {
                 outstandingAmount = 200000.0,
                 accessStatus = AccessStatus.APPROVED
             )
-            repository.addStudent(targetStudent)
+            repository.addStudent(student)
             val viewModel = MainViewModel(repository)
 
-            // 1. Verify default permissions matrix across all 7 canonical roles
-            assertFalse("Administrator must NOT have MANAGE_FEES by default", UserRole.ADMINISTRATOR.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
-            assertTrue("Administrator must have MANAGE_STUDENTS", UserRole.ADMINISTRATOR.defaultPermissions.contains(StaffPermission.MANAGE_STUDENTS))
-            assertTrue("Administrator must have SYSTEM_CONFIGURATION", UserRole.ADMINISTRATOR.defaultPermissions.contains(StaffPermission.SYSTEM_CONFIGURATION))
-
-            assertTrue("Bursar must have MANAGE_FEES", UserRole.BURSAR_FINANCE.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
-            assertFalse("Bursar must NOT have MANAGE_STUDENTS", UserRole.BURSAR_FINANCE.defaultPermissions.contains(StaffPermission.MANAGE_STUDENTS))
-
-            assertTrue("Gate Staff must have VERIFY_GATE_ACCESS", UserRole.GATE_STAFF.defaultPermissions.contains(StaffPermission.VERIFY_GATE_ACCESS))
-            assertFalse("Gate Staff must NOT have MANAGE_FEES", UserRole.GATE_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
-
-            assertTrue("Meals Staff must have SERVE_MEALS", UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.SERVE_MEALS))
-            assertFalse("Meals Staff must NOT have MANAGE_FEES", UserRole.MEAL_SERVING_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
-
-            assertTrue("Teachers must have VIEW_AUDIT_LOGS", UserRole.TEACHERS.defaultPermissions.contains(StaffPermission.VIEW_AUDIT_LOGS))
-            assertFalse("Teachers must NOT have MANAGE_STUDENTS", UserRole.TEACHERS.defaultPermissions.contains(StaffPermission.MANAGE_STUDENTS))
-
-            assertTrue("Exams Staff must have EXAM_CLEARANCE", UserRole.EXAMINATION_STAFF.defaultPermissions.contains(StaffPermission.EXAM_CLEARANCE))
-            assertFalse("Exams Staff must NOT have MANAGE_FEES", UserRole.EXAMINATION_STAFF.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
-
-            assertTrue("Head Teacher must have EMERGENCY_OVERRIDE", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.EMERGENCY_OVERRIDE))
-            assertFalse("Head Teacher must NOT have MANAGE_FEES", UserRole.HEAD_TEACHER_MANAGEMENT.defaultPermissions.contains(StaffPermission.MANAGE_FEES))
-
-            // 2. Unauthenticated session: all sensitive operations blocked
             viewModel.logout()
             assertNull(viewModel.currentUser.value)
+            viewModel.deleteStudentRecord(student.id)
+            assertTrue(
+                "Unauthenticated deletion must be denied",
+                viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true
+            )
 
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue("Unauthenticated fee change must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
-
-            viewModel.deleteStudentRecord(targetStudent.id)
-            assertTrue("Unauthenticated deletion must be denied", viewModel.userFeedbackMessage.value?.contains("Unauthenticated session") == true)
-
-            // 3. Administrator without explicit finance clearance: student ops allowed, fee change denied
-            viewModel.loginAs(UserRole.ADMINISTRATOR, hasFinancePermission = false)
-            assertFalse(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_FEES))
-            assertTrue(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_STUDENTS))
-
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue("Admin without explicit finance permission must be blocked from modifying fees", viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true)
-
-            // 4. Administrator with explicit finance clearance: fee change allowed
-            viewModel.loginAs(UserRole.ADMINISTRATOR, hasFinancePermission = true)
-            assertTrue(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_FEES))
-
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue("Admin with explicit finance permission must succeed", viewModel.userFeedbackMessage.value?.contains("CLEARED") == true)
-
-            // 5. Bursar / Finance: fee updates allowed, student registry deletions denied
-            viewModel.loginAs(UserRole.BURSAR_FINANCE)
-            assertTrue(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_FEES))
-            assertFalse(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_STUDENTS))
-
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.OUTSTANDING, 300000.0)
-            assertTrue("Bursar fee update must succeed", viewModel.userFeedbackMessage.value?.contains("OUTSTANDING") == true)
-
-            viewModel.deleteStudentRecord(targetStudent.id)
-            assertTrue("Bursar must not be allowed to delete students", viewModel.userFeedbackMessage.value?.contains("Administrator privileges") == true)
-
-            // 6. Gate Staff: fee updates and student deletions denied
             viewModel.loginAs(UserRole.GATE_STAFF)
-            viewModel.updateFeeStatus(targetStudent.id, FeeStatus.CLEARED, 0.0)
-            assertTrue("Gate Staff cannot modify fees", viewModel.userFeedbackMessage.value?.contains("Bursar / Finance") == true)
+            assertTrue(viewModel.currentUser.value!!.hasPermission(StaffPermission.VERIFY_GATE_ACCESS))
+            assertFalse(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_STUDENTS))
+            viewModel.deleteStudentRecord(student.id)
+            assertTrue(
+                "Gate staff cannot delete student records",
+                viewModel.userFeedbackMessage.value?.contains("Administrator privileges") == true
+            )
 
-            viewModel.deleteStudentRecord(targetStudent.id)
-            assertTrue("Gate Staff cannot delete students", viewModel.userFeedbackMessage.value?.contains("Administrator privileges") == true)
+            viewModel.loginAs(UserRole.MEAL_SERVING_STAFF)
+            assertTrue(viewModel.currentUser.value!!.hasPermission(StaffPermission.RECORD_MEALS))
+            assertFalse(viewModel.currentUser.value!!.hasPermission(StaffPermission.MANAGE_STUDENTS))
         }
     }
 
@@ -1844,7 +1771,6 @@ class LtcSystemVerificationTest {
             SecurityManager.resetForTesting(context)
             SecurityManager.provisionInitialAdmin(context, "Head Teacher", "9911")
             SecurityManager.setRolePin(context, UserRole.GATE_STAFF, "4422")
-            SecurityManager.setRolePin(context, UserRole.BURSAR_FINANCE, "5533")
 
             val repository = MockStudentRepository()
             val viewModel = MainViewModel(repository)
@@ -1871,11 +1797,10 @@ class LtcSystemVerificationTest {
             // Current role is unchanged
             assertEquals(UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
 
-            // 4. Switching to Bursar with correct Bursar PIN succeeds
-            val switchSuccess = viewModel.authenticateAndLogin(context, UserRole.BURSAR_FINANCE, "5533", "Bursar Florence")
-            assertTrue("Switching to Bursar with correct PIN succeeds", switchSuccess)
-            assertEquals(UserRole.BURSAR_FINANCE, viewModel.currentUser.value?.role)
-            assertEquals("Bursar Florence", viewModel.currentUser.value?.name)
+            // 4. Bursar is not a supported V1 role, even with a previously valid PIN.
+            val unsupportedSwitch = viewModel.authenticateAndLogin(context, UserRole.BURSAR_FINANCE, "5533", "Bursar Florence")
+            assertFalse("Switching to an unsupported legacy role must be rejected", unsupportedSwitch)
+            assertEquals("Unsupported role must not replace the active gate session", UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
         }
     }
 
