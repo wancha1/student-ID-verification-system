@@ -16,8 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run real-token role and finance checks
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: https://uobhtoqbenrgpzlwbsco.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_YxjKwhJ3iL3A56IFPVSf8A_TxsNNC1U
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
