@@ -1,93 +1,65 @@
 # Supabase Migration — LTC V1
 
 ## Target and operating model
-- Supabase project: `uobhtoqbenrgpzlwbsco` (eu-central-1).
+- Supabase project: `uobhtoqbenrgpzlwbsco` (eu-central-1), currently ACTIVE_HEALTHY.
 - School tenant: `ltc_school_01` (Lira Town College).
 - Room remains the on-device source of truth and durable offline queue. Supabase is the remote backend.
 - This is an intentional clean start. No Firebase student records are being imported, and the existing Firebase project/data are not deleted.
 
 ## V1 cloud scope
 - Authenticated staff membership and role resolution.
-- `students`, leadership-only `student_private`, `cards`, `gate_logs`, `meals`, `attendance_records`, and `exam_exceptions`.
-- Private Storage bucket `student-photos`, canonical path `<school_id>/<student_id>/photo.jpg`.
-- Private `school-exports` bucket reserved for server-generated exports; no direct client policy.
-- Attendance and exam-exception records sync to dedicated school-scoped Postgres tables. Attendance is writable by teaching staff and leadership; bursars submit pending exam exceptions; leadership approves them.
+- School-scoped students, restricted student-private details, cards, gate logs, meals, attendance, exam exceptions and finance records.
+- Private Storage buckets: `student-photos` and `school-exports`.
+- Android uses Supabase Auth, PostgREST and Storage with a publishable key only. A service-role/secret key must never be embedded in the Android app.
 
 ## Android implementation
-- Production `RoomStudentRepository` now constructs `SupabaseCloudBackend`.
-- `SupabaseStaffAuthenticator` handles Supabase sign-in/session restoration and resolves role only from the authenticated user's active `staff_memberships` row for `ltc_school_01`.
-- `EncryptedSupabaseSessionManager` stores the Supabase session through the Android Keystore-backed encrypted session vault.
-- Supabase Kotlin SDK 3.5.0 Auth, PostgREST and Storage are configured with a publishable key only. Never embed a service-role/secret key in Android or GitHub.
-- Backend operations cover student/private-profile sync, card sync, gate audit uploads, meal upserts, attendance sync, exam-exception request/approval sync, fee updates, soft deletion, and private photo upload/download.
-- Student class and stream values are persisted separately in Supabase and reassembled for the current Room model.
-- Supabase Auth maps BURSAR, TEACHER, DIRECTOR_OF_STUDIES, and EXAM_STAFF to the app's existing role screens; database membership constraints and RLS role lists include those staff roles.
-- Roster, card, meal and photo queries now use paginated PostgREST range requests to avoid the default row cap truncating schools with 1,000+ records.
+- Production Room repository uses `SupabaseCloudBackend`.
+- `SupabaseStaffAuthenticator` signs in with Supabase Auth and resolves the role only from the authenticated user's active `staff_memberships` row for `ltc_school_01`.
+- Encrypted session storage uses the Android Keystore-backed session vault; restored sessions are revalidated against the server.
+- V1 allowlists ADMIN, HEAD_TEACHER, GATE_OFFICER and MEAL_STAFF. Reserved legacy roles are rejected.
+- Backend supports student/private-profile sync, card sync, gate audit uploads, meal upserts, attendance sync, exam-exception request/approval sync, fee updates, soft deletion and private photo upload/download.
+- Paginated PostgREST range requests avoid default row-cap truncation.
 - Meal upload uses the database natural key `school_id,student_id,meal_type,meal_date` to prevent duplicate servings across devices.
-- Room remains responsible for offline persistence and retry/outbox orchestration. SyncManager now uploads unsynced attendance and exam exceptions, marks confirmed uploads, pulls remote records, and resolves conflicts using the record timestamps.
-- Live multi-device and offline-recovery acceptance is still required.
+- Room owns offline persistence and retry/outbox orchestration. Live offline-recovery and two-device behaviour still require physical acceptance.
 
-## Firebase removal
-- Firebase SDK dependencies and BOM removed from the Android app.
-- Google Services Gradle plugin and its root plugin declaration removed.
-- `google-services.json` and the Firebase Android resource configuration removed.
-- Legacy Firestore repository/backend/auth/model/error adapter sources and Firebase emulator-dependent Android unit tests removed.
-- Instrumented smoke test no longer initializes or asserts Firebase.
-- CI no longer installs Firebase emulator tooling or runs Firebase emulator/security-rule jobs; it builds Android variants, runs Android unit tests, and runs emulator smoke tests.
-- Firebase archival docs/rules/scripts may remain in the repository as historical material; they are not part of the Android runtime or build graph. Existing Firebase project/data are untouched.
+## Finance boundary
+- Migration `20261114180000_student_finance_access_boundary.sql` is applied to production (recorded migration version `20261114191936`).
+- Monetary balances are held in `student_finances`, not `student_private`.
+- Finance RLS requires an active ADMIN membership with `has_finance_access = true`; gate and general access flows do not expose balances.
+- The finance trigger synchronizes fee status and blocks unauthorized direct changes.
+- The sole active ADMIN has explicitly been granted finance access. HEAD_TEACHER, GATE_OFFICER and MEAL_STAFF remain without it.
+- SQL/RLS boundary tests passed using simulated JWT subject claims inside database transactions. These are not real Supabase Auth-token integration tests.
 
-## Supabase schema and security changes applied
-- Enabled RLS on `private.staff_invitation_plan` and revoked client-role grants; no client policies by design.
-- Created private `student-photos` and `school-exports` buckets.
-- Replaced student-photo policies with school-membership and role-based access.
-- Added gate audit fields needed to retain full verification context.
-- Added student/card/meal uniqueness constraints and a database trigger preventing reactivation of revoked/deleted cards.
-- Added `students.fee_status` and leadership-only `student_private.outstanding_amount`.
-- Marked the LTC clean-start privacy migration complete only after confirming the school student roster was empty.
+## Database privilege hardening
+- Migrations `20261114143342_restrict_authenticated_table_privileges` and `20261114143436_restrict_future_table_privileges` are applied.
+- Broad client grants were removed; client permissions are limited to the operations used by the app.
+- The private invitation-plan table intentionally has no client policies or grants.
+- The security advisor previously reported no critical finding. Leaked-password protection is unavailable on the current Free plan and remains a documented limitation.
 
-## Outstanding validation and manual security action
-1. CI must pass on the latest PR commit, including debug/release compilation, unit tests and Android emulator smoke test.
-2. Test Supabase RLS using separate ADMIN, HEAD_TEACHER, GATE_OFFICER and MEAL_STAFF accounts, including wrong-school and inactive-membership denial.
-3. Test real phone camera scanning, login/logout/session restoration, photo upload/download, offline queue, network recovery and multi-device meal idempotency.
-4. Verify class/stream mapping against the app's actual student model before loading the live school roster.
-5. Exercise attendance creation/correction, exam exception submission and approval, and role denial with real authenticated staff sessions.
-5. Supabase Auth leaked-password protection is unavailable on the current Free plan. Record as a plan limitation; reconsider if the project moves to Pro. Do not treat this dashboard toggle as a release blocker by itself.
-6. The intentionally policy-free private invitation-plan table is reported as an informational RLS finding; this is deliberate because client roles have no grants. Duplicate standalone student/card unique indexes were removed in migration `20261112000400_remove_duplicate_school_identifier_indexes`; the equivalent unique constraints remain.
-7. Do not merge PR #44 or call this production-ready until the checks above pass.
+## Live production snapshot — 2026-11-15
+- Project status: ACTIVE_HEALTHY.
+- Auth users: 4.
+- Active LTC staff memberships: 4 (one each for ADMIN, HEAD_TEACHER, GATE_OFFICER and MEAL_STAFF).
+- Student records in `ltc_school_01`: 0.
+- Finance rows: 0.
+- No approved student roster file has been imported. Do not create placeholder student records or load real student data until the school-approved source file and authorization are available.
 
-## Latest production-readiness checkpoint — 2026-11-14
+## Validation status
+### Completed
+- Latest PR #49 CI run `43631374250` passed Android compilation, unit tests and Android emulator smoke tests at commit `422f7b1f3b108c3cdc8e32e45f1355bc26f5771a`.
+- Finance RLS tests passed for explicitly authorized Admin and denied access for Admin without the capability, Head Teacher, Gate Officer and Meal Staff.
+- Unauthorized finance inserts and direct fee-status changes were blocked.
+- Finance migration and production permission grant were verified.
 
-### Live Supabase checks
-- Project `uobhtoqbenrgpzlwbsco` is `ACTIVE_HEALTHY` in `eu-central-1`.
-- The live LTC school row is `ltc_school_01`; four active memberships exist for ADMIN, HEAD_TEACHER, GATE_OFFICER, and MEAL_STAFF.
-- The public application tables have RLS enabled.
-- The `student-photos` and `school-exports` buckets are private. Student photos are limited to JPEG, PNG, or WebP and 5 MiB.
-- Read-only role-helper checks returned true for each of the four active roles in the LTC tenant and false for a different school ID.
-- The security advisor reports no critical finding. It reports leaked-password protection disabled (expected on the current Free plan) and one intentional informational RLS-without-policy finding on the private invitation-plan table.
+### Still required before production
+1. Real-token Supabase integration tests using the four actual Auth accounts, including wrong-school and inactive-membership denial. Existing SQL subject-claim tests are not a substitute.
+2. Physical-device acceptance on two Android phones: role login, camera/QR, photo sync, meal idempotency, offline queue, network recovery, logout and membership revocation.
+3. Obtain and validate the school-approved roster export, map its columns, deduplicate student numbers, and run a reviewed import with a post-import reconciliation report.
+4. Verify the permanent JKS and alias against the owner-held certificate fingerprint by running the Production APK workflow.
+5. Install and verify the resulting signed APK on the physical test devices.
 
-### Privilege hardening applied to production
-- Migration `20261114143342_restrict_authenticated_table_privileges` removed broad table grants from `anon` and `authenticated`, then granted only the SELECT/INSERT/UPDATE operations used by the Android app.
-- Verified after migration: `authenticated` has no DELETE or TRUNCATE privilege on the public application tables; `anon` has no SELECT or TRUNCATE privilege.
-- Migration `20261114143436_restrict_future_table_privileges` removed broad default table privileges for future public-schema tables created by the current `postgres` migration owner.
-- The separate `supabase_admin` default ACL could not be changed by the connected migration role. Any future public table created under that role must receive explicit least-privilege grants and an RLS review before exposure.
-
-### Android CI
-- Commit `d50a81add0340058603e8617e54996d02c57b3ac` (login contrast and password assistance) passed GitHub Actions run [#1083](https://github.com/wancha1/student-ID-verification-system/actions/runs/43602479156).
-- The successful run completed Android compile/release compilation, unit tests, and Android emulator smoke tests.
-- This is automated emulator validation, not physical-device acceptance.
-
-### V1 role boundary
-- V1 supports ADMIN, HEAD_TEACHER, GATE_OFFICER, and MEAL_STAFF.
-- Fee management is an optional capability on an active ADMIN membership, not a fifth staff role. See `ROLE_ACCESS_MATRIX.md` for provisioning and verification.
-- Additional legacy/future role values remain in the database schema and source models, but the production authenticator rejects them until their role permissions, interfaces, RLS rules, and tests are completed.
-
-### Remaining release blockers
-1. Complete the finance-permission boundary before enabling fee-balance management: the current app authenticator always returns `hasExplicitFinanceAccess = false`, while the outstanding balance is stored in `student_private`, which is readable by both Admin and Head Teacher. Move balances behind a dedicated finance-only table/RLS boundary and grant explicit access per Admin account, or disable balance management in V1.
-2. Complete authenticated RLS integration tests with real test accounts, including wrong-school and inactive membership denial for every operation.
-3. Complete two-device physical acceptance: QR scan, meal duplicate prevention, offline queue, network recovery, photo sync, logout, and membership revocation.
-4. Verify the school roster import process before loading real student data. The clean-start Supabase database currently has no student records.
-5. Generate the permanent owner-controlled Android signing key on a trusted computer, store encrypted backups, and configure the four GitHub Actions signing secrets.
-6. Run the Production APK workflow and verify its artifact signature against the owner's recorded certificate fingerprint.
-7. Leaked-password protection remains unavailable on the Free plan; document this limitation and enforce strong password policy, email verification, and authentication rate limits where supported.
-8. Do not declare the product production-ready until all blockers above have passed.
-
-The historical Firebase migration notes above describe the staged transition. The current Android branch uses Supabase; the Firebase project and its historical data have not been deleted.
+## Release control
+- PR #49 remains open and unmerged; the production workflow is not yet on the default branch.
+- The permanent signing secrets are configured in GitHub's `production` environment, but no production-signed artifact has yet been built or certificate-verified.
+- The latest successful CI debug artifact is not a production release.
+- Do not call this product production-ready until all required tests above pass and the school approves the pilot.
