@@ -45,7 +45,7 @@ check_membership() {
 
   # A valid token must not reveal a membership in a different school tenant.
   code="$(curl --silent --show-error --output "$tmp/$role-other-school.json" --write-out '%{http_code}' \
-    "$api/rest/v1/staff_memberships?select=user_id&school_id=eq.__integration_other_school__&user_id=eq.$uid" \
+    "$api/rest/v1/staff_memberships?select=user_id&school_id=neq.ltc_school_01&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] && [[ "$(jq 'length' "$tmp/$role-other-school.json")" == "0" ]] || {
     echo "::error::$role token crossed the school-tenant boundary."
