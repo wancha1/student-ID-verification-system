@@ -603,7 +603,7 @@ class MainViewModel(
         }
         if (!user.hasPermission(permission)) {
             val roleMsg = when (permission) {
-                StaffPermission.MANAGE_FEES -> "Access Denied: $actionName requires Bursar / Finance authorization. Administrator accounts require explicit finance clearance."
+                StaffPermission.MANAGE_FEES -> "Access Denied: $actionName requires explicit finance authorization on an Admin account."
                 StaffPermission.MANAGE_STUDENTS -> "Access Denied: $actionName requires Administrator privileges."
                 StaffPermission.VERIFY_GATE_ACCESS -> "Access Denied: $actionName requires Gate Staff authorization."
                 StaffPermission.SERVE_MEALS -> "Access Denied: $actionName requires Meal-Serving Staff authorization."

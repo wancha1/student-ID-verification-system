@@ -92,16 +92,15 @@ class SupabaseStaffAuthenticator(
             throw SecurityException("This Lira Town College staff account is inactive.")
         }
 
+        // V1 deliberately exposes only the four approved staff roles. Legacy or
+        // future roles must not create a Supabase session that the UI later rejects.
         val role = when (membership.role.trim().uppercase()) {
             "ADMIN" -> UserRole.ADMINISTRATOR
             "HEAD_TEACHER" -> UserRole.HEAD_TEACHER_MANAGEMENT
-            "BURSAR" -> UserRole.BURSAR_FINANCE
-            "TEACHER", "DIRECTOR_OF_STUDIES" -> UserRole.TEACHERS
-            "EXAM_STAFF" -> UserRole.EXAMINATION_STAFF
-            "GATE_OFFICER", "SECURITY_HEAD" -> UserRole.GATE_STAFF
+            "GATE_OFFICER" -> UserRole.GATE_STAFF
             "MEAL_STAFF" -> UserRole.MEAL_SERVING_STAFF
             else -> throw SecurityException(
-                "The LTC staff profile has an unsupported role."
+                "This LTC staff role is not enabled in Version 1."
             )
         }
 
@@ -112,7 +111,7 @@ class SupabaseStaffAuthenticator(
                 user.email ?: "LTC Staff"
             },
             role = role,
-            hasExplicitFinanceAccess = false
+            hasExplicitFinanceAccess = role == UserRole.ADMINISTRATOR && membership.hasFinanceAccess
         )
     }
 
@@ -123,7 +122,8 @@ class SupabaseStaffAuthenticator(
         @SerialName("full_name") val fullName: String,
         val email: String? = null,
         val role: String,
-        @SerialName("is_active") val isActive: Boolean
+        @SerialName("is_active") val isActive: Boolean,
+        @SerialName("has_finance_access") val hasFinanceAccess: Boolean = false
     )
 
     private companion object {

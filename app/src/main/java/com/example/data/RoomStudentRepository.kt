@@ -247,12 +247,11 @@ class RoomStudentRepository(
                         lastSyncTimestamp = lastSync
                     )
                 } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-                    val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
                     StudentScanResult.Success(
                         student = student,
                         card = card,
                         isApproved = false,
-                        reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
+                        reason = "School fees are outstanding. Refer the student to the school office.",
                         isOfflineData = isOffline,
                         lastSyncTimestamp = lastSync
                     )
@@ -365,12 +364,11 @@ class RoomStudentRepository(
                 lastSyncTimestamp = lastSync
             )
         } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-            val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
             StudentScanResult.Success(
                 student = student,
                 card = activeCard,
                 isApproved = false,
-                reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
+                reason = "School fees are outstanding. Refer the student to the school office.",
                 isOfflineData = isOffline,
                 lastSyncTimestamp = lastSync
             )
