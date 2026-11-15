@@ -66,12 +66,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.model.FeeStatus
 import com.example.model.UserRole
+import com.example.model.StaffPermission
 import com.example.ui.admin.AdminDashboardScreen
 import com.example.ui.admin.HeadTeacherDashboardScreen
 import com.example.ui.admin.AdminScanLogsScreen
 import com.example.ui.admin.BatchPrintIdCardsDialog
 import com.example.ui.admin.StudentDetailScreen
-import com.example.ui.auth.FirebaseStaffLoginScreen
+import com.example.ui.auth.SupabaseStaffLoginScreen
 import com.example.ui.exeat.ExeatPassScreen
 import com.example.ui.guard.GuardDashboardScreen
 import com.example.ui.guard.GuardScannerScreen
@@ -168,17 +169,17 @@ fun StudentAccessApp(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Firebase credentials persist per device. Revalidate staff membership on
-    // app start/resume, and retry after a transient server/network validation failure.
+    // Supabase credentials are encrypted in Android Keystore. Revalidate staff membership
+    // on app start/resume; never restore a cached role without a fresh server check.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, context, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START) {
-                viewModel.restoreFirebaseSession(context)
+                viewModel.restoreSupabaseSession(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        viewModel.restoreFirebaseSession(context)
+        viewModel.restoreSupabaseSession(context)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
@@ -196,7 +197,7 @@ fun StudentAccessApp(
     RoleThemeWrapper(role = currentUser?.role) {
         val user = currentUser
         if (user == null) {
-            FirebaseStaffLoginScreen(
+            SupabaseStaffLoginScreen(
                 onAuthenticated = { role, name, hasFinance -> viewModel.loginAs(role, name, hasFinance) },
                 modifier = modifier
             )
@@ -1111,7 +1112,7 @@ fun StudentAccessApp(
                                         viewModel.updateFeeStatus(selectedStudentDetail!!.id, newStatus, amount)
                                     },
                                     canManageStudentRecords = user.role == UserRole.ADMINISTRATOR,
-                                    canManageFees = user.role == UserRole.BURSAR_FINANCE,
+                                    canManageFees = user.hasPermission(StaffPermission.MANAGE_FEES),
                                     onUpdateStudentDetails = { updated ->
                                         viewModel.updateStudentDetails(updated)
                                     },

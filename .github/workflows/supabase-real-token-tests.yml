@@ -1,0 +1,29 @@
+name: Supabase real-token integration tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  auth-and-rls:
+    name: Verify real Supabase Auth tokens and role boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run real-token role and finance checks
+        env:
+          SUPABASE_URL: https://uobhtoqbenrgpzlwbsco.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_YxjKwhJ3iL3A56IFPVSf8A_TxsNNC1U
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
+          TEST_HEAD_TEACHER_PASSWORD: ${{ secrets.TEST_HEAD_TEACHER_PASSWORD }}
+          TEST_GATE_OFFICER_EMAIL: ${{ secrets.TEST_GATE_OFFICER_EMAIL }}
+          TEST_GATE_OFFICER_PASSWORD: ${{ secrets.TEST_GATE_OFFICER_PASSWORD }}
+          TEST_MEAL_STAFF_EMAIL: ${{ secrets.TEST_MEAL_STAFF_EMAIL }}
+          TEST_MEAL_STAFF_PASSWORD: ${{ secrets.TEST_MEAL_STAFF_PASSWORD }}
+        run: bash scripts/supabase-real-token-smoke.sh

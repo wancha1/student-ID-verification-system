@@ -6,7 +6,7 @@ package com.example.model
  */
 enum class StaffPermission {
     MANAGE_STUDENTS,       // Register, update, delete student records; issue/revoke cards
-    MANAGE_FEES,           // Update fee clearance status and outstanding balances (Bursar)
+    MANAGE_FEES,           // Update fee clearance status and balances (explicitly authorized Admin)
     VERIFY_GATE_ACCESS,    // QR barcode gate scanning and day scholar pass checks
     SERVE_MEALS,           // Dining hall meal issuance and double-serving prevention
     EXAM_CLEARANCE,        // View/check examination clearance
@@ -25,7 +25,7 @@ enum class StaffPermission {
  * Version 1 authenticates four roles: Administrator, Head Teacher, Gate Staff,
  * and Meal-Serving Staff. Legacy enum entries remain temporarily so older
  * screens and local database records compile during the staged feature removal.
- * FirebaseStaffAuthenticator and MainViewModel reject all legacy roles.
+ * SupabaseStaffAuthenticator and MainViewModel reject all legacy roles.
  */
 enum class UserRole(
     val title: String,
@@ -147,7 +147,7 @@ data class AuthUser(
      * Administrator only has MANAGE_FEES if hasExplicitFinanceAccess is true.
      */
     fun hasPermission(permission: StaffPermission): Boolean {
-        if (permission == StaffPermission.MANAGE_FEES && hasExplicitFinanceAccess) {
+        if (permission == StaffPermission.MANAGE_FEES && role == UserRole.ADMINISTRATOR && hasExplicitFinanceAccess) {
             return true
         }
         return permissions.contains(permission)
