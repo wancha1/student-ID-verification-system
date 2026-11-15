@@ -63,3 +63,17 @@
 - The permanent signing secrets are configured in GitHub's `production` environment, but no production-signed artifact has yet been built or certificate-verified.
 - The latest successful CI debug artifact is not a production release.
 - Do not call this product production-ready until all required tests above pass and the school approves the pilot.
+
+
+## Real-token integration workflow prepared — 2026-11-15
+A manual GitHub Actions workflow now exists at `.github/workflows/supabase-real-token-tests.yml`, with its non-destructive smoke-test script at `scripts/supabase-real-token-smoke.sh`. It obtains real access tokens through the Supabase password-grant endpoint for the four existing staff accounts, verifies each account's active LTC membership and role, checks that the token cannot read a membership in a different school tenant, and probes the finance INSERT boundary using a deliberately nonexistent student ID so no test row can be created.
+
+**Execution is pending protected credentials.** Add these as GitHub Environment secrets in the existing `production` environment; never place passwords in source control or chat:
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`
+- `TEST_HEAD_TEACHER_EMAIL`, `TEST_HEAD_TEACHER_PASSWORD`
+- `TEST_GATE_OFFICER_EMAIL`, `TEST_GATE_OFFICER_PASSWORD`
+- `TEST_MEAL_STAFF_EMAIL`, `TEST_MEAL_STAFF_PASSWORD`
+
+Use the four already provisioned LTC staff accounts and their current passwords. The workflow is manual and does not run as part of ordinary CI. It cannot be dispatched until the workflow file is available on the default branch. The test validates the existing active accounts; an inactive-membership denial test still requires a separately provisioned, school-approved inactive test account or a controlled temporary deactivation window.
