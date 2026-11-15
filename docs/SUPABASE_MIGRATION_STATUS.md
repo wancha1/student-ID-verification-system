@@ -69,8 +69,7 @@
 A manual GitHub Actions workflow now exists at `.github/workflows/supabase-real-token-tests.yml`, with its non-destructive smoke-test script at `scripts/supabase-real-token-smoke.sh`. It obtains real access tokens through the Supabase password-grant endpoint for the four existing staff accounts, verifies each account's active LTC membership and role, checks that the token cannot read a membership in a different school tenant, and probes the finance INSERT boundary using a deliberately nonexistent student ID so no test row can be created.
 
 **Execution is pending protected credentials.** Add these as GitHub Environment secrets in the existing `production` environment; never place passwords in source control or chat:
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
+The workflow uses the same public Supabase URL and publishable client key already configured for the Android app; these are not service-role credentials.
 - `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`
 - `TEST_HEAD_TEACHER_EMAIL`, `TEST_HEAD_TEACHER_PASSWORD`
 - `TEST_GATE_OFFICER_EMAIL`, `TEST_GATE_OFFICER_PASSWORD`
