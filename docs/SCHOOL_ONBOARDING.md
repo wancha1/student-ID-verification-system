@@ -30,15 +30,22 @@ The live database currently contains four active LTC memberships, one for each p
 
 ## Student roster and cards
 
-- Import only approved, verified student records.
-- Check student numbers for duplicates before import.
-- Keep guardian and emergency-contact details in the restricted private student profile.
-- Issue a unique card for each student.
-- Verify QR signature, card lifecycle status, and student mapping before printing.
+A blank CSV header template is maintained at [docs/templates/ltc-student-roster-template.csv](templates/ltc-student-roster-template.csv). It is a column guide, not an importer or an authorization to upload records.
+
+- Import only an official roster approved by the school's accountable data owner.
+- Preserve student numbers exactly as issued by the school; do not convert them to numbers or remove leading zeroes.
+- Required source fields: `student_number`, `first_name`, `last_name`, `grade_class`, and `access_status`.
+- Use `is_day_scholar` as `true` or `false`; use `fee_status` only as `CLEARED` or `OUTSTANDING`.
+- `class_name`, `stream`, `day_scholar_type`, `transport_route`, `gender`, `homeroom_teacher`, and `academic_year` are optional source fields.
+- The importer must derive the full display name and generate internal IDs, school ID, timestamps, QR credentials, and card records; do not invent these values in the spreadsheet.
+- Validate missing required values, duplicate student numbers within the school, invalid booleans/statuses, and malformed rows before any write.
+- Review a validation report and obtain a second-person approval before committing a live import. Imports should be idempotent and should never silently overwrite a different student's record.
+- Keep guardian and emergency-contact details in the restricted private student profile, not in the general roster CSV.
+- Issue a unique card for each student. Verify QR signature, card lifecycle status, and student mapping before printing.
 - Test lost-card revocation and replacement before handing cards to students.
 - Do not use real student records in screenshots, sample files, or support tickets.
 
-The current production database was configured as a clean start; no student roster has been migrated from Firebase. Confirm the approved import process before loading the first real roster.
+The current production database was configured as a clean start; no student roster has been migrated from Firebase. The live students table currently has zero records. No production roster import has been performed. The template does not mean that an end-to-end CSV importer has been implemented or tested; that remains a release acceptance item.
 
 ## Device setup
 
