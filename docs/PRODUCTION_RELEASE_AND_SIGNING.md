@@ -114,7 +114,7 @@ Do not change the Android `applicationId` after the first production release. Ch
 
 
 ## Current owner-controlled signing status — 2026-11-15
-The owner reports that the permanent JKS exists at `%USERPROFILE%\\LTC-Production-Signing\\ltc-release.jks`, alias `ltc-release`, and that all four required secrets are configured in the GitHub `production` environment. Secret values must remain private.
+Owner confirmation is still required for the permanent JKS location, alias, and the presence of all five signing secrets in the GitHub `production` environment. Do not infer that these prerequisites are configured merely because this runbook exists. Secret values must remain private.
 
 **Verification is pending.** The repository's Production APK workflow is present on the release candidate branch, not yet on the default branch. No production-signed APK has been produced or verified against the owner's recorded SHA-256 certificate fingerprint. The latest successful CI artifact is a debug build and must not be distributed as a production release.
 
