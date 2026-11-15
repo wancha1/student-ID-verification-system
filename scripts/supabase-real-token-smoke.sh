@@ -29,8 +29,8 @@ login() {
 }
 
 check_membership() {
-  local role="$1" token="$2" uid="$3" expected="$4"
-  local response="$tmp/$role-membership.json" code count actual active
+  local role="$1" token="$2" uid="$3" expected="$4" expected_finance="$5"
+  local response="$tmp/$role-membership.json" code count actual active finance
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.ltc_school_01&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
@@ -38,8 +38,9 @@ check_membership() {
   count="$(jq 'length' "$response")"
   actual="$(jq -r '.[0].role // empty' "$response")"
   active="$(jq -r '.[0].is_active // false' "$response")"
-  [[ "$count" == "1" && "$actual" == "$expected" && "$active" == "true" ]] || {
-    echo "::error::$role token did not resolve to exactly one active $expected membership."
+  finance="$(jq -r '.[0].has_finance_access // false' "$response")"
+  [[ "$count" == "1" && "$actual" == "$expected" && "$active" == "true" && "$finance" == "$expected_finance" ]] || {
+    echo "::error::$role token did not resolve to exactly one active $expected membership with finance_access=$expected_finance."
     exit 1
   }
 
@@ -87,7 +88,9 @@ run_role() {
   data="$(login "$role" "$email" "$password")"
   token="$(printf '%s\n' "$data" | sed -n '1p')"
   uid="$(printf '%s\n' "$data" | sed -n '2p')"
-  check_membership "$role" "$token" "$uid" "$expected"
+  local expected_finance=false
+  [[ "$expected" == "ADMIN" ]] && expected_finance=true
+  check_membership "$role" "$token" "$uid" "$expected" "$expected_finance"
   check_finance_boundary "$expected" "$token"
   echo "PASS: $expected real Auth token, active LTC membership, cross-school denial and finance boundary"
 }
