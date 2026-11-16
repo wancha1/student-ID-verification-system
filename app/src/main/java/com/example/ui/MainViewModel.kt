@@ -1269,34 +1269,56 @@ class MainViewModel(
             }
             val signer = KeystoreIssuerManager.getSigner()
                 ?: throw IllegalStateException("The enrolled Android Keystore signing key could not be loaded.")
+
+            // A locally revoked key must never be silently reactivated on sign-in.
+            if (TrustedIssuerRegistry.getIssuerEntry(signer.keyId)?.isRevoked == true) {
+                CardCryptoManager.clearIssuerPrivateKey()
+                throw IllegalStateException("This issuer key was revoked. Do not issue cards from this device.")
+            }
+
             CardCryptoManager.setActiveSigner(signer)
             val entry = TrustedIssuerRegistry.registerTrustedKey(
                 signer.publicKey,
                 "LTC Authoritative Issuer"
             )
-            _userFeedbackMessage.value = "Issuer key created locally. Publishing its public verification key to the LTC cloud…"
+            _userFeedbackMessage.value = "Checking issuer-key status with the LTC cloud before enabling card issuance…"
             val context = appContext
                 ?: throw IllegalStateException("App context unavailable; public-key distribution cannot be started.")
             viewModelScope.launch {
                 try {
-                    SupabaseClientFactory.getInstance(context.applicationContext)
-                        .from("trusted_issuers")
-                        .upsert(
-                            TrustedIssuerCloudRow(
-                                schoolId = "ltc_school_01",
-                                keyId = entry.kid,
-                                publicKeyBase64 = entry.publicKeyBase64,
-                                label = entry.label,
-                                enrolledAtMs = entry.enrolledAt,
-                                isRevoked = false
-                            )
-                        ) { onConflict = "school_id,key_id" }
+                    val client = SupabaseClientFactory.getInstance(context.applicationContext)
+                    val remote = client.from("trusted_issuers").select {
+                        filter {
+                            eq("school_id", "ltc_school_01")
+                            eq("key_id", entry.kid)
+                        }
+                    }.decodeSingleOrNull<TrustedIssuerCloudRow>()
+
+                    if (remote?.isRevoked == true) {
+                        TrustedIssuerRegistry.revokeIssuer(entry.kid)
+                        CardCryptoManager.clearIssuerPrivateKey()
+                        _userFeedbackMessage.value = "This issuer key is revoked in the LTC cloud. Card issuance is disabled on this device."
+                        return@launch
+                    }
+
+                    client.from("trusted_issuers").upsert(
+                        TrustedIssuerCloudRow(
+                            schoolId = "ltc_school_01",
+                            keyId = entry.kid,
+                            publicKeyBase64 = entry.publicKeyBase64,
+                            label = entry.label,
+                            enrolledAtMs = entry.enrolledAt,
+                            isRevoked = false
+                        )
+                    ) { onConflict = "school_id,key_id" }
                     _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
                 } catch (e: Exception) {
-                    _userFeedbackMessage.value = "Issuer key exists on this device, but cloud publication failed: ${e.localizedMessage ?: "unknown error"}. Do not issue cards until publication succeeds."
+                    CardCryptoManager.clearIssuerPrivateKey()
+                    _userFeedbackMessage.value = "Issuer key could not be confirmed in the LTC cloud: ${e.localizedMessage ?: "unknown error"}. Card issuance remains disabled until sign-in retries successfully."
                 }
             }
         } catch (e: Exception) {
+            CardCryptoManager.clearIssuerPrivateKey()
             _userFeedbackMessage.value = "Failed to enroll issuer key: ${e.message}"
         }
     }
@@ -1311,9 +1333,13 @@ class MainViewModel(
                         filter { eq("school_id", "ltc_school_01") }
                     }
                     .decodeList<TrustedIssuerCloudRow>()
+                val localSignerKeyId = KeystoreIssuerManager.getSigner()?.keyId
                 rows.forEach { row ->
                     if (row.isRevoked) {
                         TrustedIssuerRegistry.revokeIssuer(row.keyId)
+                        if (localSignerKeyId.equals(row.keyId, ignoreCase = true)) {
+                            CardCryptoManager.clearIssuerPrivateKey()
+                        }
                     } else {
                         TrustedIssuerRegistry.registerTrustedKeyBase64(
                             row.publicKeyBase64,
@@ -1324,6 +1350,8 @@ class MainViewModel(
                 }
             } catch (e: Exception) {
                 _userFeedbackMessage.value = "Issuer trust list could not be refreshed: ${e.localizedMessage ?: "check connection"}"
+                // Verifier devices keep their last-known public keys for offline operation.
+                // The issuer device may sign only after setupAuthoritativeIssuerKey confirms publication.
             }
         }
     }
