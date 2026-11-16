@@ -1276,11 +1276,6 @@ class MainViewModel(
                 throw IllegalStateException("This issuer key was revoked. Do not issue cards from this device.")
             }
 
-            CardCryptoManager.setActiveSigner(signer)
-            val entry = TrustedIssuerRegistry.registerTrustedKey(
-                signer.publicKey,
-                "LTC Authoritative Issuer"
-            )
             _userFeedbackMessage.value = "Checking issuer-key status with the LTC cloud before enabling card issuance…"
             val context = appContext
                 ?: throw IllegalStateException("App context unavailable; public-key distribution cannot be started.")
@@ -1290,17 +1285,21 @@ class MainViewModel(
                     val remote = client.from("trusted_issuers").select {
                         filter {
                             eq("school_id", "ltc_school_01")
-                            eq("key_id", entry.kid)
+                            eq("key_id", signer.keyId)
                         }
                     }.decodeSingleOrNull<TrustedIssuerCloudRow>()
 
                     if (remote?.isRevoked == true) {
-                        TrustedIssuerRegistry.revokeIssuer(entry.kid)
+                        TrustedIssuerRegistry.revokeIssuer(signer.keyId)
                         CardCryptoManager.clearIssuerPrivateKey()
                         _userFeedbackMessage.value = "This issuer key is revoked in the LTC cloud. Card issuance is disabled on this device."
                         return@launch
                     }
 
+                    val entry = TrustedIssuerRegistry.registerTrustedKey(
+                        signer.publicKey,
+                        "LTC Authoritative Issuer"
+                    )
                     client.from("trusted_issuers").upsert(
                         TrustedIssuerCloudRow(
                             schoolId = "ltc_school_01",
@@ -1311,6 +1310,7 @@ class MainViewModel(
                             isRevoked = false
                         )
                     ) { onConflict = "school_id,key_id" }
+                    CardCryptoManager.setActiveSigner(signer)
                     _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
                 } catch (e: Exception) {
                     CardCryptoManager.clearIssuerPrivateKey()
