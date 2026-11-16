@@ -282,7 +282,7 @@ fun StudentFormDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = "On this device • cloud backup pending",
+                                                    text = "Photo available on this device",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = Color(0xFF059669)
