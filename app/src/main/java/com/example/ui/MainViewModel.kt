@@ -1311,6 +1311,7 @@ class MainViewModel(
                         )
                     ) { onConflict = "school_id,key_id" }
                     CardCryptoManager.setActiveSigner(signer)
+                    refreshTrustedIssuerKeys()
                     _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
                 } catch (e: Exception) {
                     CardCryptoManager.clearIssuerPrivateKey()
