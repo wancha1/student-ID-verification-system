@@ -319,8 +319,9 @@ class MainViewModel(
             hasExplicitFinanceAccess = hasFinancePermission
         )
         dismissScanResult()
-        if (role == UserRole.ADMINISTRATOR) setupAuthoritativeIssuerKey()
-        else refreshTrustedIssuerKeys()
+        if (role == UserRole.ADMINISTRATOR && appContext != null && repository is com.example.data.RoomStudentRepository) {
+            setupAuthoritativeIssuerKey()
+        } else refreshTrustedIssuerKeys()
     }
 
     /**
@@ -360,8 +361,9 @@ class MainViewModel(
         _currentUser.value = user
         SecurityManager.saveActiveSession(context, user)
         dismissScanResult()
-        if (role == UserRole.ADMINISTRATOR) setupAuthoritativeIssuerKey()
-        else refreshTrustedIssuerKeys()
+        if (role == UserRole.ADMINISTRATOR && appContext != null && repository is com.example.data.RoomStudentRepository) {
+            setupAuthoritativeIssuerKey()
+        } else refreshTrustedIssuerKeys()
         _userFeedbackMessage.value = null
         return true
     }
