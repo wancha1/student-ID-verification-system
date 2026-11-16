@@ -9,6 +9,9 @@ import com.example.model.AccessStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
+import com.example.crypto.SoftwareCardSigner
+import com.example.testutil.TestCardCryptoHelper
+import com.example.util.CardCryptoManager
 import com.example.ui.MainViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -25,6 +28,8 @@ class NetworkRecoverySyncTest {
 
     @Test
     fun reconnectingNetworkAutomaticallyDispatchesDurableOutbox() = runBlocking {
+        CardCryptoManager.resetForTesting()
+        CardCryptoManager.setActiveSigner(SoftwareCardSigner(TestCardCryptoHelper.generateKeyPair()))
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = AppDatabase.createInMemory(context)
         try {
@@ -61,6 +66,7 @@ class NetworkRecoverySyncTest {
             )
         } finally {
             database.close()
+            CardCryptoManager.resetForTesting()
         }
     }
 }
