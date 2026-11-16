@@ -87,7 +87,7 @@ fun StudentFormDialog(
     var lastName by remember { mutableStateOf(initialStudent?.lastName ?: "") }
     var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "") }
     var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "") }
-    var dayScholarType by remember { mutableStateOf(initialStudent?.dayScholarType ?: DayScholarStatus.DAY_SCHOLAR_BUS) }
+    var dayScholarType by remember { mutableStateOf(initialStudent?.dayScholarType) }
     var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "") }
     var guardianName by remember { mutableStateOf(initialStudent?.guardianName ?: "") }
     var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "") }
@@ -455,8 +455,11 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         )
                     }
                     Text(
-                        if (dayScholarType.isDayScholar) "Day scholars are eligible for day-gate checks, subject to access and fee status."
-                        else "Boarding students are recorded in the roster and remain restricted at the day gate.",
+                        when {
+                            dayScholarType == null -> "Select the student's actual residence / transport category."
+                            dayScholarType!!.isDayScholar -> "Day scholars are eligible for day-gate checks, subject to access and fee status."
+                            else -> "Boarding students are recorded in the roster and remain restricted at the day gate."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -492,7 +495,7 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                 }
 
                 // Transport details apply only to day scholars.
-                if (dayScholarType.isDayScholar) {
+                if (dayScholarType?.isDayScholar == true) {
                     OutlinedTextField(
                         value = transportRoute,
                         onValueChange = { transportRoute = it },
@@ -574,6 +577,12 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         return@Button
                     }
 
+                    val selectedDayScholarType = dayScholarType
+                    if (selectedDayScholarType == null) {
+                        errorMessage = "Select the student's actual category before saving."
+                        return@Button
+                    }
+
                     val colorSeed = initialStudent?.avatarColorSeed ?: listOf(
                         0xFF1D4ED8, 0xFF059669, 0xFF7C3AED, 0xFF0891B2, 0xFF4F46E5, 0xFFDB2777
                     ).random()
@@ -584,9 +593,9 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         firstName = firstName.trim(),
                         lastName = lastName.trim(),
                         gradeClass = gradeClass.trim(),
-                        isDayScholar = dayScholarType.isDayScholar,
-                        dayScholarType = dayScholarType,
-                        transportRoute = if (dayScholarType.isDayScholar) transportRoute.trim() else "",
+                        isDayScholar = selectedDayScholarType.isDayScholar,
+                        dayScholarType = selectedDayScholarType,
+                        transportRoute = if (selectedDayScholarType.isDayScholar) transportRoute.trim() else "",
                         feesStatus = initialStudent?.feesStatus ?: FeeStatus.OUTSTANDING,
                         outstandingAmount = initialStudent?.outstandingAmount ?: 0.0,
                         gender = initialStudent?.gender ?: "Not specified",
