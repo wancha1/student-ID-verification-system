@@ -173,7 +173,7 @@ fun MealsMasterScreen(
                         }
                     }
 
-                    // Leadership can review and export; meal staff use the dedicated bottom navigation.
+                    // Leadership can review and export; meal staff get a dedicated full-width scan action below.
                     if (readOnly) {
                         OutlinedButton(
                             onClick = { showExportDialog = true },
@@ -185,26 +185,43 @@ fun MealsMasterScreen(
                             Text("Export", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
+                }
 
-                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = onOpenScanner,
-                            modifier = Modifier.testTag("button_meals_scan_qr"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = roleTheme.primaryColor
-                            ),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
+                if (!readOnly) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = onOpenScanner,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("button_meals_scan_qr"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = roleTheme.primaryColor
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            "SCAN STUDENT ID",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.4.sp
+                        )
                     }
+                    Text(
+                        "Point the camera at the student's QR ID card",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 5.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
