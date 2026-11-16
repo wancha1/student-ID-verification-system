@@ -85,12 +85,12 @@ fun StudentFormDialog(
 
     var firstName by remember { mutableStateOf(initialStudent?.firstName ?: "") }
     var lastName by remember { mutableStateOf(initialStudent?.lastName ?: "") }
-    var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "LTC-2026-00${(11..99).random()}") }
-    var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "Senior 3-A") }
-    var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "Bus #1 - Lira Main Line") }
+    var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "") }
+    var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "") }
+    var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "") }
     var guardianName by remember { mutableStateOf(initialStudent?.guardianName ?: "") }
-    var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "+256 772 ") }
-    var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "Mr. Obua Denis") }
+    var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "") }
+    var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "") }
     var notes by remember { mutableStateOf(initialStudent?.notes ?: "") }
 
     // Passport Photo state from device
@@ -518,7 +518,11 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         return@Button
                     }
                     if (studentNumber.isBlank()) {
-                        errorMessage = "Student Number is required."
+                        errorMessage = "Official student number is required."
+                        return@Button
+                    }
+                    if (gradeClass.isBlank()) {
+                        errorMessage = "Class / year is required."
                         return@Button
                     }
 
@@ -535,15 +539,15 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         isDayScholar = true,
                         dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
                         transportRoute = transportRoute.trim(),
-                        feesStatus = initialStudent?.feesStatus ?: FeeStatus.CLEARED,
+                        feesStatus = initialStudent?.feesStatus ?: FeeStatus.OUTSTANDING,
                         outstandingAmount = initialStudent?.outstandingAmount ?: 0.0,
                         gender = initialStudent?.gender ?: "Not specified",
                         avatarColorSeed = colorSeed,
                         photoUrl = photoUrl,
-                        guardianName = guardianName.trim().ifBlank { "Parent / Guardian" },
-                        guardianPhone = guardianPhone.trim().ifBlank { "+256 700 000000" },
-                        emergencyContact = initialStudent?.emergencyContact ?: "+256 770 000000",
-                        homeroomTeacher = homeroomTeacher.trim().ifBlank { "Unassigned" },
+                        guardianName = guardianName.trim(),
+                        guardianPhone = guardianPhone.trim(),
+                        emergencyContact = initialStudent?.emergencyContact.orEmpty(),
+                        homeroomTeacher = homeroomTeacher.trim(),
                         notes = notes.trim(),
                         qrToken = qrToken,
                         updatedAt = System.currentTimeMillis()
