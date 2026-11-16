@@ -360,10 +360,19 @@ class SupabaseCloudBackend(
                 offset += PAGE_SIZE
             }
         }
-        rows.filter { !it.photoPath.isNullOrBlank() }.mapNotNull { row ->
+        val photoRows = rows.filter { !it.photoPath.isNullOrBlank() }
+        val downloadedPhotos = photoRows.mapNotNull { row ->
             val local = downloadPhotoToCache(row.photoPath, row.id)
             if (local.isNullOrBlank()) null else row.id to local
         }.toMap()
+
+        // Do not report a successful backfill when even one cloud photo failed.
+        // SyncManager only writes its one-time refresh marker on success; keeping
+        // this Result failed makes the next sync retry incomplete photo downloads.
+        check(downloadedPhotos.size == photoRows.size) {
+            "Student photo backup is incomplete: downloaded ${downloadedPhotos.size} of ${photoRows.size}. Check Storage access and retry sync."
+        }
+        downloadedPhotos
     }
 
     private suspend fun uploadPhotoIfLocal(student: StudentEntity): String? {
