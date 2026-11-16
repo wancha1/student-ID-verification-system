@@ -698,18 +698,30 @@ class MainViewModel(
         }
         viewModelScope.launch {
             val result = repository.updateStudent(student)
-            if (result.isSuccess) {
-                _userFeedbackMessage.value = "Updated details for ${student.fullName}."
-                if (_currentScannedStudent.value?.id.equals(student.id, ignoreCase = true) ||
-                    _currentScannedStudent.value?.studentNumber.equals(student.studentNumber, ignoreCase = true)
-                ) {
-                    _currentScannedStudent.value = student
-                }
-                onComplete(true, "Student updated successfully")
-            } else {
-                val msg = result.exceptionOrNull()?.message ?: "Failed to update student"
+            if (result.isFailure) {
+                val msg = result.exceptionOrNull()?.localizedMessage ?: "Failed to update student"
                 _userFeedbackMessage.value = msg
                 onComplete(false, msg)
+                return@launch
+            }
+
+            if (_currentScannedStudent.value?.id.equals(student.id, ignoreCase = true) ||
+                _currentScannedStudent.value?.studentNumber.equals(student.studentNumber, ignoreCase = true)
+            ) {
+                _currentScannedStudent.value = student
+            }
+
+            val syncResult = repository.syncWithCloud()
+            if (syncResult.isSuccess) {
+                val msg = "Updated ${student.fullName} and synchronized the change to the school database."
+                _userFeedbackMessage.value = msg
+                onComplete(true, msg)
+            } else {
+                val detail = syncResult.exceptionOrNull()?.localizedMessage
+                val msg = "Updated ${student.fullName} on this device. Cloud sync is pending and will retry." +
+                    (detail?.takeIf { it.isNotBlank() }?.let { " Details: $it" } ?: "")
+                _userFeedbackMessage.value = msg
+                onComplete(true, msg)
             }
         }
     }
@@ -718,10 +730,23 @@ class MainViewModel(
         if (!requireAdminRole("Deleting student records")) return
         viewModelScope.launch {
             val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
-            repository.deleteStudent(studentId)
-            _userFeedbackMessage.value = "Removed student ${student?.fullName ?: studentId}."
+            val deleteResult = repository.deleteStudent(studentId)
+            if (deleteResult.isFailure) {
+                _userFeedbackMessage.value = "Could not deactivate student: ${deleteResult.exceptionOrNull()?.localizedMessage ?: "local database error"}"
+                return@launch
+            }
+
             if (_selectedStudentId.value.equals(studentId, ignoreCase = true)) {
                 _selectedStudentId.value = null
+            }
+
+            val syncResult = repository.syncWithCloud()
+            val name = student?.fullName ?: studentId
+            _userFeedbackMessage.value = if (syncResult.isSuccess) {
+                "Deactivated $name and synchronized the change to the school database."
+            } else {
+                "Deactivated $name on this device. Cloud sync is pending and will retry. " +
+                    (syncResult.exceptionOrNull()?.localizedMessage ?: "")
             }
         }
     }
