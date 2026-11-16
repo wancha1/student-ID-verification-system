@@ -771,8 +771,10 @@ fun StudentAccessApp(
                             }
 
                             UserRole.HEAD_TEACHER_MANAGEMENT -> {
+                                val isLeadershipOverview = !showLogsScreen && !showMealsScreen &&
+                                    !showAttendanceScreen && !showRequirementsScreen && !showExeatScreen
                                 NavigationBarItem(
-                                    selected = !showLogsScreen && !showMealsScreen,
+                                    selected = isLeadershipOverview,
                                     onClick = {
                                         showAttendanceScreen = false
                                         showRequirementsScreen = false
@@ -782,7 +784,7 @@ fun StudentAccessApp(
                                         showGuardianAlertsScreen = false
                                     },
                                     icon = { Icon(Icons.Default.SupervisorAccount, contentDescription = "Leadership overview") },
-                                    label = { Text("Overview", fontSize = 11.sp) },
+                                    label = { Text("Overview", fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -797,9 +799,10 @@ fun StudentAccessApp(
                                         showMealsScreen = false
                                         showAttendanceScreen = false
                                         showRequirementsScreen = false
+                                        showExeatScreen = false
                                     },
                                     icon = { Icon(Icons.Default.History, contentDescription = "Gate activity") },
-                                    label = { Text("Gate", fontSize = 11.sp) },
+                                    label = { Text("Gate", fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -814,15 +817,52 @@ fun StudentAccessApp(
                                         showLogsScreen = false
                                         showAttendanceScreen = false
                                         showRequirementsScreen = false
+                                        showExeatScreen = false
                                     },
                                     icon = { Icon(Icons.Default.Restaurant, contentDescription = "Meal reports") },
-                                    label = { Text("Meals", fontSize = 11.sp) },
+                                    label = { Text("Meals", fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
                                         selectedTextColor = roleColor
                                     ),
                                     modifier = Modifier.testTag("nav_item_head_meals")
+                                )
+                                NavigationBarItem(
+                                    selected = showAttendanceScreen,
+                                    onClick = {
+                                        showAttendanceScreen = true
+                                        showLogsScreen = false
+                                        showMealsScreen = false
+                                        showRequirementsScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.MenuBook, contentDescription = "Attendance oversight") },
+                                    label = { Text("Attendance", fontSize = 10.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_head_attendance")
+                                )
+                                NavigationBarItem(
+                                    selected = showRequirementsScreen,
+                                    onClick = {
+                                        showRequirementsScreen = true
+                                        showLogsScreen = false
+                                        showMealsScreen = false
+                                        showAttendanceScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.FactCheck, contentDescription = "Requirements oversight") },
+                                    label = { Text("Exams", fontSize = 10.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_head_exams")
                                 )
                             }
 
