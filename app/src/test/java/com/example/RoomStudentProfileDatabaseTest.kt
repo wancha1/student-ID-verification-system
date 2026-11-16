@@ -9,6 +9,9 @@ import com.example.model.AccessStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
+import com.example.crypto.SoftwareCardSigner
+import com.example.testutil.TestCardCryptoHelper
+import com.example.util.CardCryptoManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -30,6 +33,8 @@ class RoomStudentProfileDatabaseTest {
 
     @Before
     fun setup() {
+        CardCryptoManager.resetForTesting()
+        CardCryptoManager.setActiveSigner(SoftwareCardSigner(TestCardCryptoHelper.generateKeyPair()))
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = AppDatabase.createInMemory(context)
     }
@@ -37,6 +42,7 @@ class RoomStudentProfileDatabaseTest {
     @After
     fun tearDown() {
         database.close()
+        CardCryptoManager.resetForTesting()
     }
 
     @Test
