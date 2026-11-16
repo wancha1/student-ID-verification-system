@@ -16,7 +16,7 @@ concurrency:
 jobs:
   release:
     name: Build and verify permanent-key release APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment: production
     steps:
