@@ -45,7 +45,18 @@ A blank CSV header template is maintained at [docs/templates/ltc-student-roster-
 - Test lost-card revocation and replacement before handing cards to students.
 - Do not use real student records in screenshots, sample files, or support tickets.
 
-The current production database was configured as a clean start; no student roster has been migrated from Firebase. The live students table currently has zero records. No production roster import has been performed. The template does not mean that an end-to-end CSV importer has been implemented or tested; that remains a release acceptance item.
+The live LTC database currently contains one student row, one linked card, and one matching photo object. That row has not been reconciled against a school-approved roster and must not be treated as an approved bulk import. No approved roster import has been performed. The template does not mean that an end-to-end CSV importer has been implemented or tested; that remains a release acceptance item.
+
+## Issuer signing-key setup
+
+- [ ] On the designated Admin/issuer Android device, sign in with the approved Admin account.
+- [ ] Open the overflow menu and select **Enroll card-signing key**. If a key already exists on that device, the action republishes its public key rather than replacing the private key.
+- [ ] Confirm the app reports successful publication to the LTC Supabase project.
+- [ ] Sign in on each Gate Officer device and run a successful cloud sync. The app downloads the trusted public issuer keys into its local verification registry.
+- [ ] Test a newly issued card on a different physical Gate Officer device before printing or distributing cards.
+- [ ] Keep the issuer device secured and backed by the school's device-custody process. The private key remains non-exportable in Android Keystore; losing or resetting the issuer device requires a deliberate key-rotation and card-replacement procedure.
+
+New student records default to **OUTSTANDING** fees, **RESTRICTED_FEES** access and non-day-scholar status unless authorized data explicitly sets otherwise. Do not clear fees or approve access merely to make a test scan pass.
 
 ## Device setup
 
