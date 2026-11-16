@@ -124,7 +124,7 @@ fun AdminDashboardScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .roleGlassBackground(roleTheme.primaryColor)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp)
         ) {
@@ -132,7 +132,7 @@ fun AdminDashboardScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1726)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -147,8 +147,8 @@ fun AdminDashboardScreen(
                         Surface(
                             modifier = Modifier.size(52.dp),
                             shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.08f),
-                            border = BorderStroke(1.2.dp, GoldAccent.copy(alpha = 0.6f))
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -157,7 +157,7 @@ fun AdminDashboardScreen(
                                 Icon(
                                     imageVector = roleTheme.icon,
                                     contentDescription = roleTheme.departmentTagline,
-                                    tint = GoldAccent,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(30.dp)
                                 )
                             }
@@ -169,7 +169,7 @@ fun AdminDashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = roleTheme.departmentTagline,
-                                    color = GoldAccent,
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     letterSpacing = 1.2.sp
@@ -198,12 +198,12 @@ fun AdminDashboardScreen(
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Authenticated Officer: ${user.name}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.72f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
