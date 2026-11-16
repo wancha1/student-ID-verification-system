@@ -116,64 +116,58 @@ fun MealsMasterScreen(
             .animateContentSize()
             .roleGlassBackground(roleTheme.primaryColor)
     ) {
-        // Meals Master Header
+        // Meal staff need one unmistakable primary action: scan the student's card.
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 3.dp,
-            border = BorderStroke(1.dp, roleTheme.accentBorderColor.copy(alpha = 0.25f))
+            shadowElevation = 1.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+            shape = RoundedCornerShape(20.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Surface(
                             modifier = Modifier.size(46.dp),
                             shape = RoundedCornerShape(14.dp),
-                            color = roleTheme.primaryColor.copy(alpha = 0.12f),
-                            border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.5f))
+                            color = roleTheme.primaryColor.copy(alpha = 0.10f)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = roleTheme.icon,
-                                    contentDescription = "Meals Master",
+                                    contentDescription = "Dining services",
                                     tint = roleTheme.primaryColor,
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.size(25.dp)
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Dining Services",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Surface(shape = RoundedCornerShape(4.dp), color = roleTheme.containerColor) {
-                                    Text(
-                                        text = roleTheme.stationBadge,
-                                        color = roleTheme.badgeTextColor,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Black,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
+                            Text(
+                                text = "Meal service",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                             Text(
                                 text = "${user.station} • ${user.name}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-
-                    // Leadership can review and export; meal staff use the dedicated bottom navigation.
                     if (readOnly) {
                         OutlinedButton(
                             onClick = { showExportDialog = true },
@@ -182,30 +176,39 @@ fun MealsMasterScreen(
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Export")
                         }
-                    }
-
-                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = onOpenScanner,
-                            modifier = Modifier.testTag("button_meals_scan_qr"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = roleTheme.primaryColor
-                            ),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
                     }
                 }
+
+                if (!readOnly) {
+                    Button(
+                        onClick = onOpenScanner,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("button_meals_scan_qr"),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = roleTheme.primaryColor
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(21.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            "SCAN STUDENT CARD",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.4.sp
+                        )
+                    }
+                }
+            }
+        }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
