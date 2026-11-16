@@ -5,11 +5,13 @@ import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import com.example.model.AuthUser
 import com.example.model.MealType
 import com.example.model.UserRole
 import com.example.ui.meals.MealsMasterScreen
 import com.example.ui.theme.MyApplicationTheme
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,7 +26,8 @@ class MealsScannerVisibilityTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun mealStaffSeesProminentQrScanAction() {
+    fun mealStaffSeesProminentQrScanActionAndOpensScanner() {
+        var scannerOpened = false
         composeTestRule.setContent {
             MyApplicationTheme {
                 MealsMasterScreen(
@@ -38,7 +41,7 @@ class MealsScannerVisibilityTest {
                     mealScanOutcome = null,
                     allStudents = emptyList(),
                     onSelectMealType = {},
-                    onOpenScanner = {},
+                    onOpenScanner = { scannerOpened = true },
                     onManualServe = {},
                     onDismissScanOutcome = {},
                     onExport = {}
@@ -49,6 +52,8 @@ class MealsScannerVisibilityTest {
         composeTestRule.onNodeWithTag("button_meals_scan_qr")
             .assertExists()
             .assertIsDisplayed()
+            .performClick()
+        assertTrue("Meal scan action must open the scanner", scannerOpened)
     }
 
     @Test
