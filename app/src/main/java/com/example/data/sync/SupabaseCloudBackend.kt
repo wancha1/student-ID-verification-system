@@ -276,10 +276,27 @@ class SupabaseCloudBackend(
             throw SecurityException("Only meal staff can upload meal records.")
         }
         meals.forEach { meal ->
-            client.from("meals").upsert(MealRow.from(meal, schoolId)) {
-                // Database-level natural key prevents the same student receiving
-                // duplicate servings from two devices on the same meal date.
-                onConflict = "school_id,student_id,meal_type,meal_date"
+            // Meal staff have SELECT + INSERT permission, deliberately not UPDATE.
+            // PostgREST upsert requires UPDATE privileges even when no row conflicts,
+            // so use the natural key as an idempotency check and insert append-only.
+            suspend fun existingServing() = client.from("meals").select {
+                filter {
+                    eq("school_id", schoolId)
+                    eq("student_id", meal.studentId)
+                    eq("meal_type", meal.mealType)
+                    eq("meal_date", meal.mealDate)
+                }
+            }.decodeSingleOrNull<MealRow>()
+
+            if (existingServing() == null) {
+                try {
+                    client.from("meals").insert(MealRow.from(meal, schoolId))
+                } catch (insertError: Exception) {
+                    // Another device may have inserted the same serving between
+                    // the read and insert. Treat that unique-key race as success,
+                    // while preserving every unrelated database/network failure.
+                    if (existingServing() == null) throw insertError
+                }
             }
         }
     }
