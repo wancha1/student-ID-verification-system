@@ -1343,17 +1343,26 @@ class MainViewModel(
                         _currentScannedCard.value = result.card
                         _scanError.value = null
                         if (result.department == ScanDepartment.MEALS) {
-                            val newMeal = MealRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                mealType = result.mealType ?: MealType.LUNCH,
-                                timestamp = System.currentTimeMillis(),
-                                serverName = user.name,
-                                status = result.mealStatus ?: MealServingStatus.SERVED
-                            )
-                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            val mealType = result.mealType ?: MealType.LUNCH
+                            if (!result.isAllowed || result.mealStatus == MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE) {
+                                // Never show an approval dialog for a policy-denied meal scan.
+                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                    student = result.student,
+                                    reason = result.statusDetail
+                                )
+                            } else {
+                                val newMeal = MealRecord(
+                                    studentId = result.student.id,
+                                    studentNumber = result.student.studentNumber,
+                                    studentName = result.student.fullName,
+                                    gradeClass = result.student.gradeClass,
+                                    mealType = mealType,
+                                    timestamp = System.currentTimeMillis(),
+                                    serverName = user.name,
+                                    status = result.mealStatus ?: MealServingStatus.SERVED
+                                )
+                                _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
                                 studentId = result.student.id,
@@ -1370,6 +1379,24 @@ class MainViewModel(
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
+                        if (result.department == ScanDepartment.MEALS) {
+                            val mealType = _activeMealType.value
+                            val previousRecord = MealRecord(
+                                studentId = result.student.id,
+                                studentNumber = result.student.studentNumber,
+                                studentName = result.student.fullName,
+                                gradeClass = result.student.gradeClass,
+                                mealType = mealType,
+                                timestamp = result.existingEventTimestamp ?: System.currentTimeMillis(),
+                                serverName = "Previously recorded",
+                                status = MealServingStatus.SERVED
+                            )
+                            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
+                                student = result.student,
+                                mealType = mealType,
+                                previousRecord = previousRecord
+                            )
+                        }
                         context?.let { FeedbackHelper.playWarningSoundAndHaptic(it) }
                     }
                     is DepartmentVerificationResult.PermissionDenied -> {
