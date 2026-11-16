@@ -87,6 +87,7 @@ fun StudentFormDialog(
     var lastName by remember { mutableStateOf(initialStudent?.lastName ?: "") }
     var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "LTC-2026-00${(11..99).random()}") }
     var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "Senior 3-A") }
+    var dayScholarType by remember { mutableStateOf(initialStudent?.dayScholarType ?: DayScholarStatus.DAY_SCHOLAR_BUS) }
     var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "Bus #1 - Lira Main Line") }
     var guardianName by remember { mutableStateOf(initialStudent?.guardianName ?: "") }
     var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "+256 772 ") }
@@ -122,7 +123,7 @@ fun StudentFormDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (isEditing) "Edit Student Details" else "Register New Day Scholar",
+                text = if (isEditing) "Edit Student Details" else "Register Student",
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge
             )
@@ -282,7 +283,7 @@ fun StudentFormDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = "On this device • cloud backup pending",
+                                                    text = "On this device • cloud backup status shown after sync",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = Color(0xFF059669)
@@ -416,6 +417,51 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                     )
                 }
 
+                // Student residence / gate-access category
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(
+                        "STUDENT CATEGORY",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SchoolPrimary,
+                        letterSpacing = 0.5.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        FilterChip(
+                            selected = dayScholarType == DayScholarStatus.DAY_SCHOLAR_BUS,
+                            onClick = { dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS },
+                            label = { Text("Bus") },
+                            modifier = Modifier.testTag("chip_student_type_bus")
+                        )
+                        FilterChip(
+                            selected = dayScholarType == DayScholarStatus.DAY_SCHOLAR_PRIVATE,
+                            onClick = { dayScholarType = DayScholarStatus.DAY_SCHOLAR_PRIVATE },
+                            label = { Text("Private drop-off") },
+                            modifier = Modifier.testTag("chip_student_type_private")
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        FilterChip(
+                            selected = dayScholarType == DayScholarStatus.DAY_SCHOLAR_WALK,
+                            onClick = { dayScholarType = DayScholarStatus.DAY_SCHOLAR_WALK },
+                            label = { Text("Walking / local") },
+                            modifier = Modifier.testTag("chip_student_type_walk")
+                        )
+                        FilterChip(
+                            selected = dayScholarType == DayScholarStatus.BOARDER,
+                            onClick = { dayScholarType = DayScholarStatus.BOARDER },
+                            label = { Text("Boarder") },
+                            modifier = Modifier.testTag("chip_student_type_boarder")
+                        )
+                    }
+                    Text(
+                        if (dayScholarType.isDayScholar) "Day scholars are eligible for day-gate checks, subject to access and fee status."
+                        else "Boarding students are recorded in the roster and remain restricted at the day gate.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 // First & Last Name
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -445,19 +491,21 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                     )
                 }
 
-                // Transport Route
-                OutlinedTextField(
-                    value = transportRoute,
-                    onValueChange = { transportRoute = it },
-                    label = { Text("Day Scholar Route / Transport") },
-                    leadingIcon = {
-                        Icon(Icons.Default.DirectionsBus, contentDescription = null)
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .testTag("input_form_route")
-                        .fillMaxWidth()
-                )
+                // Transport details apply only to day scholars.
+                if (dayScholarType.isDayScholar) {
+                    OutlinedTextField(
+                        value = transportRoute,
+                        onValueChange = { transportRoute = it },
+                        label = { Text("Day Scholar Route / Transport") },
+                        leadingIcon = {
+                            Icon(Icons.Default.DirectionsBus, contentDescription = null)
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .testTag("input_form_route")
+                            .fillMaxWidth()
+                    )
+                }
 
                 // Homeroom Teacher
                 OutlinedTextField(
@@ -532,9 +580,9 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         firstName = firstName.trim(),
                         lastName = lastName.trim(),
                         gradeClass = gradeClass.trim(),
-                        isDayScholar = true,
-                        dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
-                        transportRoute = transportRoute.trim(),
+                        isDayScholar = dayScholarType.isDayScholar,
+                        dayScholarType = dayScholarType,
+                        transportRoute = if (dayScholarType.isDayScholar) transportRoute.trim() else "",
                         feesStatus = initialStudent?.feesStatus ?: FeeStatus.CLEARED,
                         outstandingAmount = initialStudent?.outstandingAmount ?: 0.0,
                         gender = initialStudent?.gender ?: "Not specified",
