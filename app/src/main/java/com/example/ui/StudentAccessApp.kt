@@ -1097,8 +1097,12 @@ fun StudentAccessApp(
                                 students = allStudents,
                                 mealRecords = mealRecords,
                                 gateLogs = scanLogs,
+                                attendanceRecords = attendanceRecords,
                                 onOpenGateLogs = { showLogsScreen = true },
-                                onOpenMeals = { showMealsScreen = true }
+                                onOpenMeals = { showMealsScreen = true },
+                                onOpenAttendance = { showAttendanceScreen = true },
+                                onOpenRequirements = { showRequirementsScreen = true },
+                                onOpenExeat = { showExeatScreen = true }
                             )
                         }
 
