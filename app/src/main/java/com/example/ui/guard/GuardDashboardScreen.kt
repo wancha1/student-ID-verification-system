@@ -152,7 +152,7 @@ fun GuardDashboardScreen(
             SyncStatusHeaderCard(
                 syncInfo = syncInfo,
                 onTriggerSync = onTriggerSync,
-                onToggleOnline = onToggleOnline
+                // Connectivity is reported by the app; staff cannot manually fake network state.
             )
             Spacer(modifier = Modifier.height(14.dp))
         }
@@ -519,7 +519,6 @@ fun GuardDashboardScreen(
 fun SyncStatusHeaderCard(
     syncInfo: SyncInfo,
     onTriggerSync: () -> Unit,
-    onToggleOnline: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
@@ -559,7 +558,7 @@ fun SyncStatusHeaderCard(
                 RejectedRed.copy(alpha = 0.4f),
                 Icons.Default.SyncProblem,
                 "Sync Warning",
-                "Could not reach cloud • Using local data ($lastSyncStr)"
+                syncInfo.errorMessage?.takeIf { it.isNotBlank() } ?: "Last successful sync: $lastSyncStr"
             )
         }
         SyncStatus.NEEDS_SYNC -> {
@@ -568,7 +567,7 @@ fun SyncStatusHeaderCard(
                 Color(0xFF3B82F6),
                 Icons.Default.CloudSync,
                 "Changes Pending Upload",
-                "${syncInfo.pendingLogsCount} gate logs awaiting upload"
+                "${syncInfo.pendingLogsCount} change(s) waiting to upload"
             )
         }
     }
@@ -625,27 +624,28 @@ fun SyncStatusHeaderCard(
                 )
             }
 
-            // Online / Offline toggle switch
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 4.dp)
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (syncInfo.isOnline) ApprovedGreen.copy(alpha = 0.12f) else Color(0xFFF59E0B).copy(alpha = 0.14f)
             ) {
-                Icon(
-                    imageVector = if (syncInfo.isOnline) Icons.Default.Wifi else Icons.Default.WifiOff,
-                    contentDescription = if (syncInfo.isOnline) "Online" else "Offline",
-                    tint = if (syncInfo.isOnline) ApprovedGreen else Color(0xFFB45309),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Switch(
-                    checked = syncInfo.isOnline,
-                    onCheckedChange = onToggleOnline,
-                    modifier = Modifier.testTag("switch_network_online"),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = ApprovedGreen,
-                        checkedTrackColor = ApprovedGreenLight
+                Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = if (syncInfo.isOnline) Icons.Default.Wifi else Icons.Default.WifiOff,
+                        contentDescription = if (syncInfo.isOnline) "Online" else "Offline",
+                        tint = if (syncInfo.isOnline) ApprovedGreen else Color(0xFFB45309),
+                        modifier = Modifier.size(15.dp)
                     )
-                )
+                    Text(
+                        if (syncInfo.isOnline) "Online" else "Offline",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (syncInfo.isOnline) ApprovedGreen else Color(0xFF92400E)
+                    )
+                }
             }
         }
     }

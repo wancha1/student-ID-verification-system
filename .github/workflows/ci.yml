@@ -17,7 +17,7 @@ permissions:
 jobs:
   android:
     name: Android compile and unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,6 +32,28 @@ jobs:
           gradle-version: "9.3.1"
       - name: Validate Supabase real-token test script syntax
         run: bash -n scripts/supabase-real-token-smoke.sh
+      - name: Run real-token Supabase role smoke tests when protected credentials are configured
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
+          TEST_HEAD_TEACHER_PASSWORD: ${{ secrets.TEST_HEAD_TEACHER_PASSWORD }}
+          TEST_GATE_OFFICER_EMAIL: ${{ secrets.TEST_GATE_OFFICER_EMAIL }}
+          TEST_GATE_OFFICER_PASSWORD: ${{ secrets.TEST_GATE_OFFICER_PASSWORD }}
+          TEST_MEAL_STAFF_EMAIL: ${{ secrets.TEST_MEAL_STAFF_EMAIL }}
+          TEST_MEAL_STAFF_PASSWORD: ${{ secrets.TEST_MEAL_STAFF_PASSWORD }}
+        run: |
+          if [[ -n "$SUPABASE_URL" && -n "$SUPABASE_PUBLISHABLE_KEY" && \
+                -n "$TEST_ADMIN_EMAIL" && -n "$TEST_ADMIN_PASSWORD" && \
+                -n "$TEST_HEAD_TEACHER_EMAIL" && -n "$TEST_HEAD_TEACHER_PASSWORD" && \
+                -n "$TEST_GATE_OFFICER_EMAIL" && -n "$TEST_GATE_OFFICER_PASSWORD" && \
+                -n "$TEST_MEAL_STAFF_EMAIL" && -n "$TEST_MEAL_STAFF_PASSWORD" ]]; then
+            bash scripts/supabase-real-token-smoke.sh
+          else
+            echo "::notice::Real-token Supabase tests skipped because protected test credentials are not configured."
+          fi
       - name: Generate ephemeral debug keystore
         run: |
           keytool -genkeypair -v \

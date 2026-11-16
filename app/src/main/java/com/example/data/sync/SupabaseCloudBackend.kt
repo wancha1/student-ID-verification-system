@@ -253,8 +253,19 @@ class SupabaseCloudBackend(
             throw SecurityException("Only gate staff can upload gate verification records.")
         }
         logs.forEach { log ->
-            client.from("gate_logs").upsert(GateLogRow.from(log, schoolId)) {
-                onConflict = "school_id,id"
+            // Gate events are append-only. Do not use upsert here: upsert requires
+            // UPDATE table privileges and an UPDATE RLS policy, neither of which
+            // should be granted to gate operators for an audit log. A retry first
+            // checks the immutable event ID; already-uploaded events are treated
+            // as successful and are not rewritten.
+            val existing = client.from("gate_logs").select {
+                filter {
+                    eq("school_id", schoolId)
+                    eq("id", log.id)
+                }
+            }.decodeSingleOrNull<GateLogRow>()
+            if (existing == null) {
+                client.from("gate_logs").insert(GateLogRow.from(log, schoolId))
             }
         }
     }
@@ -265,10 +276,26 @@ class SupabaseCloudBackend(
             throw SecurityException("Only meal staff can upload meal records.")
         }
         meals.forEach { meal ->
-            client.from("meals").upsert(MealRow.from(meal, schoolId)) {
-                // Database-level natural key prevents the same student receiving
-                // duplicate servings from two devices on the same meal date.
-                onConflict = "school_id,student_id,meal_type,meal_date"
+            // Meal records are append-only. Meal staff deliberately have no UPDATE
+            // privilege, so a PostgREST upsert is not permitted even for new rows.
+            // The database natural-key constraint makes this retry-safe across devices.
+            suspend fun existingServing() = client.from("meals").select {
+                filter {
+                    eq("school_id", schoolId)
+                    eq("student_id", meal.studentId)
+                    eq("meal_type", meal.mealType)
+                    eq("meal_date", meal.mealDate)
+                }
+            }.decodeSingleOrNull<MealRow>()
+
+            if (existingServing() == null) {
+                try {
+                    client.from("meals").insert(MealRow.from(meal, schoolId))
+                } catch (insertError: Exception) {
+                    // Another device may have recorded the same serving after our
+                    // read. Treat only that duplicate race as success; surface other errors.
+                    if (existingServing() == null) throw insertError
+                }
             }
         }
     }
@@ -349,10 +376,19 @@ class SupabaseCloudBackend(
                 offset += PAGE_SIZE
             }
         }
-        rows.filter { !it.photoPath.isNullOrBlank() }.mapNotNull { row ->
+        val photoRows = rows.filter { !it.photoPath.isNullOrBlank() }
+        val downloadedPhotos = photoRows.mapNotNull { row ->
             val local = downloadPhotoToCache(row.photoPath, row.id)
             if (local.isNullOrBlank()) null else row.id to local
         }.toMap()
+
+        // Do not report a successful backfill when even one cloud photo failed.
+        // SyncManager only writes its one-time refresh marker on success; keeping
+        // this Result failed makes the next sync retry incomplete photo downloads.
+        check(downloadedPhotos.size == photoRows.size) {
+            "Student photo backup is incomplete: downloaded ${downloadedPhotos.size} of ${photoRows.size}. Check Storage access and retry sync."
+        }
+        downloadedPhotos
     }
 
     private suspend fun uploadPhotoIfLocal(student: StudentEntity): String? {

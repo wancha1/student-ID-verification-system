@@ -45,7 +45,7 @@ A blank CSV header template is maintained at [docs/templates/ltc-student-roster-
 - Test lost-card revocation and replacement before handing cards to students.
 - Do not use real student records in screenshots, sample files, or support tickets.
 
-The current production database was configured as a clean start; no student roster has been migrated from Firebase. The live students table currently has zero records. No production roster import has been performed. The template does not mean that an end-to-end CSV importer has been implemented or tested; that remains a release acceptance item.
+The current production database was configured as a clean start; no student roster has been migrated from Firebase. As of 16 November 2026, the live LTC tenant contains one student record with one photo object in Storage. Treat this as a pilot/test record until the school's accountable data owner confirms otherwise; it is not an approved production roster import. No bulk production roster import has been performed. The template does not mean that an end-to-end CSV importer has been implemented or tested; that remains a release acceptance item.
 
 ## Device setup
 

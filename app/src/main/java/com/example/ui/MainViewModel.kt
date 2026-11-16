@@ -36,6 +36,9 @@ import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
 import com.example.crypto.KeystoreIssuerManager
+import io.github.jan.supabase.postgrest.from
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.crypto.TrustedIssuerEntry
 import com.example.util.CardCryptoManager
@@ -316,6 +319,9 @@ class MainViewModel(
             hasExplicitFinanceAccess = hasFinancePermission
         )
         dismissScanResult()
+        if (role == UserRole.ADMINISTRATOR && appContext != null && repository is com.example.data.RoomStudentRepository) {
+            setupAuthoritativeIssuerKey()
+        } else refreshTrustedIssuerKeys()
     }
 
     /**
@@ -355,6 +361,9 @@ class MainViewModel(
         _currentUser.value = user
         SecurityManager.saveActiveSession(context, user)
         dismissScanResult()
+        if (role == UserRole.ADMINISTRATOR && appContext != null && repository is com.example.data.RoomStudentRepository) {
+            setupAuthoritativeIssuerKey()
+        } else refreshTrustedIssuerKeys()
         _userFeedbackMessage.value = null
         return true
     }
@@ -565,6 +574,7 @@ class MainViewModel(
         viewModelScope.launch {
             val result = repository.syncWithCloud()
             if (result.isSuccess) {
+                refreshTrustedIssuerKeys()
                 val summary = result.getOrThrow()
                 _userFeedbackMessage.value = "Synced with central server! ${summary.logsUploaded} logs uploaded, ${summary.studentsUpdated} records updated."
             } else {
@@ -1254,15 +1264,96 @@ class MainViewModel(
     fun setupAuthoritativeIssuerKey(preferStrongBox: Boolean = true) {
         if (!requireAdminRole("Enrolling Issuer Signing Key")) return
         try {
-            val keyInfo = KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
-            val signer = KeystoreIssuerManager.getSigner()
-            CardCryptoManager.setActiveSigner(signer)
-            if (signer != null) {
-                TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Local Device (${keyInfo.securityLevel.name})")
+            if (!KeystoreIssuerManager.hasIssuerKey()) {
+                KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
             }
-            _userFeedbackMessage.value = "Issuer Key enrolled in Keystore! Level: ${keyInfo.securityLevel.name}, kid: ${keyInfo.keyId}"
+            val signer = KeystoreIssuerManager.getSigner()
+                ?: throw IllegalStateException("The enrolled Android Keystore signing key could not be loaded.")
+
+            // A locally revoked key must never be silently reactivated on sign-in.
+            if (TrustedIssuerRegistry.getIssuerEntry(signer.keyId)?.isRevoked == true) {
+                CardCryptoManager.clearIssuerPrivateKey()
+                throw IllegalStateException("This issuer key was revoked. Do not issue cards from this device.")
+            }
+
+            _userFeedbackMessage.value = "Checking issuer-key status with the LTC cloud before enabling card issuance…"
+            val context = appContext
+                ?: throw IllegalStateException("App context unavailable; public-key distribution cannot be started.")
+            viewModelScope.launch {
+                try {
+                    val client = SupabaseClientFactory.getInstance(context.applicationContext)
+                    val remote = client.from("trusted_issuers").select {
+                        filter {
+                            eq("school_id", "ltc_school_01")
+                            eq("key_id", signer.keyId)
+                        }
+                    }.decodeSingleOrNull<TrustedIssuerCloudRow>()
+
+                    if (remote?.isRevoked == true) {
+                        TrustedIssuerRegistry.revokeIssuer(signer.keyId)
+                        CardCryptoManager.clearIssuerPrivateKey()
+                        _userFeedbackMessage.value = "This issuer key is revoked in the LTC cloud. Card issuance is disabled on this device."
+                        return@launch
+                    }
+
+                    val entry = TrustedIssuerRegistry.registerTrustedKey(
+                        signer.publicKey,
+                        "LTC Authoritative Issuer"
+                    )
+                    client.from("trusted_issuers").upsert(
+                        TrustedIssuerCloudRow(
+                            schoolId = "ltc_school_01",
+                            keyId = entry.kid,
+                            publicKeyBase64 = entry.publicKeyBase64,
+                            label = entry.label,
+                            enrolledAtMs = entry.enrolledAt,
+                            isRevoked = false
+                        )
+                    ) { onConflict = "school_id,key_id" }
+                    CardCryptoManager.setActiveSigner(signer)
+                    refreshTrustedIssuerKeys()
+                    _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
+                } catch (e: Exception) {
+                    CardCryptoManager.clearIssuerPrivateKey()
+                    _userFeedbackMessage.value = "Issuer key could not be confirmed in the LTC cloud: ${e.localizedMessage ?: "unknown error"}. Card issuance remains disabled until sign-in retries successfully."
+                }
+            }
         } catch (e: Exception) {
-            _userFeedbackMessage.value = "Failed to enroll Keystore key: ${e.message}"
+            CardCryptoManager.clearIssuerPrivateKey()
+            _userFeedbackMessage.value = "Failed to enroll issuer key: ${e.message}"
+        }
+    }
+
+    private fun refreshTrustedIssuerKeys() {
+        val context = appContext ?: return
+        viewModelScope.launch {
+            try {
+                val rows = SupabaseClientFactory.getInstance(context.applicationContext)
+                    .from("trusted_issuers")
+                    .select {
+                        filter { eq("school_id", "ltc_school_01") }
+                    }
+                    .decodeList<TrustedIssuerCloudRow>()
+                val localSignerKeyId = KeystoreIssuerManager.getSigner()?.keyId
+                rows.forEach { row ->
+                    if (row.isRevoked) {
+                        TrustedIssuerRegistry.revokeIssuer(row.keyId)
+                        if (localSignerKeyId.equals(row.keyId, ignoreCase = true)) {
+                            CardCryptoManager.clearIssuerPrivateKey()
+                        }
+                    } else {
+                        TrustedIssuerRegistry.registerTrustedKeyBase64(
+                            row.publicKeyBase64,
+                            row.label,
+                            row.enrolledAtMs
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _userFeedbackMessage.value = "Issuer trust list could not be refreshed: ${e.localizedMessage ?: "check connection"}"
+                // Verifier devices keep their last-known public keys for offline operation.
+                // The issuer device may sign only after setupAuthoritativeIssuerKey confirms publication.
+            }
         }
     }
 
@@ -1278,9 +1369,33 @@ class MainViewModel(
 
     fun revokeTrustedIssuer(kid: String) {
         if (!requireAdminRole("Revoking trusted issuer key")) return
+        val existing = TrustedIssuerRegistry.getIssuerEntry(kid)
         val success = TrustedIssuerRegistry.revokeIssuer(kid)
-        if (success) {
-            _userFeedbackMessage.value = "Issuer key '$kid' revoked! Associated badges will now be rejected."
+        if (success && existing != null) {
+            val context = appContext
+            if (context != null) {
+                viewModelScope.launch {
+                    try {
+                        SupabaseClientFactory.getInstance(context.applicationContext)
+                            .from("trusted_issuers")
+                            .upsert(
+                                TrustedIssuerCloudRow(
+                                    schoolId = "ltc_school_01",
+                                    keyId = existing.kid,
+                                    publicKeyBase64 = existing.publicKeyBase64,
+                                    label = existing.label,
+                                    enrolledAtMs = existing.enrolledAt,
+                                    isRevoked = true
+                                )
+                            ) { onConflict = "school_id,key_id" }
+                        _userFeedbackMessage.value = "Issuer key revoked in the LTC cloud. Devices will reject its cards after their next successful sync."
+                    } catch (e: Exception) {
+                        _userFeedbackMessage.value = "Local key revoked, but cloud revocation failed: ${e.localizedMessage ?: "unknown error"}"
+                    }
+                }
+            } else {
+                _userFeedbackMessage.value = "Issuer key revoked on this device."
+            }
         } else {
             _userFeedbackMessage.value = "Key '$kid' not found in trusted registry."
         }
@@ -1343,17 +1458,26 @@ class MainViewModel(
                         _currentScannedCard.value = result.card
                         _scanError.value = null
                         if (result.department == ScanDepartment.MEALS) {
-                            val newMeal = MealRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                mealType = result.mealType ?: MealType.LUNCH,
-                                timestamp = System.currentTimeMillis(),
-                                serverName = user.name,
-                                status = result.mealStatus ?: MealServingStatus.SERVED
-                            )
-                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            val mealType = result.mealType ?: MealType.LUNCH
+                            if (!result.isAllowed || result.mealStatus == MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE) {
+                                // Never show an approval dialog for a policy-denied meal scan.
+                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                    student = result.student,
+                                    reason = result.statusDetail
+                                )
+                            } else {
+                                val newMeal = MealRecord(
+                                    studentId = result.student.id,
+                                    studentNumber = result.student.studentNumber,
+                                    studentName = result.student.fullName,
+                                    gradeClass = result.student.gradeClass,
+                                    mealType = mealType,
+                                    timestamp = System.currentTimeMillis(),
+                                    serverName = user.name,
+                                    status = result.mealStatus ?: MealServingStatus.SERVED
+                                )
+                                _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
                                 studentId = result.student.id,
@@ -1370,6 +1494,24 @@ class MainViewModel(
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
+                        if (result.department == ScanDepartment.MEALS) {
+                            val mealType = _activeMealType.value
+                            val previousRecord = MealRecord(
+                                studentId = result.student.id,
+                                studentNumber = result.student.studentNumber,
+                                studentName = result.student.fullName,
+                                gradeClass = result.student.gradeClass,
+                                mealType = mealType,
+                                timestamp = result.existingEventTimestamp ?: System.currentTimeMillis(),
+                                serverName = "Previously recorded",
+                                status = MealServingStatus.SERVED
+                            )
+                            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
+                                student = result.student,
+                                mealType = mealType,
+                                previousRecord = previousRecord
+                            )
+                        }
                         context?.let { FeedbackHelper.playWarningSoundAndHaptic(it) }
                     }
                     is DepartmentVerificationResult.PermissionDenied -> {
@@ -1455,3 +1597,14 @@ class MainViewModel(
 }
 
 
+
+
+@Serializable
+private data class TrustedIssuerCloudRow(
+    @SerialName("school_id") val schoolId: String,
+    @SerialName("key_id") val keyId: String,
+    @SerialName("public_key_base64") val publicKeyBase64: String,
+    val label: String,
+    @SerialName("enrolled_at_ms") val enrolledAtMs: Long,
+    @SerialName("is_revoked") val isRevoked: Boolean
+)
