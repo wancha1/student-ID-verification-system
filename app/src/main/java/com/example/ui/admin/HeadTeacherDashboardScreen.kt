@@ -1,6 +1,5 @@
 package com.example.ui.admin
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -35,11 +35,10 @@ import com.example.model.MealRecord
 import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.ui.theme.LocalRoleTheme
-import com.example.ui.theme.roleGlassBackground
 
 /**
- * Version 1 Head Teacher overview.
- * Read-only oversight is limited to the student roster, gate activity and meal service.
+ * Read-only operational overview for the Head Teacher.
+ * Actions are limited to the live oversight modules available in LTC V1.
  */
 @Composable
 fun HeadTeacherDashboardScreen(
@@ -52,41 +51,110 @@ fun HeadTeacherDashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val roleTheme = LocalRoleTheme.current
+    val todayMeals = mealRecords.count { it.mealDate == java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) }
+
     LazyColumn(
-        modifier = modifier.fillMaxSize().roleGlassBackground(roleTheme.primaryColor),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 18.dp, 16.dp, 100.dp)
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = 18.dp, vertical = 20.dp
+        )
     ) {
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xCC14263D)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text("SCHOOL LEADERSHIP", color = Color(0xFFE8C77A), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                    Text("Good day, ${user.name}", color = Color.White, style = MaterialTheme.typography.headlineSmall)
-                    Text("Version 1 operational overview • Lira Town College", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.bodyMedium)
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "LIRA TOWN COLLEGE",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = roleTheme.primaryColor,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.4.sp
+                )
+                Text(
+                    text = "Good day, ${user.name}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "School operations at a glance",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
+
         item {
-            Text("School at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                LeadershipMetric("Students", students.size.toString(), Icons.Default.School, Modifier.weight(1f))
-                LeadershipMetric("Meal records", mealRecords.size.toString(), Icons.Default.Restaurant, Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LeadershipMetric(
+                    label = "Registered students",
+                    value = students.size.toString(),
+                    icon = Icons.Default.School,
+                    modifier = Modifier.weight(1f)
+                )
+                LeadershipMetric(
+                    label = "Meals today",
+                    value = todayMeals.toString(),
+                    icon = Icons.Default.Restaurant,
+                    modifier = Modifier.weight(1f)
+                )
             }
             Spacer(Modifier.height(10.dp))
-            LeadershipMetric("Gate records", gateLogs.size.toString(), Icons.Default.History, Modifier.fillMaxWidth())
+            LeadershipMetric(
+                label = "Gate activity records",
+                value = gateLogs.size.toString(),
+                icon = Icons.Default.History,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-        item { Text("Operational oversight", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+
         item {
-            LeadershipAction("Gate activity", "Review student entry decisions and gate logs", Icons.Default.History, onOpenGateLogs)
+            Text(
+                "Operational oversight",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
         }
         item {
-            LeadershipAction("Meals oversight", "Review meal service records across meal sessions", Icons.Default.Restaurant, onOpenMeals)
+            LeadershipAction(
+                title = "Gate activity",
+                description = "Review recent student entry decisions and access history",
+                icon = Icons.Default.History,
+                onClick = onOpenGateLogs,
+                accent = Color(0xFF2563EB)
+            )
+        }
+        item {
+            LeadershipAction(
+                title = "Meal service",
+                description = "Review serving records and meal-session activity",
+                icon = Icons.Default.Restaurant,
+                onClick = onOpenMeals,
+                accent = Color(0xFF0F766E)
+            )
+        }
+        item {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Default.TrendingUp,
+                        contentDescription = null,
+                        tint = roleTheme.primaryColor
+                    )
+                    Text(
+                        "Figures reflect records currently available on this device.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -100,19 +168,36 @@ private fun LeadershipMetric(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = Color(0xFF52769A), modifier = Modifier.size(24.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(9.dp).size(21.dp)
+                )
             }
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -122,11 +207,12 @@ private fun LeadershipAction(
     title: String,
     description: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    accent: Color
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -135,14 +221,25 @@ private fun LeadershipAction(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF52769A).copy(alpha = 0.12f)) {
-                Icon(icon, contentDescription = null, tint = Color(0xFF52769A), modifier = Modifier.padding(10.dp).size(22.dp))
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = accent.copy(alpha = 0.12f)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.padding(12.dp).size(24.dp)
+                )
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
                 Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("›", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp)
+            Text("›", color = accent, style = MaterialTheme.typography.headlineSmall)
         }
     }
 }
