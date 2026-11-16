@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AuthUser
+import com.example.model.AttendanceRecord
 import com.example.model.MealRecord
 import com.example.model.MealServingStatus
 import com.example.model.ScanLog
@@ -63,8 +64,12 @@ fun HeadTeacherDashboardScreen(
     students: List<Student>,
     mealRecords: List<MealRecord>,
     gateLogs: List<ScanLog>,
+    attendanceRecords: List<AttendanceRecord>,
     onOpenGateLogs: () -> Unit,
     onOpenMeals: () -> Unit,
+    onOpenAttendance: () -> Unit,
+    onOpenRequirements: () -> Unit,
+    onOpenExeat: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val roleTheme = LocalRoleTheme.current
@@ -80,6 +85,9 @@ fun HeadTeacherDashboardScreen(
     }
     val approvedGate = todayGate.count { it.isApproved }
     val blockedGate = todayGate.size - approvedGate
+    val todayAttendance = attendanceRecords.filter { it.lessonDate == today }
+    val presentToday = todayAttendance.count { it.isPresent }
+    val absentToday = todayAttendance.size - presentToday
     val classCounts = remember(activeStudents) {
         activeStudents.groupingBy { it.gradeClass.ifBlank { "Unassigned class" } }.eachCount()
             .toList().sortedByDescending { it.second }
@@ -143,6 +151,13 @@ fun HeadTeacherDashboardScreen(
         }
 
         item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OverviewMetric("Attendance marked", todayAttendance.size.toString(), Icons.Default.TrendingUp, Modifier.weight(1f))
+                OverviewMetric("Present", presentToday.toString(), Icons.Default.School, Modifier.weight(1f))
+            }
+        }
+
+        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -167,6 +182,15 @@ fun HeadTeacherDashboardScreen(
 
         item {
             WorkspaceAction("Meals oversight", "Review meal service activity and serving history", Icons.Default.Restaurant, onOpenMeals)
+        }
+        item {
+            WorkspaceAction("Class attendance", "Review class, subject and session attendance records", Icons.Default.TrendingUp, onOpenAttendance)
+        }
+        item {
+            WorkspaceAction("Student requirements", "Review clearance checklists and outstanding requirements", Icons.Default.School, onOpenRequirements)
+        }
+        item {
+            WorkspaceAction("Exeat passes", "Review student leave requests and used / outstanding passes", Icons.Default.History, onOpenExeat)
         }
 
         item {
