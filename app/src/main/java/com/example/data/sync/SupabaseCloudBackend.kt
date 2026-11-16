@@ -253,8 +253,19 @@ class SupabaseCloudBackend(
             throw SecurityException("Only gate staff can upload gate verification records.")
         }
         logs.forEach { log ->
-            client.from("gate_logs").upsert(GateLogRow.from(log, schoolId)) {
-                onConflict = "school_id,id"
+            // Gate events are append-only. Do not use upsert here: upsert requires
+            // UPDATE table privileges and an UPDATE RLS policy, neither of which
+            // should be granted to gate operators for an audit log. A retry first
+            // checks the immutable event ID; already-uploaded events are treated
+            // as successful and are not rewritten.
+            val existing = client.from("gate_logs").select {
+                filter {
+                    eq("school_id", schoolId)
+                    eq("id", log.id)
+                }
+            }.decodeSingleOrNull<GateLogRow>()
+            if (existing == null) {
+                client.from("gate_logs").insert(GateLogRow.from(log, schoolId))
             }
         }
     }
