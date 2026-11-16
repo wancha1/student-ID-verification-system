@@ -319,7 +319,8 @@ class MainViewModel(
             hasExplicitFinanceAccess = hasFinancePermission
         )
         dismissScanResult()
-        refreshTrustedIssuerKeys()
+        if (role == UserRole.ADMINISTRATOR) setupAuthoritativeIssuerKey()
+        else refreshTrustedIssuerKeys()
     }
 
     /**
@@ -359,6 +360,8 @@ class MainViewModel(
         _currentUser.value = user
         SecurityManager.saveActiveSession(context, user)
         dismissScanResult()
+        if (role == UserRole.ADMINISTRATOR) setupAuthoritativeIssuerKey()
+        else refreshTrustedIssuerKeys()
         _userFeedbackMessage.value = null
         return true
     }
