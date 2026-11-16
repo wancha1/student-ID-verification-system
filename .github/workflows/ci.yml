@@ -32,6 +32,20 @@ jobs:
           gradle-version: "9.3.1"
       - name: Validate Supabase real-token test script syntax
         run: bash -n scripts/supabase-real-token-smoke.sh
+      - name: Run real-token Supabase role smoke tests
+        if: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_PUBLISHABLE_KEY != '' && secrets.TEST_ADMIN_EMAIL != '' && secrets.TEST_ADMIN_PASSWORD != '' && secrets.TEST_HEAD_TEACHER_EMAIL != '' && secrets.TEST_HEAD_TEACHER_PASSWORD != '' && secrets.TEST_GATE_OFFICER_EMAIL != '' && secrets.TEST_GATE_OFFICER_PASSWORD != '' && secrets.TEST_MEAL_STAFF_EMAIL != '' && secrets.TEST_MEAL_STAFF_PASSWORD != '' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
+          TEST_HEAD_TEACHER_PASSWORD: ${{ secrets.TEST_HEAD_TEACHER_PASSWORD }}
+          TEST_GATE_OFFICER_EMAIL: ${{ secrets.TEST_GATE_OFFICER_EMAIL }}
+          TEST_GATE_OFFICER_PASSWORD: ${{ secrets.TEST_GATE_OFFICER_PASSWORD }}
+          TEST_MEAL_STAFF_EMAIL: ${{ secrets.TEST_MEAL_STAFF_EMAIL }}
+          TEST_MEAL_STAFF_PASSWORD: ${{ secrets.TEST_MEAL_STAFF_PASSWORD }}
+        run: bash scripts/supabase-real-token-smoke.sh
       - name: Generate ephemeral debug keystore
         run: |
           keytool -genkeypair -v \
