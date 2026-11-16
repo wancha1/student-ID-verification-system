@@ -570,6 +570,9 @@ class MainViewModel(
         viewModelScope.launch {
             val result = repository.syncWithCloud()
             if (result.isSuccess) {
+                // Refresh public issuer keys after the data sync so gate terminals
+                // learn newly enrolled or revoked issuers without reinstalling the app.
+                refreshTrustedIssuerKeys()
                 val summary = result.getOrThrow()
                 _userFeedbackMessage.value = "Synced with central server! ${summary.logsUploaded} logs uploaded, ${summary.studentsUpdated} records updated."
             } else {
