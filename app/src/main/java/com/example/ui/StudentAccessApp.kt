@@ -540,6 +540,17 @@ fun StudentAccessApp(
                                     }
                                     if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
+                                        text = { Text("Enroll card-signing key") },
+                                        leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) },
+                                        onClick = {
+                                            viewModel.setupAuthoritativeIssuerKey()
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_enroll_issuer_key")
+                                    )
+                                    }
+                                    if (user.role == UserRole.ADMINISTRATOR) {
+                                    DropdownMenuItem(
                                         text = { Text("Batch ID Badges Studio") },
                                         leadingIcon = {
                                             Icon(
