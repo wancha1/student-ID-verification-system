@@ -5,6 +5,7 @@ import com.example.BuildConfig
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.storage.Storage
 
@@ -50,6 +51,9 @@ object SupabaseClientFactory {
                 autoLoadFromStorage = true
                 autoSaveToStorage = true
                 alwaysAutoRefresh = true
+                host = "auth-callback"
+                scheme = "ltcstudentaccess"
+                flowType = FlowType.PKCE
             }
             install(Postgrest)
             install(Storage)
