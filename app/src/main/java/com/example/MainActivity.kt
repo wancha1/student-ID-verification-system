@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import io.github.jan.supabase.handleDeeplinks
+import io.github.jan.supabase.auth.handleDeeplinks
 import com.example.data.auth.SupabaseClientFactory
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -31,8 +31,13 @@ class MainActivity : ComponentActivity() {
     private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
         val callback = callbackIntent?.data ?: return
         if (callback.scheme == "ltcstudentaccess" && callback.host == "auth-callback") {
-            passwordRecoveryRequested = true
-            runCatching { SupabaseClientFactory.getInstance(applicationContext).handleDeeplinks(callbackIntent) }
+            runCatching {
+                SupabaseClientFactory.getInstance(applicationContext).handleDeeplinks(
+                    callbackIntent,
+                    onSessionSuccess = { passwordRecoveryRequested = true },
+                    onError = { /* Invalid or expired recovery links stay on the login screen. */ }
+                )
+            }
         }
     }
 
