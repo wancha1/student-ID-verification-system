@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import com.example.MainActivity
 import com.example.data.auth.SupabaseClientFactory
 import com.example.data.auth.SupabaseStaffAuthenticator
+import io.github.jan.supabase.auth.auth
 import com.example.model.UserRole
 import kotlinx.coroutines.launch
 
