@@ -148,6 +148,7 @@ fun SupabaseStaffLoginScreen(
                                 SupabaseClientFactory.getInstance(context.applicationContext).auth.updateUser {
                                     password = recoveryPassword
                                 }
+                                SupabaseClientFactory.getInstance(context.applicationContext).auth.signOut()
                                 MainActivity.dismissPasswordRecovery()
                                 recoveryPassword = ""
                                 recoveryPasswordConfirm = ""
