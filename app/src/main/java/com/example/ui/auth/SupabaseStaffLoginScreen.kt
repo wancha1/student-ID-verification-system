@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.MainActivity
 import com.example.data.auth.SupabaseClientFactory
 import com.example.data.auth.SupabaseStaffAuthenticator
 import com.example.model.UserRole
@@ -87,6 +90,11 @@ fun SupabaseStaffLoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var recoveryPassword by remember { mutableStateOf("") }
+    var recoveryPasswordConfirm by remember { mutableStateOf("") }
+    var recoveryBusy by remember { mutableStateOf(false) }
+    var recoveryMessage by remember { mutableStateOf<String?>(null) }
+    var showForgotDialog by remember { mutableStateOf(false) }
     var errorMessage by remember {
         mutableStateOf(
             if (authenticator == null) {
@@ -99,6 +107,121 @@ fun SupabaseStaffLoginScreen(
     val deepBlue = Color(0xFF102941)
     val champagne = Color(0xFFE8C77A)
     val mutedText = Color(0xFF627286)
+
+    if (MainActivity.passwordRecoveryRequested) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Create a new password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Choose a new password for your LTC staff account.")
+                    OutlinedTextField(
+                        value = recoveryPassword,
+                        onValueChange = { recoveryPassword = it; recoveryMessage = null },
+                        label = { Text("New password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled = !recoveryBusy
+                    )
+                    OutlinedTextField(
+                        value = recoveryPasswordConfirm,
+                        onValueChange = { recoveryPasswordConfirm = it; recoveryMessage = null },
+                        label = { Text("Confirm new password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        enabled = !recoveryBusy
+                    )
+                    recoveryMessage?.let { Text(it, color = Color(0xFF9B2C2C), style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !recoveryBusy && recoveryPassword.length >= 8 && recoveryPassword == recoveryPasswordConfirm,
+                    onClick = {
+                        scope.launch {
+                            recoveryBusy = true
+                            recoveryMessage = null
+                            try {
+                                SupabaseClientFactory.getInstance(context.applicationContext).auth.updateUser {
+                                    password = recoveryPassword
+                                }
+                                MainActivity.passwordRecoveryRequested = false
+                                recoveryPassword = ""
+                                recoveryPasswordConfirm = ""
+                                errorMessage = "Password updated. Sign in using your new password."
+                            } catch (_: Exception) {
+                                recoveryMessage = "The password could not be updated. Reopen the latest recovery email and try again."
+                            } finally {
+                                recoveryBusy = false
+                            }
+                        }
+                    }
+                ) { Text(if (recoveryBusy) "Updating…" else "Update password") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !recoveryBusy,
+                    onClick = {
+                        scope.launch {
+                            runCatching { SupabaseClientFactory.getInstance(context.applicationContext).auth.signOut() }
+                            MainActivity.dismissPasswordRecovery()
+                            recoveryPassword = ""
+                            recoveryPasswordConfirm = ""
+                        }
+                    }
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showForgotDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isLoading) showForgotDialog = false },
+            title = { Text("Reset your password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("We’ll send a secure recovery link to your staff email address.")
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it; errorMessage = null },
+                        label = { Text("Staff email") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        enabled = !isLoading
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isLoading && email.contains("@"),
+                    onClick = {
+                        scope.launch {
+                            isLoading = true
+                            errorMessage = null
+                            try {
+                                SupabaseClientFactory.getInstance(context.applicationContext).auth.resetPasswordForEmail(
+                                    email = email.trim(),
+                                    redirectUrl = "ltcstudentaccess://auth-callback"
+                                )
+                                errorMessage = "If this email belongs to an LTC staff account, a recovery link has been sent. Check your inbox and spam folder."
+                                showForgotDialog = false
+                            } catch (_: Exception) {
+                                errorMessage = "A recovery request could not be completed. Check your connection and try again."
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    }
+                ) { Text(if (isLoading) "Sending…" else "Send recovery link") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgotDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
 
     Box(
         modifier = modifier
@@ -253,6 +376,10 @@ fun SupabaseStaffLoginScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    TextButton(onClick = { showForgotDialog = true }, enabled = !isLoading, modifier = Modifier.align(Alignment.End)) {
+                        Text("Forgot password?", color = Color(0xFF8D6827), fontWeight = FontWeight.SemiBold)
+                    }
 
                     if (errorMessage != null) {
                         Surface(
