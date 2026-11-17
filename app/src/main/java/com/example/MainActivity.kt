@@ -22,6 +22,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         var passwordRecoveryRequested by mutableStateOf(false)
             private set
+
+        fun dismissPasswordRecovery() {
+            passwordRecoveryRequested = false
+        }
     }
 
     private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
