@@ -336,6 +336,23 @@ class SupabaseCloudBackend(
         updatedAt: Long
     ): Result<Unit> = runCatching {
         if (activeRole() != "ADMIN" || !hasFinanceAccess()) throw SecurityException("Explicit finance permission is required to update fee status.")
+
+        // Gate terminals are allowed to read the student roster, not the private
+        // finance table. Keep the non-monetary clearance decision projected onto
+        // students.fee_status so every authorised staff device can enforce the
+        // same gate rule. Monetary balances remain isolated in student_finances.
+        // If the finance write fails after this projection, the durable FEE_STATUS
+        // outbox item remains pending and retries both writes idempotently.
+        client.from("students").update({
+            set("fee_status", newStatus.name)
+            set("updated_at_ms", updatedAt)
+        }) {
+            filter {
+                eq("school_id", schoolId)
+                eq("id", studentId)
+            }
+        }
+
         client.from("student_finances").upsert(
             StudentFinanceRow(
                 schoolId = schoolId,
