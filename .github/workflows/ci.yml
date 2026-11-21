@@ -34,42 +34,45 @@ jobs:
         run: bash -n scripts/supabase-real-token-smoke.sh
       - name: Generate ephemeral debug keystore
         run: |
-          keytool -genkeypair -v \
-            -keystore debug.keystore \
-            -storepass android \
-            -keypass android \
-            -alias androiddebugkey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
+          keytool -genkeypair -v \\
+            -keystore debug.keystore \\
+            -storepass android \\
+            -keypass android \\
+            -alias androiddebugkey \\
+            -keyalg RSA \\
+            -keysize 2048 \\
+            -validity 10000 \\
             -dname "CN=Android Debug,O=Android,C=US"
       - name: Generate ephemeral CI-only release keystore
         env:
           STORE_PASSWORD: ci-only-store-password
           KEY_PASSWORD: ci-only-store-password
         run: |
-          keytool -genkeypair -v \
-            -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \
-            -storepass "$STORE_PASSWORD" \
-            -keypass "$STORE_PASSWORD" \
-            -alias upload \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 2 \
+          keytool -genkeypair -v \\
+            -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \\
+            -storepass "$STORE_PASSWORD" \\
+            -keypass "$STORE_PASSWORD" \\
+            -alias upload \\
+            -keyalg RSA \\
+            -keysize 2048 \\
+            -validity 2 \\
             -dname "CN=CI Only,O=Non-Production,C=UG"
       - name: Compile debug and release APK variants
         env:
           STORE_PASSWORD: ci-only-store-password
           KEY_PASSWORD: ci-only-store-password
         run: |
-          KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
-            STORE_PASSWORD="$STORE_PASSWORD" \
-            KEY_PASSWORD="$STORE_PASSWORD" \
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \\
+            STORE_PASSWORD="$STORE_PASSWORD" \\
+            KEY_PASSWORD="$STORE_PASSWORD" \\
             gradle --no-daemon --no-build-cache assembleDebug assembleRelease
       - name: Run Android unit tests
         run: gradle --no-daemon testDebugUnitTest --stacktrace
       - name: Run device smoke tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # Current emulator releases require explicit opt-in to TCG when KVM is unavailable.
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           # API 34 keeps the CI smoke test on a stable, widely supported image.
           api-level: 34
@@ -96,4 +99,3 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 7
-
