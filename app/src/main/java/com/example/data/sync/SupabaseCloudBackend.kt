@@ -13,6 +13,7 @@ import com.example.model.FeeStatus
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -62,6 +63,7 @@ class SupabaseCloudBackend(
                         eq("school_id", schoolId)
                         gt("updated_at_ms", timestamp)
                     }
+                    order(column = "id", order = Order.ASCENDING)
                     range(offset..(offset + PAGE_SIZE - 1))
                 }.decodeList<StudentRow>()
                 addAll(page)
@@ -76,6 +78,7 @@ class SupabaseCloudBackend(
                 while (true) {
                     val page = client.from("student_private").select {
                         filter { eq("school_id", schoolId) }
+                        order(column = "student_id", order = Order.ASCENDING)
                         range(offset..(offset + PAGE_SIZE - 1))
                     }.decodeList<StudentPrivateRow>()
                     addAll(page)
@@ -92,6 +95,7 @@ class SupabaseCloudBackend(
                 while (true) {
                     val page = client.from("student_finances").select {
                         filter { eq("school_id", schoolId) }
+                        order(column = "student_id", order = Order.ASCENDING)
                         range(offset..(offset + PAGE_SIZE - 1))
                     }.decodeList<StudentFinanceRow>()
                     addAll(page)
@@ -146,6 +150,7 @@ class SupabaseCloudBackend(
                         eq("school_id", schoolId)
                         gt("updated_at_ms", timestamp)
                     }
+                    order(column = "id", order = Order.ASCENDING)
                     range(offset..(offset + PAGE_SIZE - 1))
                 }.decodeList<CardRow>()
                 addAll(page)
@@ -168,6 +173,7 @@ class SupabaseCloudBackend(
             while (true) {
                 val page = client.from("meals").select {
                     filter { eq("school_id", schoolId) }
+                    order(column = "id", order = Order.ASCENDING)
                     range(offset..(offset + PAGE_SIZE - 1))
                 }.decodeList<MealRow>()
                 addAll(page)
@@ -184,6 +190,7 @@ class SupabaseCloudBackend(
             while (true) {
                 val page = client.from("attendance_records").select {
                     filter { eq("school_id", schoolId) }
+                    order(column = "id", order = Order.ASCENDING)
                     range(offset..(offset + PAGE_SIZE - 1))
                 }.decodeList<AttendanceRow>()
                 addAll(page)
@@ -200,6 +207,7 @@ class SupabaseCloudBackend(
             while (true) {
                 val page = client.from("exam_exceptions").select {
                     filter { eq("school_id", schoolId) }
+                    order(column = "id", order = Order.ASCENDING)
                     range(offset..(offset + PAGE_SIZE - 1))
                 }.decodeList<ExamExceptionRow>()
                 addAll(page)
@@ -370,6 +378,7 @@ class SupabaseCloudBackend(
             while (true) {
                 val page = client.from("students").select {
                     filter { eq("school_id", schoolId) }
+                    order(column = "id", order = Order.ASCENDING)
                     range(offset..(offset + PAGE_SIZE - 1))
                 }.decodeList<StudentRow>()
                 addAll(page)
