@@ -70,6 +70,9 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest --stacktrace
       - name: Run device smoke tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # Explicitly allow TCG fallback on hosted runners without KVM acceleration.
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           # API 34 keeps the CI smoke test on a stable, widely supported image.
           api-level: 34
@@ -96,4 +99,3 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 7
-

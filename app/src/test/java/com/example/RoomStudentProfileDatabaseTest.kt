@@ -9,6 +9,7 @@ import com.example.model.AccessStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
+import com.example.util.CardCryptoManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -32,10 +33,13 @@ class RoomStudentProfileDatabaseTest {
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = AppDatabase.createInMemory(context)
+        // Registration now requires an issuer key; tests use a disposable software signer.
+        CardCryptoManager.setActiveSigner(TestIssuerSignerFactory.create())
     }
 
     @After
     fun tearDown() {
+        CardCryptoManager.clearIssuerPrivateKey()
         database.close()
     }
 
@@ -196,8 +200,8 @@ class RoomStudentProfileDatabaseTest {
             accessStatus = AccessStatus.RESTRICTED_FEES
         )
 
-        repo.addStudent(student)
-        repo.updateFeeStatus(student.id, FeeStatus.CLEARED, 0.0)
+        assertTrue("Student registration should succeed with the test issuer", repo.addStudent(student).isSuccess)
+        assertTrue("Fee update should succeed", repo.updateFeeStatus(student.id, FeeStatus.CLEARED, 0.0).isSuccess)
 
         val pending = database.pendingChangeDao().getPendingChanges()
         assertTrue("Student creation must remain queued for V1 synchronization", pending.any {

@@ -97,6 +97,10 @@ class SyncManager(
         syncMutex.withLock {
             _syncInfo.value = _syncInfo.value.copy(status = SyncStatus.SYNCING, errorMessage = null)
             try {
+                // Preserve the first actionable failure across all sync queues.
+                // Without this, non-outbox failures were reduced to a vague pending count.
+                var firstUploadFailure: String? = null
+
                 // 1. Upload unsynced local gate verification logs to cloud
                 val unsyncedLogs = database.scanLogDao().getUnsyncedLogs()
                 var logsUploadedCount = 0
@@ -105,6 +109,8 @@ class SyncManager(
                     if (uploadResult.isSuccess) {
                         database.scanLogDao().markLogsAsSynced(unsyncedLogs.map { it.id })
                         logsUploadedCount += unsyncedLogs.size
+                    } else {
+                        firstUploadFailure = "Gate log upload: ${uploadResult.exceptionOrNull()?.localizedMessage ?: "unknown remote error"}"
                     }
                 }
 
@@ -115,6 +121,8 @@ class SyncManager(
                     if (mealResult.isSuccess) {
                         database.mealRecordDao().markSynced(unsyncedMeals.map { it.id })
                         logsUploadedCount += unsyncedMeals.size
+                    } else {
+                        firstUploadFailure = firstUploadFailure ?: "Meal upload: ${mealResult.exceptionOrNull()?.localizedMessage ?: "unknown remote error"}"
                     }
                 }
 
@@ -125,6 +133,8 @@ class SyncManager(
                     if (result.isSuccess) {
                         database.attendanceRecordDao().markSynced(unsyncedAttendance.map { it.id })
                         logsUploadedCount += unsyncedAttendance.size
+                    } else {
+                        firstUploadFailure = firstUploadFailure ?: "Attendance upload: ${result.exceptionOrNull()?.localizedMessage ?: "unknown remote error"}"
                     }
                 }
 
@@ -135,6 +145,8 @@ class SyncManager(
                     if (result.isSuccess) {
                         database.examExceptionDao().markSynced(unsyncedExceptions.map { it.id })
                         logsUploadedCount += unsyncedExceptions.size
+                    } else {
+                        firstUploadFailure = firstUploadFailure ?: "Exam exception upload: ${result.exceptionOrNull()?.localizedMessage ?: "unknown remote error"}"
                     }
                 }
 
@@ -317,7 +329,7 @@ class SyncManager(
                     val failureDetail = firstFailure?.let { change ->
                         "${change.entityType} ${change.operationType} (${change.recordId}): ${change.lastError ?: "Remote write failed"}"
                     }
-                    val message = failureDetail
+                    val message = failureDetail ?: firstUploadFailure
                         ?: "$pendingAfter local change(s) remain unsynchronized; they will be retried."
                     _syncInfo.value = _syncInfo.value.copy(
                         status = SyncStatus.SYNC_FAILED,

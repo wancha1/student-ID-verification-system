@@ -36,6 +36,10 @@ import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.UserRole
 import com.example.crypto.KeystoreIssuerManager
+import com.example.crypto.CardCryptoUtils
+import io.github.jan.supabase.postgrest.from
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.crypto.TrustedIssuerEntry
 import com.example.util.CardCryptoManager
@@ -316,6 +320,7 @@ class MainViewModel(
             hasExplicitFinanceAccess = hasFinancePermission
         )
         dismissScanResult()
+        refreshTrustedIssuerKeys()
     }
 
     /**
@@ -565,6 +570,9 @@ class MainViewModel(
         viewModelScope.launch {
             val result = repository.syncWithCloud()
             if (result.isSuccess) {
+                // Refresh public issuer keys after the data sync so gate terminals
+                // learn newly enrolled or revoked issuers without reinstalling the app.
+                refreshTrustedIssuerKeys()
                 val summary = result.getOrThrow()
                 _userFeedbackMessage.value = "Synced with central server! ${summary.logsUploaded} logs uploaded, ${summary.studentsUpdated} records updated."
             } else {
@@ -690,18 +698,30 @@ class MainViewModel(
         }
         viewModelScope.launch {
             val result = repository.updateStudent(student)
-            if (result.isSuccess) {
-                _userFeedbackMessage.value = "Updated details for ${student.fullName}."
-                if (_currentScannedStudent.value?.id.equals(student.id, ignoreCase = true) ||
-                    _currentScannedStudent.value?.studentNumber.equals(student.studentNumber, ignoreCase = true)
-                ) {
-                    _currentScannedStudent.value = student
-                }
-                onComplete(true, "Student updated successfully")
-            } else {
-                val msg = result.exceptionOrNull()?.message ?: "Failed to update student"
+            if (result.isFailure) {
+                val msg = result.exceptionOrNull()?.localizedMessage ?: "Failed to update student"
                 _userFeedbackMessage.value = msg
                 onComplete(false, msg)
+                return@launch
+            }
+
+            if (_currentScannedStudent.value?.id.equals(student.id, ignoreCase = true) ||
+                _currentScannedStudent.value?.studentNumber.equals(student.studentNumber, ignoreCase = true)
+            ) {
+                _currentScannedStudent.value = student
+            }
+
+            val syncResult = repository.syncWithCloud()
+            if (syncResult.isSuccess) {
+                val msg = "Updated ${student.fullName} and synchronized the change to the school database."
+                _userFeedbackMessage.value = msg
+                onComplete(true, msg)
+            } else {
+                val detail = syncResult.exceptionOrNull()?.localizedMessage
+                val msg = "Updated ${student.fullName} on this device. Cloud sync is pending and will retry." +
+                    (detail?.takeIf { it.isNotBlank() }?.let { " Details: $it" } ?: "")
+                _userFeedbackMessage.value = msg
+                onComplete(true, msg)
             }
         }
     }
@@ -710,10 +730,23 @@ class MainViewModel(
         if (!requireAdminRole("Deleting student records")) return
         viewModelScope.launch {
             val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
-            repository.deleteStudent(studentId)
-            _userFeedbackMessage.value = "Removed student ${student?.fullName ?: studentId}."
+            val deleteResult = repository.deleteStudent(studentId)
+            if (deleteResult.isFailure) {
+                _userFeedbackMessage.value = "Could not deactivate student: ${deleteResult.exceptionOrNull()?.localizedMessage ?: "local database error"}"
+                return@launch
+            }
+
             if (_selectedStudentId.value.equals(studentId, ignoreCase = true)) {
                 _selectedStudentId.value = null
+            }
+
+            val syncResult = repository.syncWithCloud()
+            val name = student?.fullName ?: studentId
+            _userFeedbackMessage.value = if (syncResult.isSuccess) {
+                "Deactivated $name and synchronized the change to the school database."
+            } else {
+                "Deactivated $name on this device. Cloud sync is pending and will retry. " +
+                    (syncResult.exceptionOrNull()?.localizedMessage ?: "")
             }
         }
     }
@@ -1254,15 +1287,67 @@ class MainViewModel(
     fun setupAuthoritativeIssuerKey(preferStrongBox: Boolean = true) {
         if (!requireAdminRole("Enrolling Issuer Signing Key")) return
         try {
-            val keyInfo = KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
-            val signer = KeystoreIssuerManager.getSigner()
-            CardCryptoManager.setActiveSigner(signer)
-            if (signer != null) {
-                TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Local Device (${keyInfo.securityLevel.name})")
+            if (!KeystoreIssuerManager.hasIssuerKey()) {
+                KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
             }
-            _userFeedbackMessage.value = "Issuer Key enrolled in Keystore! Level: ${keyInfo.securityLevel.name}, kid: ${keyInfo.keyId}"
+            val signer = KeystoreIssuerManager.getSigner()
+                ?: throw IllegalStateException("The enrolled Android Keystore signing key could not be loaded.")
+            CardCryptoManager.setActiveSigner(signer)
+            val entry = TrustedIssuerRegistry.registerTrustedKey(
+                signer.publicKey,
+                "LTC Authoritative Issuer"
+            )
+            _userFeedbackMessage.value = "Issuer key created locally. Publishing its public verification key to the LTC cloud…"
+            val context = appContext
+                ?: throw IllegalStateException("App context unavailable; public-key distribution cannot be started.")
+            viewModelScope.launch {
+                try {
+                    SupabaseClientFactory.getInstance(context.applicationContext)
+                        .from("trusted_issuers")
+                        .upsert(
+                            TrustedIssuerCloudRow(
+                                schoolId = "ltc_school_01",
+                                keyId = entry.kid,
+                                publicKeyBase64 = entry.publicKeyBase64,
+                                label = entry.label,
+                                enrolledAtMs = entry.enrolledAt,
+                                isRevoked = false
+                            )
+                        ) { onConflict = "school_id,key_id" }
+                    _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
+                } catch (e: Exception) {
+                    _userFeedbackMessage.value = "Issuer key exists on this device, but cloud publication failed: ${e.localizedMessage ?: "unknown error"}. Do not issue cards until publication succeeds."
+                }
+            }
         } catch (e: Exception) {
-            _userFeedbackMessage.value = "Failed to enroll Keystore key: ${e.message}"
+            _userFeedbackMessage.value = "Failed to enroll issuer key: ${e.message}"
+        }
+    }
+
+    private fun refreshTrustedIssuerKeys() {
+        val context = appContext ?: return
+        viewModelScope.launch {
+            try {
+                val rows = SupabaseClientFactory.getInstance(context.applicationContext)
+                    .from("trusted_issuers")
+                    .select {
+                        filter { eq("school_id", "ltc_school_01") }
+                    }
+                    .decodeList<TrustedIssuerCloudRow>()
+                rows.forEach { row ->
+                    if (row.isRevoked) {
+                        TrustedIssuerRegistry.revokeIssuer(row.keyId)
+                    } else {
+                        TrustedIssuerRegistry.registerTrustedKeyBase64(
+                            row.publicKeyBase64,
+                            row.label,
+                            row.enrolledAtMs
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _userFeedbackMessage.value = "Issuer trust list could not be refreshed: ${e.localizedMessage ?: "check connection"}"
+            }
         }
     }
 
@@ -1278,9 +1363,33 @@ class MainViewModel(
 
     fun revokeTrustedIssuer(kid: String) {
         if (!requireAdminRole("Revoking trusted issuer key")) return
+        val existing = TrustedIssuerRegistry.getIssuerEntry(kid)
         val success = TrustedIssuerRegistry.revokeIssuer(kid)
-        if (success) {
-            _userFeedbackMessage.value = "Issuer key '$kid' revoked! Associated badges will now be rejected."
+        if (success && existing != null) {
+            val context = appContext
+            if (context != null) {
+                viewModelScope.launch {
+                    try {
+                        SupabaseClientFactory.getInstance(context.applicationContext)
+                            .from("trusted_issuers")
+                            .upsert(
+                                TrustedIssuerCloudRow(
+                                    schoolId = "ltc_school_01",
+                                    keyId = existing.kid,
+                                    publicKeyBase64 = existing.publicKeyBase64,
+                                    label = existing.label,
+                                    enrolledAtMs = existing.enrolledAt,
+                                    isRevoked = true
+                                )
+                            ) { onConflict = "school_id,key_id" }
+                        _userFeedbackMessage.value = "Issuer key revoked in the LTC cloud. Devices will reject its cards after their next successful sync."
+                    } catch (e: Exception) {
+                        _userFeedbackMessage.value = "Local key revoked, but cloud revocation failed: ${e.localizedMessage ?: "unknown error"}"
+                    }
+                }
+            } else {
+                _userFeedbackMessage.value = "Issuer key revoked on this device."
+            }
         } else {
             _userFeedbackMessage.value = "Key '$kid' not found in trusted registry."
         }
@@ -1455,3 +1564,14 @@ class MainViewModel(
 }
 
 
+
+
+@Serializable
+private data class TrustedIssuerCloudRow(
+    @SerialName("school_id") val schoolId: String,
+    @SerialName("key_id") val keyId: String,
+    @SerialName("public_key_base64") val publicKeyBase64: String,
+    val label: String,
+    @SerialName("enrolled_at_ms") val enrolledAtMs: Long,
+    @SerialName("is_revoked") val isRevoked: Boolean
+)

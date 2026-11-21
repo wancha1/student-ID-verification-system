@@ -10,6 +10,7 @@ import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
 import com.example.ui.MainViewModel
+import com.example.util.CardCryptoManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -27,6 +28,7 @@ class NetworkRecoverySyncTest {
     fun reconnectingNetworkAutomaticallyDispatchesDurableOutbox() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = AppDatabase.createInMemory(context)
+        CardCryptoManager.setActiveSigner(TestIssuerSignerFactory.create())
         try {
             val backend = InMemoryCloudBackend()
             val repository = RoomStudentRepository(database, backend)
@@ -60,6 +62,7 @@ class NetworkRecoverySyncTest {
                 remoteStudents.any { it.id == student.id }
             )
         } finally {
+            CardCryptoManager.clearIssuerPrivateKey()
             database.close()
         }
     }

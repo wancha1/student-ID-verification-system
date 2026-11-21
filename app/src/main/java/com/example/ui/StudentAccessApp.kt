@@ -484,6 +484,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_multi_export")
                                     )
+                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.GATE_STAFF)) {
                                     DropdownMenuItem(
                                         text = { Text("Gate Access Logs") },
                                         leadingIcon = {
@@ -500,6 +501,8 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_logs")
                                     )
+                                    }
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Guardian WhatsApp Alerts") },
                                         leadingIcon = {
@@ -516,6 +519,8 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_alerts")
                                     )
+                                    }
+                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT)) {
                                     DropdownMenuItem(
                                         text = { Text("Exeat & Gate Leave Passes") },
                                         leadingIcon = {
@@ -532,6 +537,19 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_view_exeats")
                                     )
+                                    }
+                                    if (user.role == UserRole.ADMINISTRATOR) {
+                                    DropdownMenuItem(
+                                        text = { Text("Enroll card-signing key") },
+                                        leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) },
+                                        onClick = {
+                                            viewModel.setupAuthoritativeIssuerKey()
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.testTag("menu_enroll_issuer_key")
+                                    )
+                                    }
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Batch ID Badges Studio") },
                                         leadingIcon = {
@@ -546,6 +564,8 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_batch_print")
                                     )
+                                    }
+                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.GATE_STAFF)) {
                                     DropdownMenuItem(
                                         text = { Text("Export Gate Logs (CSV)") },
                                         leadingIcon = {
@@ -560,6 +580,8 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_export_csv")
                                     )
+                                    }
+                                    if (user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT, UserRole.TEACHERS)) {
                                     DropdownMenuItem(
                                         text = { Text("Share Attendance Summary") },
                                         leadingIcon = {
@@ -574,6 +596,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_export_summary")
                                     )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Sync with Central Server") },
                                         leadingIcon = {
@@ -588,6 +611,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_trigger_sync")
                                     )
+                                    if (user.role == UserRole.ADMINISTRATOR) {
                                     DropdownMenuItem(
                                         text = { Text("Clear Gate Logs") },
                                         leadingIcon = {
@@ -602,6 +626,7 @@ fun StudentAccessApp(
                                         },
                                         modifier = Modifier.testTag("menu_clear_logs")
                                     )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Lock Terminal / Log Out") },
                                         leadingIcon = {
@@ -757,8 +782,10 @@ fun StudentAccessApp(
                             }
 
                             UserRole.HEAD_TEACHER_MANAGEMENT -> {
+                                val isLeadershipOverview = !showLogsScreen && !showMealsScreen &&
+                                    !showAttendanceScreen && !showRequirementsScreen && !showExeatScreen
                                 NavigationBarItem(
-                                    selected = !showLogsScreen && !showMealsScreen,
+                                    selected = isLeadershipOverview,
                                     onClick = {
                                         showAttendanceScreen = false
                                         showRequirementsScreen = false
@@ -768,7 +795,7 @@ fun StudentAccessApp(
                                         showGuardianAlertsScreen = false
                                     },
                                     icon = { Icon(Icons.Default.SupervisorAccount, contentDescription = "Leadership overview") },
-                                    label = { Text("Overview", fontSize = 11.sp) },
+                                    label = { Text("Overview", fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -783,9 +810,10 @@ fun StudentAccessApp(
                                         showMealsScreen = false
                                         showAttendanceScreen = false
                                         showRequirementsScreen = false
+                                        showExeatScreen = false
                                     },
                                     icon = { Icon(Icons.Default.History, contentDescription = "Gate activity") },
-                                    label = { Text("Gate", fontSize = 11.sp) },
+                                    label = { Text("Gate", fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
@@ -800,15 +828,52 @@ fun StudentAccessApp(
                                         showLogsScreen = false
                                         showAttendanceScreen = false
                                         showRequirementsScreen = false
+                                        showExeatScreen = false
                                     },
                                     icon = { Icon(Icons.Default.Restaurant, contentDescription = "Meal reports") },
-                                    label = { Text("Meals", fontSize = 11.sp) },
+                                    label = { Text("Meals", fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = roleColor.copy(alpha = 0.2f),
                                         selectedIconColor = roleColor,
                                         selectedTextColor = roleColor
                                     ),
                                     modifier = Modifier.testTag("nav_item_head_meals")
+                                )
+                                NavigationBarItem(
+                                    selected = showAttendanceScreen,
+                                    onClick = {
+                                        showAttendanceScreen = true
+                                        showLogsScreen = false
+                                        showMealsScreen = false
+                                        showRequirementsScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.MenuBook, contentDescription = "Attendance oversight") },
+                                    label = { Text("Attendance", fontSize = 10.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_head_attendance")
+                                )
+                                NavigationBarItem(
+                                    selected = showRequirementsScreen,
+                                    onClick = {
+                                        showRequirementsScreen = true
+                                        showLogsScreen = false
+                                        showMealsScreen = false
+                                        showAttendanceScreen = false
+                                        showExeatScreen = false
+                                    },
+                                    icon = { Icon(Icons.Default.FactCheck, contentDescription = "Requirements oversight") },
+                                    label = { Text("Exams", fontSize = 10.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = roleColor.copy(alpha = 0.2f),
+                                        selectedIconColor = roleColor,
+                                        selectedTextColor = roleColor
+                                    ),
+                                    modifier = Modifier.testTag("nav_item_head_exams")
                                 )
                             }
 

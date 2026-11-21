@@ -444,17 +444,21 @@ class RoomStudentRepository(
         val studentWithTimestamp = student.copy(updatedAt = now)
         val entity = StudentEntity.fromDomain(studentWithTimestamp)
 
-        // Automatically issue first active card for the new student
-        val cleanStudentNum = student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")
-        val cardId = "CRD-$cleanStudentNum-01"
-        val signedPayload = if (CardCryptoManager.hasIssuerPrivateKey()) {
-            try {
-                CardCryptoManager.signCardPayload(cardId)
-            } catch (_: Exception) {
-                ""
-            }
-        } else {
-            ""
+        // Never create an ACTIVE card with an empty or unsigned QR payload.
+        // Card issuance requires an explicitly enrolled authoritative issuer key.
+        if (!CardCryptoManager.hasIssuerPrivateKey()) {
+            return@withContext Result.failure(
+                IllegalStateException(
+                    "Student registration is blocked because this device has no issuer signing key. " +
+                        "An administrator must enroll the LTC card-signing key before issuing student IDs."
+                )
+            )
+        }
+        val cardId = CardCryptoManager.generateSecureRandomCardId()
+        val signedPayload = try {
+            CardCryptoManager.signCardPayload(cardId)
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
         }
         val firstCard = Card(
             id = UUID.randomUUID().toString(),
