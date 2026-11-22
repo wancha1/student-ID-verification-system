@@ -220,4 +220,22 @@ class RoleScannerRoutingTest {
         assertNull(log.feeStatus)
     }
 
+    @Test
+    fun manualMealServingPersistsReasonAndBlocksDuplicateServing() = runBlocking {
+        assertTrue(viewModel.authenticateAndLogin(context, UserRole.MEAL_SERVING_STAFF, "3333"))
+        viewModel.setActiveMealType(MealType.LUNCH)
+
+        viewModel.verifyAndServeMealManually("LTC-2026-9001", "QR code damaged")
+        kotlinx.coroutines.delay(250L)
+
+        val saved = database.mealRecordDao().findServing(studentId, MealType.LUNCH.name,
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()))
+        assertNotNull(saved)
+        assertTrue(saved?.notes?.contains("MANUAL_ENTRY: QR code damaged") == true)
+
+        viewModel.verifyAndServeMealManually("LTC-2026-9001", "QR code still unreadable")
+        kotlinx.coroutines.delay(250L)
+        assertTrue(viewModel.mealScanOutcome.value is com.example.model.MealVerificationResult.BlockedDoubleServing)
+    }
+
 }
