@@ -275,6 +275,30 @@ class ExampleRobolectricTest {
     }
 
     @Test
+    fun testRosterBatchDuplicateRollsBackAllImportedRows() = runBlocking {
+        val existing = Student(
+            studentNumber = "OAK-2026-0196",
+            firstName = "Existing",
+            lastName = "Student",
+            gradeClass = "Senior 3-A"
+        )
+        assertTrue(repository.addStudentWithoutCard(existing).isSuccess)
+
+        val duplicate = existing.copy(id = UUID.randomUUID().toString(), firstName = "Replacement")
+        val newRecord = Student(
+            studentNumber = "OAK-2026-0195",
+            firstName = "New",
+            lastName = "Student",
+            gradeClass = "Senior 3-B"
+        )
+        val result = repository.addStudentsWithoutCards(listOf(duplicate, newRecord))
+
+        assertTrue(result.isFailure)
+        assertNull(repository.getStudentByStudentNumber(newRecord.studentNumber))
+        assertNull(repository.getActiveCardForStudent(existing.id))
+    }
+
+    @Test
     fun testSuspendedStudentRemainsDeniedWhileGeneralEntryPolicyIsPending() = runBlocking {
         val suspended = Student(
             studentNumber = "OAK-2026-0198",
