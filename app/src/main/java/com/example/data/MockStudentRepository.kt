@@ -199,6 +199,18 @@ class MockStudentRepository : StudentRepository {
                     )
                 }
 
+                if (student.accessStatus in setOf(com.example.model.AccessStatus.SUSPENDED, com.example.model.AccessStatus.INACTIVE)) {
+                    return StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        isPolicyPending = false,
+                        reason = "Student record is ${student.accessStatus.label.lowercase()}. Refer to school administration.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
                 // Gate verification establishes identity and card validity only.
                 // Fee and boarding restrictions require formal school policy approval.
                 StudentScanResult.Success(
@@ -206,6 +218,7 @@ class MockStudentRepository : StudentRepository {
                     card = card,
                     // A valid card confirms identity, not permission to enter.
                     isApproved = false,
+                    isPolicyPending = true,
                     reason = "Identity verified. Entry decision pending approved LTC gate policy.",
                     isOfflineData = isOffline,
                     lastSyncTimestamp = lastSync
@@ -261,35 +274,17 @@ class MockStudentRepository : StudentRepository {
             }
         }
 
-        return if (!student.isDayScholar) {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-            val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = true,
-                reason = "Entry Approved: Fees Cleared & Card Active (${activeCard.cardIdentifier}).",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        }
+        // Identity and card are valid. Keep entry permission pending until
+        // the school has formally approved a gate policy.
+        return StudentScanResult.Success(
+            student = student,
+            card = activeCard,
+            isApproved = false,
+            isPolicyPending = true,
+            reason = "Identity verified. Entry decision pending approved LTC gate policy.",
+            isOfflineData = isOffline,
+            lastSyncTimestamp = lastSync
+        )
     }
 
     override suspend fun updateFeeStatus(
@@ -306,6 +301,10 @@ class MockStudentRepository : StudentRepository {
                     student.copy(
                         feesStatus = newStatus,
                         outstandingAmount = if (newStatus == FeeStatus.CLEARED) 0.0 else if (outstandingAmount > 0) outstandingAmount else 450000.0,
+                        accessStatus = if (student.accessStatus in setOf(
+                            com.example.model.AccessStatus.SUSPENDED,
+                            com.example.model.AccessStatus.INACTIVE
+                        )) student.accessStatus else com.example.model.AccessStatus.PENDING_POLICY,
                         updatedAt = now
                     )
                 } else {
@@ -339,6 +338,29 @@ class MockStudentRepository : StudentRepository {
             reason = "Initial issuance"
         )
         _cards.update { listOf(firstCard) + it }
+        return Result.success(Unit)
+    }
+
+    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> =
+        addStudentsWithoutCards(listOf(student))
+
+    override suspend fun addStudentsWithoutCards(students: List<Student>): Result<Unit> {
+        if (students.isEmpty()) return Result.success(Unit)
+        val newNumbers = students.map { it.studentNumber.trim().uppercase() }
+        if (newNumbers.size != newNumbers.toSet().size) {
+            return Result.failure(IllegalArgumentException("The import contains duplicate admission numbers."))
+        }
+        val existing = _students.value
+        val duplicate = students.firstOrNull { candidate ->
+            existing.any {
+                it.id.equals(candidate.id.trim(), ignoreCase = true) ||
+                    it.studentNumber.equals(candidate.studentNumber.trim(), ignoreCase = true)
+            }
+        }
+        if (duplicate != null) {
+            return Result.failure(IllegalArgumentException("Admission number '${duplicate.studentNumber}' is already registered."))
+        }
+        _students.update { list -> students + list }
         return Result.success(Unit)
     }
 

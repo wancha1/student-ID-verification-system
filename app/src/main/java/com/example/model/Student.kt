@@ -52,8 +52,8 @@ data class Student(
     val qrPayload: String get() = uniqueQrCode
 
     /**
-     * Entry verification policy:
-     * Student is approved if they are a registered Day Scholar and their School Fees are CLEARED.
+     * Legacy convenience property. It can only be true when an explicit approved access
+     * status has been assigned; fee and boarding fields alone do not establish entry policy.
      */
     val isEntryApproved: Boolean get() = (accessStatus.isApproved && feesStatus == FeeStatus.CLEARED && isDayScholar)
 }

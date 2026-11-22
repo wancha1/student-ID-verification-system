@@ -177,6 +177,13 @@ fun GateDecisionBadge(
             Icons.Default.CheckCircle,
             "APPROVED"
         )
+        GateVerificationDecision.POLICY_PENDING -> Tuple5(
+            Color(0xFFFFF7ED),
+            Color(0xFFF59E0B),
+            Color(0xFF92400E),
+            Icons.Default.Warning,
+            "POLICY PENDING"
+        )
         GateVerificationDecision.NOT_APPROVED -> Tuple5(
             RejectedRedLight,
             RejectedRed,

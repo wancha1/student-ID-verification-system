@@ -1,11 +1,12 @@
 package com.example.model
 
 /**
- * The 5 distinct semantic outcomes of a QR scan at the school gate.
+ * The distinct semantic outcomes of a QR scan at the school gate.
  */
 enum class GateVerificationDecision(val title: String) {
     APPROVED("ENTRY APPROVED"),
     NOT_APPROVED("ENTRY NOT APPROVED"),
+    POLICY_PENDING("POLICY DECISION PENDING"),
     CARD_INACTIVE("CARD INACTIVE"),
     STUDENT_NOT_FOUND("STUDENT NOT FOUND"),
     INVALID_QR("INVALID QR CODE")
@@ -19,6 +20,8 @@ sealed class StudentScanResult {
         val student: Student,
         val card: Card?,
         val isApproved: Boolean,
+        /** True when identity/card are valid but school entry policy has not been approved. */
+        val isPolicyPending: Boolean = false,
         val reason: String,
         val isOfflineData: Boolean,
         val lastSyncTimestamp: Long = System.currentTimeMillis()

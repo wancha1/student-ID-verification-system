@@ -132,6 +132,7 @@ class ExampleRobolectricTest {
         // 1. Initial scan is approved with authentic V2 card
         val scanResult1 = repository.verifyStudentByQr(activeCard.qrPayload)
         assertTrue(scanResult1 is StudentScanResult.Success && !scanResult1.isApproved)
+        assertTrue((scanResult1 as StudentScanResult.Success).isPolicyPending)
 
         // 2. Report card lost
         val reportResult = repository.reportCardLost(student.id, activeCard.id, "Student lost wallet on campus")
@@ -179,6 +180,7 @@ class ExampleRobolectricTest {
         repository.updateFeeStatus(initialStudent.id, FeeStatus.OUTSTANDING, 480000.0)
         val scanResult2 = repository.verifyStudentByQr(card.qrPayload)
         assertTrue(scanResult2 is StudentScanResult.Success && !scanResult2.isApproved)
+        assertTrue((scanResult2 as StudentScanResult.Success).isPolicyPending)
     }
 
     @Test
@@ -208,6 +210,7 @@ class ExampleRobolectricTest {
         val retrieved = (scanResult as StudentScanResult.Success).student
         assertEquals("Lucas", retrieved.firstName)
         assertFalse(scanResult.isApproved)
+        assertTrue(scanResult.isPolicyPending)
 
         // Delete student
         val deleteResult = repository.deleteStudent(newStudent.id)
@@ -232,6 +235,7 @@ class ExampleRobolectricTest {
         val clearedResult = viewModel.activeScanResult.first { it != null }
         assertNotNull(clearedResult)
         assertTrue(clearedResult is StudentScanResult.Success && !clearedResult.isApproved)
+        assertTrue((clearedResult as StudentScanResult.Success).isPolicyPending)
         assertNull(viewModel.scanError.value)
 
         // Fee policy is not an identity-verification rule. Until LTC approves
@@ -240,6 +244,7 @@ class ExampleRobolectricTest {
         val outstandingResult = viewModel.activeScanResult.value
         assertNotNull(outstandingResult)
         assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved)
+        assertTrue((outstandingResult as StudentScanResult.Success).isPolicyPending)
         assertFalse((outstandingResult as StudentScanResult.Success).reason.contains("fee", ignoreCase = true))
 
         // Scan invalid barcode format
@@ -253,7 +258,64 @@ class ExampleRobolectricTest {
         val logs = repository.scanLogsFlow.first { it.size == 3 }
         assertEquals(3, logs.size)
         assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
-        assertEquals(GateVerificationDecision.APPROVED, logs[1].decision)
-        assertEquals(GateVerificationDecision.APPROVED, logs[2].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs[1].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs[2].decision)
     }
+    @Test
+    fun testRosterImportCreatesStudentWithoutIssuingCard() = runBlocking {
+        val imported = Student(
+            studentNumber = "OAK-2026-0197",
+            firstName = "Roster",
+            lastName = "Only",
+            gradeClass = "Senior 4-A"
+        )
+        assertTrue(repository.addStudentWithoutCard(imported).isSuccess)
+        assertNotNull(repository.getStudentByStudentNumber(imported.studentNumber))
+        assertNull(repository.getActiveCardForStudent(imported.id))
+    }
+
+    @Test
+    fun testRosterBatchDuplicateRollsBackAllImportedRows() = runBlocking {
+        val existing = Student(
+            studentNumber = "OAK-2026-0196",
+            firstName = "Existing",
+            lastName = "Student",
+            gradeClass = "Senior 3-A"
+        )
+        assertTrue(repository.addStudentWithoutCard(existing).isSuccess)
+
+        val duplicate = existing.copy(id = UUID.randomUUID().toString(), firstName = "Replacement")
+        val newRecord = Student(
+            studentNumber = "OAK-2026-0195",
+            firstName = "New",
+            lastName = "Student",
+            gradeClass = "Senior 3-B"
+        )
+        val result = repository.addStudentsWithoutCards(listOf(duplicate, newRecord))
+
+        assertTrue(result.isFailure)
+        assertNull(repository.getStudentByStudentNumber(newRecord.studentNumber))
+        assertNull(repository.getActiveCardForStudent(existing.id))
+    }
+
+    @Test
+    fun testSuspendedStudentRemainsDeniedWhileGeneralEntryPolicyIsPending() = runBlocking {
+        val suspended = Student(
+            studentNumber = "OAK-2026-0198",
+            firstName = "Test",
+            lastName = "Suspended",
+            gradeClass = "Senior 4-A",
+            accessStatus = com.example.model.AccessStatus.SUSPENDED
+        )
+        assertTrue(repository.addStudent(suspended).isSuccess)
+
+        val card = repository.getActiveCardForStudent(suspended.id)!!
+        val result = repository.verifyStudentByQr(card.qrPayload)
+        assertTrue(result is StudentScanResult.Success)
+        val success = result as StudentScanResult.Success
+        assertFalse(success.isApproved)
+        assertFalse(success.isPolicyPending)
+        assertTrue(success.reason.contains("suspended", ignoreCase = true))
+    }
+
 }

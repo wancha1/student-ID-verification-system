@@ -1,0 +1,2 @@
+admission_number,first_name,last_name,other_names,gender,date_of_birth,class_name,stream,student_phone,guardian_name,guardian_phone,email,status
+LTC-TEST-001,Alice,Okello,Grace,Female,2009-04-12,Senior 3,A,+256700000001,John Okello,+256770000001,alice@example.test,ACTIVE

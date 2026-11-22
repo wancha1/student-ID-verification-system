@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -268,7 +269,7 @@ fun GuardDashboardScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
-                        text = "Scan student QR badge to evaluate fees and day-scholar gate permissions.",
+                        text = "Verify student identity and card authenticity. Entry decisions follow the school's approved gate procedure.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                         modifier = Modifier.padding(vertical = 6.dp)
@@ -428,13 +429,25 @@ fun GuardDashboardScreen(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(if (log.isApproved) ApprovedGreenLight else RejectedRedLight),
+                                .background(when (log.decision) {
+                                    GateVerificationDecision.APPROVED -> ApprovedGreenLight
+                                    GateVerificationDecision.POLICY_PENDING -> Color(0xFFFFF7ED)
+                                    else -> RejectedRedLight
+                                }),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (log.isApproved) Icons.Default.CheckCircle else Icons.Default.Close,
+                                imageVector = when (log.decision) {
+                                    GateVerificationDecision.APPROVED -> Icons.Default.CheckCircle
+                                    GateVerificationDecision.POLICY_PENDING -> Icons.Default.Warning
+                                    else -> Icons.Default.Close
+                                },
                                 contentDescription = null,
-                                tint = if (log.isApproved) ApprovedGreen else RejectedRed,
+                                tint = when (log.decision) {
+                                    GateVerificationDecision.APPROVED -> ApprovedGreen
+                                    GateVerificationDecision.POLICY_PENDING -> Color(0xFFB45309)
+                                    else -> RejectedRed
+                                },
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -456,11 +469,23 @@ fun GuardDashboardScreen(
 
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = if (log.isApproved) ApprovedGreenLight else RejectedRedLight
+                            color = when (log.decision) {
+                                GateVerificationDecision.APPROVED -> ApprovedGreenLight
+                                GateVerificationDecision.POLICY_PENDING -> Color(0xFFFFF7ED)
+                                else -> RejectedRedLight
+                            }
                         ) {
                             Text(
-                                text = if (log.isApproved) "APPROVED" else "DENIED",
-                                color = if (log.isApproved) ApprovedGreenText else RejectedRedText,
+                                text = when (log.decision) {
+                                    GateVerificationDecision.APPROVED -> "APPROVED"
+                                    GateVerificationDecision.POLICY_PENDING -> "POLICY PENDING"
+                                    else -> "DENIED"
+                                },
+                                color = when (log.decision) {
+                                    GateVerificationDecision.APPROVED -> ApprovedGreenText
+                                    GateVerificationDecision.POLICY_PENDING -> Color(0xFF92400E)
+                                    else -> RejectedRedText
+                                },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)

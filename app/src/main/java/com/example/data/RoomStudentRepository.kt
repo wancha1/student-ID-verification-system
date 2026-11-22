@@ -236,6 +236,18 @@ class RoomStudentRepository(
 
                 val student = studentEntity.toDomain()
 
+                if (student.accessStatus in setOf(com.example.model.AccessStatus.SUSPENDED, com.example.model.AccessStatus.INACTIVE)) {
+                    return@withContext StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        isPolicyPending = false,
+                        reason = "Student record is ${student.accessStatus.label.lowercase()}. Refer to school administration.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
                 // Gate verification establishes identity and card validity only.
                 // Fee and boarding restrictions are policy decisions and must not be
                 // enforced until LTC formally approves the gate policy.
@@ -245,6 +257,7 @@ class RoomStudentRepository(
                     // Identity verification is not an entry decision. Until LTC approves
                     // a gate policy, the officer must hold and follow the school's procedure.
                     isApproved = false,
+                    isPolicyPending = true,
                     reason = "Identity verified. Entry decision pending approved LTC gate policy.",
                     isOfflineData = isOffline,
                     lastSyncTimestamp = lastSync
@@ -337,35 +350,29 @@ class RoomStudentRepository(
             }
         }
 
-        // Active Card exists: Check student gate authorization criteria
-        return if (!student.isDayScholar) {
-            StudentScanResult.Success(
+        if (student.accessStatus in setOf(AccessStatus.SUSPENDED, AccessStatus.INACTIVE)) {
+            return StudentScanResult.Success(
                 student = student,
                 card = activeCard,
                 isApproved = false,
-                reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "School fees are outstanding. Refer the student to the school office.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = true,
-                reason = "Entry Approved: Fees Cleared & Card Active (${activeCard.cardIdentifier}).",
+                isPolicyPending = false,
+                reason = "Student record is ${student.accessStatus.label.lowercase()}. Refer to school administration.",
                 isOfflineData = isOffline,
                 lastSyncTimestamp = lastSync
             )
         }
+
+        // Identity and card are valid. This helper must not infer entry policy
+        // from fees or boarding fields before LTC formally approves that policy.
+        return StudentScanResult.Success(
+            student = student,
+            card = activeCard,
+            isApproved = false,
+            isPolicyPending = true,
+            reason = "Identity verified. Entry decision pending approved LTC gate policy.",
+            isOfflineData = isOffline,
+            lastSyncTimestamp = lastSync
+        )
     }
 
     override suspend fun updateFeeStatus(
@@ -376,10 +383,10 @@ class RoomStudentRepository(
         val now = System.currentTimeMillis()
         try {
             val student = database.studentDao().getStudentById(studentId)?.toDomain()
-            val newAccessStatus = if (student != null) {
-                AccessStatus.evaluate(student.isDayScholar, newStatus)
-            } else {
-                if (newStatus == FeeStatus.CLEARED) AccessStatus.APPROVED else AccessStatus.RESTRICTED_FEES
+            val newAccessStatus = when (student?.accessStatus) {
+                AccessStatus.SUSPENDED -> AccessStatus.SUSPENDED
+                AccessStatus.INACTIVE -> AccessStatus.INACTIVE
+                else -> AccessStatus.PENDING_POLICY
             }
 
             database.withTransaction {
@@ -487,6 +494,50 @@ class RoomStudentRepository(
                 )
             }
 
+            syncManager.notifyLocalLogAdded()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> =
+        addStudentsWithoutCards(listOf(student))
+
+    override suspend fun addStudentsWithoutCards(students: List<Student>): Result<Unit> = withContext(ioDispatcher) {
+        if (students.isEmpty()) return@withContext Result.success(Unit)
+        val normalizedNumbers = students.map { it.studentNumber.trim().uppercase() }
+        if (normalizedNumbers.size != normalizedNumbers.toSet().size) {
+            return@withContext Result.failure(IllegalArgumentException("The import contains duplicate admission numbers."))
+        }
+        val now = System.currentTimeMillis()
+        val timestamped = students.map { it.copy(updatedAt = now) }
+        try {
+            database.withTransaction {
+                val existingStudents = database.studentDao().getAllStudentsSnapshot()
+                val existingNumbers = existingStudents.map { it.studentNumber.trim().uppercase() }.toSet()
+                val existingIds = existingStudents.map { it.id }.toSet()
+                val conflict = timestamped.firstOrNull {
+                    it.studentNumber.trim().uppercase() in existingNumbers || it.id in existingIds
+                }
+                if (conflict != null) {
+                    throw IllegalArgumentException("Admission number '${conflict.studentNumber}' is already registered.")
+                }
+                timestamped.forEach { student ->
+                    database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+                    database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(student))
+                    testFailureInterceptor?.invoke("addStudentsWithoutCards_afterLocalWrite")
+                    database.pendingChangeDao().enqueueChange(
+                        PendingChangeEntity(
+                            changeId = UUID.randomUUID().toString(),
+                            entityType = SyncEntityType.STUDENT,
+                            recordId = student.id,
+                            operationType = SyncOperationType.CREATE,
+                            createdAt = now
+                        )
+                    )
+                }
+            }
             syncManager.notifyLocalLogAdded()
             Result.success(Unit)
         } catch (e: Exception) {

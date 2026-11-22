@@ -550,7 +550,7 @@ class LtcSystemVerificationTest {
 
             val retrievedProfile = database.studentProfileDao().getProfileById(studentId)
             assertNotNull("Student profile must be persisted", retrievedProfile)
-            assertEquals(AccessStatus.APPROVED.name, retrievedProfile?.accessStatus)
+            assertEquals(AccessStatus.PENDING_POLICY.name, retrievedProfile?.accessStatus)
 
             val cards = database.cardDao().getCardsForStudent(studentId)
             assertEquals("Exactly one initial active card must be issued", 1, cards.size)
@@ -569,10 +569,10 @@ class LtcSystemVerificationTest {
             val updatedStudent = database.studentDao().getStudentById(studentId)
             assertEquals(FeeStatus.OUTSTANDING.name, updatedStudent?.feesStatus)
             assertEquals(320000.0, updatedStudent?.outstandingAmount ?: 0.0, 0.01)
-            assertEquals(AccessStatus.RESTRICTED_FEES.name, updatedStudent?.accessStatus)
+            assertEquals(AccessStatus.PENDING_POLICY.name, updatedStudent?.accessStatus)
 
             val updatedProfile = database.studentProfileDao().getProfileById(studentId)
-            assertEquals(AccessStatus.RESTRICTED_FEES.name, updatedProfile?.accessStatus)
+            assertEquals(AccessStatus.PENDING_POLICY.name, updatedProfile?.accessStatus)
 
             val pendingChanges2 = database.pendingChangeDao().getPendingChanges()
             assertEquals("Fee mutations are retired from the V1 sync queue", 2, pendingChanges2.size)
@@ -696,7 +696,7 @@ class LtcSystemVerificationTest {
             assertEquals("Student outstandingAmount must remain 0.0", 0.0, studentAfterFailedFee?.outstandingAmount ?: 0.0, 0.01)
 
             val profileAfterFailedFee = database.studentProfileDao().getProfileById(studentId)
-            assertEquals("Profile accessStatus must remain APPROVED due to rollback", AccessStatus.APPROVED.name, profileAfterFailedFee?.accessStatus)
+            assertEquals("Profile accessStatus must remain PENDING_POLICY due to rollback", AccessStatus.PENDING_POLICY.name, profileAfterFailedFee?.accessStatus)
 
             assertEquals(
                 "No orphan FEE_STATUS change must be recorded in pending queue",

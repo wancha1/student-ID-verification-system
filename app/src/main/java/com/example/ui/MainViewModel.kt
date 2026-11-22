@@ -440,7 +440,7 @@ class MainViewModel(
                             cardId = card?.id,
                             cardIdentifier = card?.cardIdentifier ?: "CRD-UNKNOWN",
                             qrPayload = card?.qrPayload ?: rawCode,
-                            decision = if (scanResult.isApproved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
+                            decision = when { scanResult.isPolicyPending -> GateVerificationDecision.POLICY_PENDING; scanResult.isApproved -> GateVerificationDecision.APPROVED; else -> GateVerificationDecision.NOT_APPROVED },
                             feeStatus = student.feesStatus,
                             cardStatus = card?.status ?: CardStatus.ACTIVE,
                             isDayScholar = student.isDayScholar,
@@ -455,7 +455,7 @@ class MainViewModel(
                     )
 
                     context?.let { ctx ->
-                        FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
+                        if (!scanResult.isPolicyPending) FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
                     }
                 }
 
@@ -793,6 +793,34 @@ class MainViewModel(
                 // to close the form while clearly disclosing that cloud sync is pending.
                 onComplete(true, msg)
             }
+        }
+    }
+
+    fun registerImportedStudents(students: List<Student>, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
+        if (!requireAdminRole("Importing roster students")) {
+            onComplete(false, "Access Denied: Administrator role required.")
+            return
+        }
+        if (students.isEmpty()) {
+            onComplete(false, "No valid students were selected for import.")
+            return
+        }
+        viewModelScope.launch {
+            val result = repository.addStudentsWithoutCards(students)
+            if (result.isFailure) {
+                val message = result.exceptionOrNull()?.localizedMessage ?: "Failed to import student roster"
+                _userFeedbackMessage.value = message
+                onComplete(false, message)
+                return@launch
+            }
+            val syncResult = repository.syncWithCloud()
+            val message = if (syncResult.isSuccess) {
+                "${students.size} student record(s) imported and synchronized. No ID cards were issued."
+            } else {
+                "${students.size} student record(s) saved locally; cloud sync is pending. No ID cards were issued."
+            }
+            _userFeedbackMessage.value = message
+            onComplete(true, message)
         }
     }
 

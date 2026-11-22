@@ -26,7 +26,11 @@ object ExportUtils {
         for (log in logs) {
             val dateStr = dateFormatter.format(Date(log.timestamp))
             val timeStr = timeFormatter.format(Date(log.timestamp))
-            val isApprovedStr = if (log.decision == GateVerificationDecision.APPROVED) "APPROVED" else "DENIED"
+            val isApprovedStr = when (log.decision) {
+                GateVerificationDecision.APPROVED -> "APPROVED"
+                GateVerificationDecision.POLICY_PENDING -> "POLICY_PENDING"
+                else -> "DENIED"
+            }
 
             sb.append(escapeCsv(log.id)).append(",")
             sb.append(escapeCsv(log.studentNumber ?: log.studentId ?: "N/A")).append(",")

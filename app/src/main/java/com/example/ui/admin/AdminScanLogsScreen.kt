@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -79,6 +80,7 @@ import java.util.Locale
 private enum class DecisionFilter(val label: String) {
     ALL("All"),
     APPROVED("Approved"),
+    POLICY_PENDING("Policy Pending"),
     NOT_APPROVED("Not Approved"),
     CARD_INACTIVE("Card Inactive"),
     NOT_FOUND("Not Found"),
@@ -100,6 +102,7 @@ fun AdminScanLogsScreen(
     val totalCount = scanLogs.size
     val approvedCount = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
     val deniedCount = scanLogs.count { it.decision == GateVerificationDecision.NOT_APPROVED }
+    val policyPendingCount = scanLogs.count { it.decision == GateVerificationDecision.POLICY_PENDING }
     val cardInactiveCount = scanLogs.count { it.decision == GateVerificationDecision.CARD_INACTIVE }
     val notFoundCount = scanLogs.count { it.decision == GateVerificationDecision.STUDENT_NOT_FOUND }
     val invalidQrCount = scanLogs.count { it.decision == GateVerificationDecision.INVALID_QR }
@@ -110,6 +113,7 @@ fun AdminScanLogsScreen(
         val matchesFilter = when (selectedDecisionFilter) {
             DecisionFilter.ALL -> true
             DecisionFilter.APPROVED -> log.decision == GateVerificationDecision.APPROVED
+            DecisionFilter.POLICY_PENDING -> log.decision == GateVerificationDecision.POLICY_PENDING
             DecisionFilter.NOT_APPROVED -> log.decision == GateVerificationDecision.NOT_APPROVED
             DecisionFilter.CARD_INACTIVE -> log.decision == GateVerificationDecision.CARD_INACTIVE
             DecisionFilter.NOT_FOUND -> log.decision == GateVerificationDecision.STUDENT_NOT_FOUND
@@ -281,6 +285,19 @@ fun AdminScanLogsScreen(
                     }
                     item {
                         FilterChip(
+                            selected = selectedDecisionFilter == DecisionFilter.POLICY_PENDING,
+                            onClick = { selectedDecisionFilter = DecisionFilter.POLICY_PENDING },
+                            label = { Text("Policy Pending ($policyPendingCount)") },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFFF7ED),
+                                selectedLabelColor = Color(0xFF92400E)
+                            ),
+                            modifier = Modifier.testTag("filter_logs_policy_pending")
+                        )
+                    }
+                    item {
+                        FilterChip(
                             selected = selectedDecisionFilter == DecisionFilter.CARD_INACTIVE,
                             onClick = { selectedDecisionFilter = DecisionFilter.CARD_INACTIVE },
                             label = { Text("Card Inactive ($cardInactiveCount)") },
@@ -395,6 +412,7 @@ fun AdminScanLogsScreen(
                                 .background(
                                     when (log.decision) {
                                         GateVerificationDecision.APPROVED -> ApprovedGreenLight
+                                        GateVerificationDecision.POLICY_PENDING -> Color(0xFFFFF7ED)
                                         GateVerificationDecision.NOT_APPROVED -> RejectedRedLight
                                         GateVerificationDecision.CARD_INACTIVE -> Color(0xFFFEF3C7)
                                         GateVerificationDecision.STUDENT_NOT_FOUND -> Color(0xFFFFFBEB)
@@ -406,6 +424,7 @@ fun AdminScanLogsScreen(
                             Icon(
                                 imageVector = when (log.decision) {
                                     GateVerificationDecision.APPROVED -> Icons.Default.CheckCircle
+                                    GateVerificationDecision.POLICY_PENDING -> Icons.Default.Warning
                                     GateVerificationDecision.NOT_APPROVED -> Icons.Default.Error
                                     GateVerificationDecision.CARD_INACTIVE -> Icons.Default.Block
                                     GateVerificationDecision.STUDENT_NOT_FOUND -> Icons.Default.Help
@@ -414,6 +433,7 @@ fun AdminScanLogsScreen(
                                 contentDescription = null,
                                 tint = when (log.decision) {
                                     GateVerificationDecision.APPROVED -> ApprovedGreen
+                                    GateVerificationDecision.POLICY_PENDING -> Color(0xFFB45309)
                                     GateVerificationDecision.NOT_APPROVED -> RejectedRed
                                     GateVerificationDecision.CARD_INACTIVE -> Color(0xFFB45309)
                                     GateVerificationDecision.STUDENT_NOT_FOUND -> Color(0xFFD97706)
