@@ -262,35 +262,17 @@ class MockStudentRepository : StudentRepository {
             }
         }
 
-        return if (!student.isDayScholar) {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-            val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = true,
-                reason = "Entry Approved: Fees Cleared & Card Active (${activeCard.cardIdentifier}).",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        }
+        // Identity and card are valid. Keep entry permission pending until
+        // the school has formally approved a gate policy.
+        return StudentScanResult.Success(
+            student = student,
+            card = activeCard,
+            isApproved = false,
+            isPolicyPending = true,
+            reason = "Identity verified. Entry decision pending approved LTC gate policy.",
+            isOfflineData = isOffline,
+            lastSyncTimestamp = lastSync
+        )
     }
 
     override suspend fun updateFeeStatus(
