@@ -147,16 +147,6 @@ fun GuardDashboardScreen(
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
     ) {
-        // 1. SYNC STATUS & OFFLINE FRESHNESS BANNER
-        item {
-            SyncStatusHeaderCard(
-                syncInfo = syncInfo,
-                onTriggerSync = onTriggerSync,
-                onToggleOnline = onToggleOnline
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-        }
-
         // 2. GATE & GUARD STATION BANNER
         item {
             Card(
@@ -332,6 +322,17 @@ fun GuardDashboardScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Sync health remains visible immediately after the primary scan action.
+        // 1. SYNC STATUS & OFFLINE FRESHNESS BANNER
+        item {
+            SyncStatusHeaderCard(
+                syncInfo = syncInfo,
+                onTriggerSync = onTriggerSync,
+                onToggleOnline = onToggleOnline
+            )
+            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // 4. RECENT GATE SCAN LOGS
