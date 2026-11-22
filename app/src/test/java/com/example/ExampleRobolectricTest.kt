@@ -219,7 +219,7 @@ class ExampleRobolectricTest {
 
     @Test
     fun testGuardScanWorkflowAndAuditLogging() = runBlocking {
-        viewModel.loginAs(UserRole.SECURITY_GUARD)
+        viewModel.loginAs(UserRole.GATE_STAFF)
 
         val s1 = repository.getStudentByStudentNumber("OAK-2026-0001")!!
         val card1 = repository.getActiveCardForStudent(s1.id)!!
@@ -234,11 +234,13 @@ class ExampleRobolectricTest {
         assertTrue(clearedResult is StudentScanResult.Success && clearedResult.isApproved)
         assertNull(viewModel.scanError.value)
 
-        // Scan outstanding student
+        // Fee policy is not an identity-verification rule. Until LTC approves
+        // a gate restriction policy, a valid active card verifies identity only.
         viewModel.handleBarcodeScan(card2.qrPayload)
         val outstandingResult = viewModel.activeScanResult.value
         assertNotNull(outstandingResult)
-        assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved)
+        assertTrue(outstandingResult is StudentScanResult.Success && outstandingResult.isApproved)
+        assertFalse((outstandingResult as StudentScanResult.Success).reason.contains("fee", ignoreCase = true))
 
         // Scan invalid barcode format
         viewModel.handleBarcodeScan("NON_SCHOOL_BARCODE_XYZ")
@@ -250,7 +252,7 @@ class ExampleRobolectricTest {
         val logs = repository.scanLogsFlow.first()
         assertEquals(3, logs.size)
         assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
-        assertEquals(GateVerificationDecision.NOT_APPROVED, logs[1].decision)
+        assertEquals(GateVerificationDecision.APPROVED, logs[1].decision)
         assertEquals(GateVerificationDecision.APPROVED, logs[2].decision)
     }
 }
