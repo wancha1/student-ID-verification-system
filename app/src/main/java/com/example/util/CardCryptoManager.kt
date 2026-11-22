@@ -107,6 +107,11 @@ object CardCryptoManager {
                 "Cannot sign card payload: Device is operating in Gate / Verifier mode with no Issuer Signing Key configured. " +
                 "Card issuance requires an authoritative Issuer device."
             )
+        if (!TrustedIssuerRegistry.isTrusted(effectiveSigner.keyId)) {
+            throw IllegalStateException(
+                "Cannot sign card payload: issuer key '${effectiveSigner.keyId}' is not trusted or has been revoked."
+            )
+        }
 
         val cleanCardId = cardId.trim().uppercase()
         require(cleanCardId.isNotBlank()) { "Card ID must not be blank" }
