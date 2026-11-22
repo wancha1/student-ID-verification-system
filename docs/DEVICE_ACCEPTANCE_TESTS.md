@@ -36,7 +36,9 @@ Record device model, Android version, app version, APK SHA-256, signing certific
 - [ ] A role cannot gain additional permissions by changing local UI state or client metadata.
 
 ### QR and gate operation
-- [ ] Valid active card is identified correctly.
+- [ ] Valid active V2 card displays **POLICY DECISION PENDING** in amber while LTC entry policy remains unapproved; it must not look like an ordinary denial or an approval.
+- [ ] A pending identity scan is recorded as `POLICY_PENDING`, not `NOT_APPROVED`, in gate logs and exports.
+- [ ] Invalid QR is rejected.
 - [ ] Invalid QR is rejected.
 - [ ] Unknown student/card is rejected.
 - [ ] Lost, replaced, revoked, or deactivated card is rejected.
@@ -49,12 +51,29 @@ Record device model, Android version, app version, APK SHA-256, signing certific
 - [ ] Meal Staff cannot edit student records or card status.
 - [ ] Meal history synchronizes to the second device after network recovery.
 
+### Two-physical-device card issuance and synchronisation
+
+Use two actual Android phones, Device A and Device B, signed in with separately provisioned test staff accounts in the same school. Keep both app builds and school IDs recorded.
+
+- [ ] Install the same release-candidate APK on both phones and record each APK SHA-256 and signing certificate fingerprint.
+- [ ] Enrol/refresh the trusted issuer public key on both phones before card verification.
+- [ ] On Device A, register a synthetic test student and issue a new signed V2 card.
+- [ ] Confirm the card record and signed QR payload are present on Device A.
+- [ ] Trigger sync on Device A and wait for an explicit successful sync result.
+- [ ] Trigger sync on Device B; confirm the same student and card identifier arrive without manually recreating either record.
+- [ ] Scan the newly issued card on Device B; verify signature, issuer trust, card lifecycle, and student lookup all succeed.
+- [ ] Confirm Device B shows the amber policy-pending outcome, not an ordinary denial, while entry policy is pending.
+- [ ] Revoke/deactivate the card on Device A, sync, then refresh Device B.
+- [ ] Scan the old QR on Device B and confirm it is rejected as inactive/revoked.
+- [ ] Verify the same immutable scan event does not appear twice after repeated sync/retry.
+- [ ] Record the result, timestamp, device identifiers, student test number, card identifier, and relevant log IDs. Never include private keys or real student data.
+
 ### Offline and multi-device behaviour
 - [ ] Download/sync the roster on Device A.
 - [ ] Disconnect Device A from the network and verify an authorized test card.
 - [ ] Confirm the event is queued locally and no data is silently lost.
 - [ ] Reconnect and confirm queued events upload once.
-- [ ] Device B receives the synced records.
+- [ ] Device B receives the synced records and the card lifecycle state.
 - [ ] Conflict handling does not overwrite newer server data with stale data.
 - [ ] Photo upload/download works with a private bucket and authorized staff only.
 
@@ -69,3 +88,20 @@ Record device model, Android version, app version, APK SHA-256, signing certific
 ## Acceptance rule
 
 Do not mark a test as passed based only on source-code inspection or GitHub emulator CI. Physical-device tests must be performed on actual devices, and the results must be recorded. Any failed security-boundary test blocks release.
+
+
+## Physical-device execution record
+
+| Field | Device A | Device B |
+|---|---|---|
+| Model |  |  |
+| Android version |  |  |
+| App version |  |  |
+| APK SHA-256 |  |  |
+| Signing certificate SHA-256 |  |  |
+| Staff role/test account label |  |  |
+| Test date/time |  |  |
+
+**Two-phone outcome:** Not run / Pass / Fail
+
+**Evidence to attach:** redacted screenshots of the issued card record, successful sync state on both devices, Device B scan result, revocation result, and relevant audit-log IDs.
