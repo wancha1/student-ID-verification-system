@@ -111,6 +111,7 @@ fun AdminDashboardScreen(
     onSelectStudent: (String) -> Unit,
     onQuickToggleFeeStatus: (studentId: String, currentStatus: FeeStatus) -> Unit,
     onAddStudent: (Student) -> Unit,
+    onImportStudent: (Student) -> Unit = onAddStudent,
     onDeleteStudent: (String) -> Unit,
     onEditStudent: (Student) -> Unit,
     onViewScanLogs: () -> Unit,
@@ -774,7 +775,7 @@ fun AdminDashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        newRecords.forEach { record -> onAddStudent(record.toStudent()) }
+                        newRecords.forEach { record -> onImportStudent(record.toStudent()) }
                         rosterImportNotice = "${newRecords.size} student record(s) submitted for registration. Existing admission numbers were skipped."
                         rosterPreview = null
                     },
