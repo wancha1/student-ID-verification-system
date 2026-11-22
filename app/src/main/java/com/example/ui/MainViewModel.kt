@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
@@ -404,12 +405,25 @@ class MainViewModel(
         _isScannerOpen.value = false
     }
 
+    private val gateScanLock = Any()
+    private var gateScanInFlight = false
+    private var lastGateScanCode: String? = null
+    private var lastGateScanAtMs = 0L
+    private val gateScanCooldownMs = 2_000L
+
     fun handleBarcodeScan(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Gate verification scanning")) {
             _scanError.value = "Access Denied: Gate verification scanning requires Gate Staff authorization."
             return
         }
-        viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        synchronized(gateScanLock) {
+            if (gateScanInFlight || (rawCode == lastGateScanCode && now - lastGateScanAtMs < gateScanCooldownMs)) return
+            gateScanInFlight = true
+            lastGateScanCode = rawCode
+            lastGateScanAtMs = now
+        }
+        val scanJob = viewModelScope.launch {
             _isScannerOpen.value = false
             val scanResult = repository.verifyStudentByQr(rawCode)
             _activeScanResult.value = scanResult
@@ -555,6 +569,17 @@ class MainViewModel(
                     }
                 }
             }
+
+            // Approved students get a brief acknowledgement, then the scanner resumes.
+            // Denials and verification errors remain visible until an officer dismisses them.
+            if (scanResult is StudentScanResult.Success && scanResult.isApproved) {
+                delay(1_500L)
+                dismissScanResult()
+                openScanner()
+            }
+        }
+        scanJob.invokeOnCompletion {
+            synchronized(gateScanLock) { gateScanInFlight = false }
         }
     }
 
