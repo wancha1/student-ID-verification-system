@@ -100,13 +100,15 @@ fun GateAccessLogsScreen(
     val filteredLogs = remember(scanLogs, selectedFilter) {
         when (selectedFilter) {
             "APPROVED" -> scanLogs.filter { it.decision == GateVerificationDecision.APPROVED }
-            "DENIED" -> scanLogs.filter { it.decision != GateVerificationDecision.APPROVED }
+            "DENIED" -> scanLogs.filter { it.decision == GateVerificationDecision.NOT_APPROVED }
+            "POLICY_PENDING" -> scanLogs.filter { it.decision == GateVerificationDecision.POLICY_PENDING }
             else -> scanLogs
         }
     }
 
     val approvedCount = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
-    val deniedCount = scanLogs.count { it.decision != GateVerificationDecision.APPROVED }
+    val deniedCount = scanLogs.count { it.decision == GateVerificationDecision.NOT_APPROVED }
+    val policyPendingCount = scanLogs.count { it.decision == GateVerificationDecision.POLICY_PENDING }
     val context = LocalContext.current
 
     BackHandler(onBack = onBack)
@@ -212,6 +214,18 @@ fun GateAccessLogsScreen(
                         selectedLabelColor = ApprovedGreenText
                     ),
                     modifier = Modifier.testTag("filter_chip_approved")
+                )
+
+                FilterChip(
+                    selected = selectedFilter == "POLICY_PENDING",
+                    onClick = { selectedFilter = "POLICY_PENDING" },
+                    label = { Text("Policy pending ($policyPendingCount)") },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFFFF7ED),
+                        selectedLabelColor = Color(0xFF92400E)
+                    ),
+                    modifier = Modifier.testTag("filter_chip_policy_pending")
                 )
 
                 FilterChip(
@@ -438,6 +452,7 @@ fun GateLogItemCard(
     modifier: Modifier = Modifier
 ) {
     val isApproved = log.decision == GateVerificationDecision.APPROVED
+    val isPolicyPending = log.decision == GateVerificationDecision.POLICY_PENDING
     val timeFormatter = remember { SimpleDateFormat("hh:mm:ss a", Locale.getDefault()) }
     val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
@@ -469,19 +484,20 @@ fun GateLogItemCard(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(if (isApproved) ApprovedGreenLight else RejectedRedLight),
+                    .background(when { isPolicyPending -> Color(0xFFFFF7ED); isApproved -> ApprovedGreenLight; else -> RejectedRedLight }),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = when (log.decision) {
                         GateVerificationDecision.APPROVED -> Icons.Default.CheckCircle
+                        GateVerificationDecision.POLICY_PENDING -> Icons.Default.Warning
                         GateVerificationDecision.NOT_APPROVED -> Icons.Default.Close
                         GateVerificationDecision.CARD_INACTIVE -> Icons.Default.Block
                         GateVerificationDecision.STUDENT_NOT_FOUND -> Icons.Default.Error
                         GateVerificationDecision.INVALID_QR -> Icons.Default.QrCodeScanner
                     },
                     contentDescription = null,
-                    tint = if (isApproved) ApprovedGreen else RejectedRed,
+                    tint = when { isPolicyPending -> Color(0xFFB45309); isApproved -> ApprovedGreen; else -> RejectedRed },
                     modifier = Modifier.size(22.dp)
                 )
             }
