@@ -1292,11 +1292,17 @@ class MainViewModel(
             }
             val signer = KeystoreIssuerManager.getSigner()
                 ?: throw IllegalStateException("The enrolled Android Keystore signing key could not be loaded.")
-            CardCryptoManager.setActiveSigner(signer)
             val entry = TrustedIssuerRegistry.registerTrustedKey(
                 signer.publicKey,
                 "LTC Authoritative Issuer"
             )
+            if (entry.isRevoked) {
+                CardCryptoManager.clearIssuerPrivateKey()
+                throw IllegalStateException(
+                    "This issuer key is revoked. Do not issue cards with it; complete an explicit key-rotation procedure first."
+                )
+            }
+            CardCryptoManager.setActiveSigner(signer)
             _userFeedbackMessage.value = "Issuer key created locally. Publishing its public verification key to the LTC cloud…"
             val context = appContext
                 ?: throw IllegalStateException("App context unavailable; public-key distribution cannot be started.")
@@ -1311,7 +1317,7 @@ class MainViewModel(
                                 publicKeyBase64 = entry.publicKeyBase64,
                                 label = entry.label,
                                 enrolledAtMs = entry.enrolledAt,
-                                isRevoked = false
+                                isRevoked = entry.isRevoked
                             )
                         ) { onConflict = "school_id,key_id" }
                     _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
@@ -1337,6 +1343,9 @@ class MainViewModel(
                 rows.forEach { row ->
                     if (row.isRevoked) {
                         TrustedIssuerRegistry.revokeIssuer(row.keyId)
+                        if (KeystoreIssuerManager.getSigner()?.keyId.equals(row.keyId, ignoreCase = true) == true) {
+                            CardCryptoManager.clearIssuerPrivateKey()
+                        }
                     } else {
                         TrustedIssuerRegistry.registerTrustedKeyBase64(
                             row.publicKeyBase64,
@@ -1365,6 +1374,9 @@ class MainViewModel(
         if (!requireAdminRole("Revoking trusted issuer key")) return
         val existing = TrustedIssuerRegistry.getIssuerEntry(kid)
         val success = TrustedIssuerRegistry.revokeIssuer(kid)
+        if (success && KeystoreIssuerManager.getSigner()?.keyId.equals(kid, ignoreCase = true) == true) {
+            CardCryptoManager.clearIssuerPrivateKey()
+        }
         if (success && existing != null) {
             val context = appContext
             if (context != null) {
