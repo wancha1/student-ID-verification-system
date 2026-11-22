@@ -1084,8 +1084,8 @@ fun StudentAccessApp(
                                     scanLogs = scanLogs,
                                     syncInfo = syncInfo,
                                     onOpenScanner = { viewModel.openScanner() },
-                                    onManualLookup = { studentId ->
-                                        viewModel.handleBarcodeScan(studentId, context)
+                                    onManualLookup = { studentNumber, reason ->
+                                        viewModel.handleManualGateLookup(studentNumber, reason, context)
                                     },
                                     onDismissScanResult = { viewModel.dismissScanResult() },
                                     onTriggerSync = { viewModel.triggerCloudSync() },
