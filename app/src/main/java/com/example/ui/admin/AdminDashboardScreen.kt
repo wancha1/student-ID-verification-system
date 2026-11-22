@@ -776,7 +776,7 @@ fun AdminDashboardScreen(
                 Button(
                     onClick = {
                         onImportStudents(newRecords.map { it.toStudent() })
-                        rosterImportNotice = "${newRecords.size} student record(s) submitted for registration. Existing admission numbers were skipped."
+                        rosterImportNotice = "${newRecords.size} student record(s) submitted for registration. Existing admission numbers were skipped. No ID cards are issued during roster import."
                         rosterPreview = null
                     },
                     enabled = newRecords.isNotEmpty(),
