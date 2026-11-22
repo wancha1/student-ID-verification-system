@@ -796,24 +796,28 @@ class MainViewModel(
         }
     }
 
-    fun registerImportedStudent(student: Student, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
+    fun registerImportedStudents(students: List<Student>, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
         if (!requireAdminRole("Importing roster students")) {
             onComplete(false, "Access Denied: Administrator role required.")
             return
         }
+        if (students.isEmpty()) {
+            onComplete(false, "No valid students were selected for import.")
+            return
+        }
         viewModelScope.launch {
-            val result = repository.addStudentWithoutCard(student)
+            val result = repository.addStudentsWithoutCards(students)
             if (result.isFailure) {
-                val message = result.exceptionOrNull()?.localizedMessage ?: "Failed to import student"
+                val message = result.exceptionOrNull()?.localizedMessage ?: "Failed to import student roster"
                 _userFeedbackMessage.value = message
                 onComplete(false, message)
                 return@launch
             }
             val syncResult = repository.syncWithCloud()
             val message = if (syncResult.isSuccess) {
-                "Student ${student.fullName} (${student.studentNumber}) imported and synchronized. No ID card was issued."
+                "${students.size} student record(s) imported and synchronized. No ID cards were issued."
             } else {
-                "Student ${student.fullName} (${student.studentNumber}) saved locally; cloud sync is pending. No ID card was issued."
+                "${students.size} student record(s) saved locally; cloud sync is pending. No ID cards were issued."
             }
             _userFeedbackMessage.value = message
             onComplete(true, message)
