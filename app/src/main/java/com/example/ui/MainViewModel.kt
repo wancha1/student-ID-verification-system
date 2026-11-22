@@ -1322,10 +1322,14 @@ class MainViewModel(
                         ) { onConflict = "school_id,key_id" }
                     _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
                 } catch (e: Exception) {
-                    _userFeedbackMessage.value = "Issuer key exists on this device, but cloud publication failed: ${e.localizedMessage ?: "unknown error"}. Do not issue cards until publication succeeds."
+                    // Keep the private key in Android Keystore for retry, but disable
+                    // signing until its public key is confirmed in the cloud registry.
+                    CardCryptoManager.clearIssuerPrivateKey()
+                    _userFeedbackMessage.value = "Issuer key exists on this device, but cloud publication failed: ${e.localizedMessage ?: "unknown error"}. Signing has been disabled; retry publication before issuing cards."
                 }
             }
         } catch (e: Exception) {
+            CardCryptoManager.clearIssuerPrivateKey()
             _userFeedbackMessage.value = "Failed to enroll issuer key: ${e.message}"
         }
     }
