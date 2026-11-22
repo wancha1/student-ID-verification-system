@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
@@ -75,10 +76,14 @@ fun GateAnalyticsCard(
 
     val totalScans = scanLogs.size
     val approvedScans = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
-    val deniedScans = scanLogs.count { it.decision != GateVerificationDecision.APPROVED }
-    val approvalPct = if (totalScans > 0) (approvedScans * 100 / totalScans) else 0
-    val approvalDisplay = if (totalScans > 0) "$approvalPct%" else "--"
-    val approvalSubtitle = if (totalScans > 0) "$approvedScans / $totalScans passed" else "0 scans logged"
+    val policyPendingScans = scanLogs.count { it.decision == GateVerificationDecision.POLICY_PENDING }
+    val deniedScans = scanLogs.count {
+        it.decision != GateVerificationDecision.APPROVED && it.decision != GateVerificationDecision.POLICY_PENDING
+    }
+    val decidedScans = approvedScans + deniedScans
+    val approvalPct = if (decidedScans > 0) (approvedScans * 100 / decidedScans) else 0
+    val approvalDisplay = if (decidedScans > 0) "$approvalPct%" else "--"
+    val approvalSubtitle = if (totalScans > 0) "$approvedScans / $decidedScans decided • $policyPendingScans pending" else "0 scans logged"
 
     // Hourly scan buckets (6 AM to 18 PM)
     val hourlyData = remember(scanLogs) {
@@ -291,7 +296,7 @@ fun GateAnalyticsCard(
             ) {
                 Text(
                     text = if (totalScans > 0)
-                        "Gate Access Integrity: $approvedScans Approved • $deniedScans Denied / Flagged"
+                        "Gate decisions: $approvedScans approved • $deniedScans denied • $policyPendingScans pending"
                     else
                         "Gate Access Integrity: No gate scans logged yet today",
                     fontSize = 11.5.sp,
@@ -318,6 +323,7 @@ fun GateAnalyticsCard(
                 } else {
                     val approvedWeight = (approvedScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.01f)
                     val deniedWeight = (deniedScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.001f)
+                    val pendingWeight = (policyPendingScans.toFloat() / totalScans.toFloat()).coerceAtLeast(0.001f)
 
                     Box(
                         modifier = Modifier
@@ -331,6 +337,14 @@ fun GateAnalyticsCard(
                                 .weight(deniedWeight)
                                 .fillMaxHeight()
                                 .background(RejectedRed)
+                        )
+                    }
+                    if (policyPendingScans > 0) {
+                        Box(
+                            modifier = Modifier
+                                .weight(pendingWeight)
+                                .fillMaxHeight()
+                                .background(Color(0xFFF59E0B))
                         )
                     }
                 }
