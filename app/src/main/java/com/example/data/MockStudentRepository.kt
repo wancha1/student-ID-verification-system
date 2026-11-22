@@ -206,6 +206,7 @@ class MockStudentRepository : StudentRepository {
                     card = card,
                     // A valid card confirms identity, not permission to enter.
                     isApproved = false,
+                    isPolicyPending = true,
                     reason = "Identity verified. Entry decision pending approved LTC gate policy.",
                     isOfflineData = isOffline,
                     lastSyncTimestamp = lastSync
