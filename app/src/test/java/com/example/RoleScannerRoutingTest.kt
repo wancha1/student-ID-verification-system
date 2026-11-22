@@ -16,6 +16,7 @@ import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.DepartmentVerificationResult
 import com.example.model.FeeStatus
+import com.example.model.GateVerificationDecision
 import com.example.model.MealServingStatus
 import com.example.model.MealType
 import com.example.model.ScanDepartment
@@ -207,4 +208,16 @@ class RoleScannerRoutingTest {
         SecurityManager.clearActiveSession(context)
         assertNull("Restored session should be null after logout", SecurityManager.getActiveSession(context))
     }
+    @Test
+    fun manualGateLookupIsRecordedAsManualAndOmitsFinanceStatus() = runBlocking {
+        assertTrue(viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222"))
+        viewModel.handleManualGateLookup("LTC-2026-9001", "QR code damaged")
+
+        kotlinx.coroutines.delay(250L)
+        val log = repository.scanLogsFlow.first().first { it.reason.contains("MANUAL_ENTRY: QR code damaged") }
+        assertEquals("MANUAL_ENTRY", log.qrPayload)
+        assertEquals(GateVerificationDecision.APPROVED, log.decision)
+        assertNull(log.feeStatus)
+    }
+
 }
