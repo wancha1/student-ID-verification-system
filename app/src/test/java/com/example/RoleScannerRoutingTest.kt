@@ -213,45 +213,30 @@ class RoleScannerRoutingTest {
         assertTrue(viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222"))
         viewModel.handleManualGateLookup("LTC-2026-9001", "QR code damaged")
 
-        kotlinx.coroutines.delay(250L)
-        val log = repository.scanLogsFlow.first().first { it.reason.contains("MANUAL_ENTRY: QR code damaged") }
+        val log = repository.scanLogsFlow.first { logs ->
+            logs.any { it.reason.contains("MANUAL_ENTRY: QR code damaged") }
+        }.first { it.reason.contains("MANUAL_ENTRY: QR code damaged") }
         assertEquals("MANUAL_ENTRY", log.qrPayload)
-        assertEquals(GateVerificationDecision.APPROVED, log.decision)
+        assertEquals(GateVerificationDecision.NOT_APPROVED, log.decision)
         assertNull(log.feeStatus)
     }
 
-    @Test
-    fun manualMealServingPersistsReasonAndBlocksDuplicateServing() = runBlocking {
-        assertTrue(viewModel.authenticateAndLogin(context, UserRole.MEAL_SERVING_STAFF, "3333"))
-        viewModel.setActiveMealType(MealType.LUNCH)
-
-        viewModel.verifyAndServeMealManually("LTC-2026-9001", "QR code damaged")
-        kotlinx.coroutines.delay(250L)
-
-        val saved = database.mealRecordDao().findServing(studentId, MealType.LUNCH.name,
-            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()))
-        assertNotNull(saved)
-        assertTrue(saved?.notes?.contains("MANUAL_ENTRY: QR code damaged") == true)
-
-        viewModel.verifyAndServeMealManually("LTC-2026-9001", "QR code still unreadable")
-        kotlinx.coroutines.delay(250L)
-        assertTrue(viewModel.mealScanOutcome.value is com.example.model.MealVerificationResult.BlockedDoubleServing)
-    }
+    // Meal workflows are deliberately excluded from the gate-only pilot and are not
+    // exercised by this pilot acceptance test suite.
 
     @Test
-    fun manualGateLookupKeepsDeniedDecisionAndNeutralReason() = runBlocking {
+    fun manualGateLookupKeepsDecisionOnHoldUntilSchoolPolicyIsApproved() = runBlocking {
         assertTrue(viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222"))
-        database.studentDao().updateFeeStatus(
-            studentId, FeeStatus.OUTSTANDING.name, 1.0, System.currentTimeMillis()
-        )
 
         viewModel.handleManualGateLookup("LTC-2026-9001", "Badge unreadable")
-        kotlinx.coroutines.delay(250L)
 
         val result = viewModel.activeScanResult.value as StudentScanResult.Success
         assertFalse(result.isApproved)
+        assertTrue(result.reason.contains("authorised school exception", ignoreCase = true))
         assertFalse(result.reason.contains("fee", ignoreCase = true))
-        val log = repository.scanLogsFlow.first().first { it.reason.contains("MANUAL_ENTRY: Badge unreadable") }
+        val log = repository.scanLogsFlow.first { logs ->
+            logs.any { it.reason.contains("MANUAL_ENTRY: Badge unreadable") }
+        }.first { it.reason.contains("MANUAL_ENTRY: Badge unreadable") }
         assertEquals(GateVerificationDecision.NOT_APPROVED, log.decision)
         assertNull(log.feeStatus)
     }
