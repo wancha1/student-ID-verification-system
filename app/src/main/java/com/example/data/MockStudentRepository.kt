@@ -199,36 +199,16 @@ class MockStudentRepository : StudentRepository {
                     )
                 }
 
-                // 5. Evaluate fee and day-scholar gate access rules
-                if (!student.isDayScholar) {
-                    StudentScanResult.Success(
-                        student = student,
-                        card = card,
-                        isApproved = false,
-                        reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
-                        isOfflineData = isOffline,
-                        lastSyncTimestamp = lastSync
-                    )
-                } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-                    val formattedAmt = String.format(Locale.US, "%,.0f", student.outstandingAmount)
-                    StudentScanResult.Success(
-                        student = student,
-                        card = card,
-                        isApproved = false,
-                        reason = "School fees are outstanding (Balance: UGX $formattedAmt). Direct to Bursar.",
-                        isOfflineData = isOffline,
-                        lastSyncTimestamp = lastSync
-                    )
-                } else {
-                    StudentScanResult.Success(
-                        student = student,
-                        card = card,
-                        isApproved = true,
-                        reason = "Entry Approved: Authentic V2 Card (${card.cardIdentifier}) verified & Fees Cleared.",
-                        isOfflineData = isOffline,
-                        lastSyncTimestamp = lastSync
-                    )
-                }
+                // Gate verification establishes identity and card validity only.
+                // Fee and boarding restrictions require formal school policy approval.
+                StudentScanResult.Success(
+                    student = student,
+                    card = card,
+                    isApproved = true,
+                    reason = "Identity verified. Authentic active V2 card confirmed.",
+                    isOfflineData = isOffline,
+                    lastSyncTimestamp = lastSync
+                )
             }
         }
     }
