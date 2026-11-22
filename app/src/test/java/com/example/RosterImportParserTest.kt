@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.model.AccessStatus
 import com.example.util.RosterImportParser
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -35,6 +36,8 @@ LTC-001,Alice,Okello,"Grace, Mary",Female,2009-04-12,Senior 3,A,0700000001,John 
         assertEquals("Senior 3-A", student.gradeClass)
         assertEquals("Female", student.gender)
         assertEquals("John Okello", student.guardianName)
+        assertEquals(AccessStatus.PENDING_POLICY, student.accessStatus)
+        assertTrue(!student.isEntryApproved)
         assertTrue(student.notes.contains("date_of_birth"))
         assertTrue(student.notes.contains("0700000001"))
         assertTrue(student.notes.contains("alice@example.com"))
