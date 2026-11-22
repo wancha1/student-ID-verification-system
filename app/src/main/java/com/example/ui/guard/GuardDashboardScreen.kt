@@ -102,7 +102,7 @@ fun GuardDashboardScreen(
     scanLogs: List<ScanLog>,
     syncInfo: SyncInfo,
     onOpenScanner: () -> Unit,
-    onManualLookup: (String) -> Unit,
+    onManualLookup: (String, String) -> Unit,
     onDismissScanResult: () -> Unit,
     onTriggerSync: () -> Unit,
     onToggleOnline: (Boolean) -> Unit,
@@ -111,6 +111,7 @@ fun GuardDashboardScreen(
 ) {
     var showManualInputDialog by remember { mutableStateOf(false) }
     var manualIdText by remember { mutableStateOf("") }
+    var manualReason by remember { mutableStateOf("") }
     val roleTheme = LocalRoleTheme.current
 
     // If a student verification is active, display the full-bleed Verification result view
@@ -477,7 +478,7 @@ fun GuardDashboardScreen(
             text = {
                 Column {
                     Text(
-                        text = "Enter the student registration number (e.g. OAK-2026-0001):",
+                        text = "Search the enrolled student by admission number. This does not validate or replace a QR badge.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -485,11 +486,23 @@ fun GuardDashboardScreen(
                     OutlinedTextField(
                         value = manualIdText,
                         onValueChange = { manualIdText = it.uppercase() },
-                        placeholder = { Text("OAK-2026-0001") },
+                        label = { Text("Admission number") },
+                        placeholder = { Text("LTC001") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("input_manual_student_id")
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = manualReason,
+                        onValueChange = { manualReason = it },
+                        label = { Text("Reason for manual verification") },
+                        placeholder = { Text("e.g. QR code damaged") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_manual_lookup_reason"),
+                        minLines = 2
                     )
                 }
             },
@@ -497,14 +510,17 @@ fun GuardDashboardScreen(
                 Button(
                     onClick = {
                         val input = manualIdText.trim()
-                        if (input.isNotBlank()) {
+                        val reason = manualReason.trim()
+                        if (input.isNotBlank() && reason.isNotBlank()) {
                             showManualInputDialog = false
-                            onManualLookup(input)
+                            onManualLookup(input, reason)
+                            manualIdText = ""
+                            manualReason = ""
                         }
                     },
                     modifier = Modifier.testTag("button_confirm_manual_lookup")
                 ) {
-                    Text("Verify")
+                    Text("Record manual check")
                 }
             },
             dismissButton = {
