@@ -131,9 +131,9 @@ fun VerificationResultDisplay(
     StudentSuccessVerificationView(
         student = student,
         card = null,
-        isApproved = student.isEntryApproved,
-        isPolicyPending = false,
-        reason = if (student.isEntryApproved) "Student record verified." else "Access requires review by the school office.",
+        isApproved = false,
+        isPolicyPending = true,
+        reason = "Student identity record found. Entry decision pending approved LTC gate policy.",
         isOffline = false,
         lastSyncTimestamp = System.currentTimeMillis(),
         onScanNext = onScanNext,
