@@ -83,7 +83,7 @@ fun MealsMasterScreen(
     allStudents: List<Student>,
     onSelectMealType: (MealType) -> Unit,
     onOpenScanner: () -> Unit,
-    onManualServe: (studentNumber: String) -> Unit,
+    onManualServe: (studentNumber: String, reason: String) -> Unit,
     onDismissScanOutcome: () -> Unit,
     onExport: (format: ExportFormat) -> Unit,
     modifier: Modifier = Modifier,
@@ -91,6 +91,7 @@ fun MealsMasterScreen(
 ) {
     var showExportDialog by remember { mutableStateOf(false) }
     var manualInput by remember { mutableStateOf("") }
+    var manualReason by remember { mutableStateOf("") }
     var historySearchQuery by remember { mutableStateOf("") }
     var selectedMealsTab by remember { mutableStateOf("SERVE") }
 
@@ -309,38 +310,51 @@ fun MealsMasterScreen(
                 }
 
                 if (!readOnly && selectedMealsTab == "SERVE") {
-                // Manual Student Entry Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = manualInput,
-                        onValueChange = { manualInput = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("input_meals_manual_student"),
-                        placeholder = { Text("Enter student no. e.g. OAK-2026-0001") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                // Audited manual fallback for a damaged or unreadable badge.
+                OutlinedTextField(
+                    value = manualInput,
+                    onValueChange = { manualInput = it.uppercase() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_meals_manual_student"),
+                    label = { Text("Student admission number") },
+                    placeholder = { Text("LTC001") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = manualReason,
+                    onValueChange = { manualReason = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_meals_manual_reason"),
+                    label = { Text("Reason for manual serving") },
+                    placeholder = { Text("e.g. QR code damaged") },
+                    minLines = 2,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val number = manualInput.trim()
+                        val reason = manualReason.trim()
+                        if (number.isNotBlank() && reason.isNotBlank()) {
+                            onManualServe(number, reason)
+                            manualInput = ""
+                            manualReason = ""
+                        }
+                    },
+                    enabled = manualInput.isNotBlank() && manualReason.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("button_meals_manual_serve"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE11D48)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (manualInput.isNotBlank()) {
-                                onManualServe(manualInput)
-                                manualInput = ""
-                            }
-                        },
-                        enabled = manualInput.isNotBlank(),
-                        modifier = Modifier.testTag("button_meals_manual_serve"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE11D48)
-                        )
-                    ) {
-                        Text("Serve")
-                    }
+                ) {
+                    Text("Record manual serving")
                 }
             }
         }
