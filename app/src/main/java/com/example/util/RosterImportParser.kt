@@ -90,6 +90,7 @@ data class RosterImportPreview(
 
 object RosterImportParser {
     private const val MAX_INPUT_BYTES = 20 * 1024 * 1024
+    private const val MAX_DATA_ROWS = 10_000
     private val requiredColumns = setOf("admission_number", "first_name", "last_name", "class_name")
 
     fun parse(input: InputStream, fileName: String, mimeType: String? = null): RosterImportPreview {
@@ -119,6 +120,7 @@ object RosterImportParser {
     }
 
     private fun validateRows(rows: List<List<String>>): RosterImportPreview {
+        require(rows.size <= MAX_DATA_ROWS + 1) { "Roster contains more than 10,000 data rows." }
         if (rows.isEmpty()) return RosterImportPreview(emptyList(), listOf("The selected file is empty."), emptyList())
         val headers = rows.first().map(::normalizeHeader)
         val missing = requiredColumns - headers.toSet()
