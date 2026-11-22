@@ -262,6 +262,19 @@ class ExampleRobolectricTest {
         assertEquals(GateVerificationDecision.POLICY_PENDING, logs[2].decision)
     }
     @Test
+    fun testRosterImportCreatesStudentWithoutIssuingCard() = runBlocking {
+        val imported = Student(
+            studentNumber = "OAK-2026-0197",
+            firstName = "Roster",
+            lastName = "Only",
+            gradeClass = "Senior 4-A"
+        )
+        assertTrue(repository.addStudentWithoutCard(imported).isSuccess)
+        assertNotNull(repository.getStudentByStudentNumber(imported.studentNumber))
+        assertNull(repository.getActiveCardForStudent(imported.id))
+    }
+
+    @Test
     fun testSuspendedStudentRemainsDeniedWhileGeneralEntryPolicyIsPending() = runBlocking {
         val suspended = Student(
             studentNumber = "OAK-2026-0198",
