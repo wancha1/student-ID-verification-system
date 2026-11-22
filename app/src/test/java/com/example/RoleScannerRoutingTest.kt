@@ -238,4 +238,22 @@ class RoleScannerRoutingTest {
         assertTrue(viewModel.mealScanOutcome.value is com.example.model.MealVerificationResult.BlockedDoubleServing)
     }
 
+    @Test
+    fun manualGateLookupKeepsDeniedDecisionAndNeutralReason() = runBlocking {
+        assertTrue(viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222"))
+        database.studentDao().updateFeeStatus(
+            studentId, FeeStatus.OUTSTANDING.name, 1.0, System.currentTimeMillis()
+        )
+
+        viewModel.handleManualGateLookup("LTC-2026-9001", "Badge unreadable")
+        kotlinx.coroutines.delay(250L)
+
+        val result = viewModel.activeScanResult.value as StudentScanResult.Success
+        assertFalse(result.isApproved)
+        assertFalse(result.reason.contains("fee", ignoreCase = true))
+        val log = repository.scanLogsFlow.first().first { it.reason.contains("MANUAL_ENTRY: Badge unreadable") }
+        assertEquals(GateVerificationDecision.NOT_APPROVED, log.decision)
+        assertNull(log.feeStatus)
+    }
+
 }
