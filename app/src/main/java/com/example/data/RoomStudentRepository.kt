@@ -245,6 +245,7 @@ class RoomStudentRepository(
                     // Identity verification is not an entry decision. Until LTC approves
                     // a gate policy, the officer must hold and follow the school's procedure.
                     isApproved = false,
+                    isPolicyPending = true,
                     reason = "Identity verified. Entry decision pending approved LTC gate policy.",
                     isOfflineData = isOffline,
                     lastSyncTimestamp = lastSync
