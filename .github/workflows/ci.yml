@@ -67,12 +67,18 @@ jobs:
             KEY_PASSWORD="$STORE_PASSWORD" \
             gradle --no-daemon --no-build-cache assembleDebug assembleRelease
       - name: Run Android unit tests
+        env:
+          # Robolectric downloads its Android 14 runtime at test time. Use the
+          # canonical Maven Central host instead of repo1.maven.org, which can
+          # fail independently of Gradle dependency resolution on hosted runners.
+          JAVA_TOOL_OPTIONS: "-Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2"
         run: gradle --no-daemon testDebugUnitTest --stacktrace
       - name: Run device smoke tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
           # Explicitly allow TCG fallback on hosted runners without KVM acceleration.
           ANDROID_I_WANT_MY_TCG: "yes"
+          JAVA_TOOL_OPTIONS: "-Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2"
         with:
           # API 34 keeps the CI smoke test on a stable, widely supported image.
           api-level: 34
