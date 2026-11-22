@@ -58,10 +58,11 @@ class LtcSystemVerificationTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
-        if (!CardCryptoManager.hasIssuerPrivateKey()) {
-            val keyPair = TestCardCryptoHelper.generateKeyPair()
-            TestCardCryptoHelper.configureTestKeyPair(keyPair)
-        }
+        // Each test must start with a signer whose public key is trusted in this test's registry.
+        // Reusing a process-global signer lets earlier tests that revoke/clear issuers poison later tests.
+        TrustedIssuerRegistry.clearAll()
+        val keyPair = TestCardCryptoHelper.generateKeyPair()
+        TestCardCryptoHelper.configureTestKeyPair(keyPair)
     }
 
     @After
