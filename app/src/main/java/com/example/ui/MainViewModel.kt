@@ -407,6 +407,7 @@ class MainViewModel(
     }
 
     private val gateScanThrottle = GateScanThrottle(cooldownMs = 2_000L)
+    private val departmentScanThrottle = GateScanThrottle(cooldownMs = 2_000L)
 
     fun handleBarcodeScan(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Gate verification scanning")) {
@@ -1623,7 +1624,8 @@ class MainViewModel(
             return
         }
 
-        viewModelScope.launch {
+        if (!departmentScanThrottle.tryBegin(rawCode)) return
+        val scanJob = viewModelScope.launch {
             _isScannerOpen.value = false
             _isMealScannerOpen.value = false
             _isRequirementScannerOpen.value = false
@@ -1704,6 +1706,7 @@ class MainViewModel(
                 handleBarcodeScan(rawCode, context)
             }
         }
+        scanJob.invokeOnCompletion { departmentScanThrottle.finish() }
     }
 
     fun recommendExamException(studentId: String, studentNumber: String, studentName: String, reason: String = "Financial clearance pending bursar review") {
