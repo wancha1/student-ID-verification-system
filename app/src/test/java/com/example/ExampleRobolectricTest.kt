@@ -229,7 +229,7 @@ class ExampleRobolectricTest {
 
         // Scan cleared student
         viewModel.handleBarcodeScan(card1.qrPayload)
-        val clearedResult = viewModel.activeScanResult.value
+        val clearedResult = viewModel.activeScanResult.first { it != null }
         assertNotNull(clearedResult)
         assertTrue(clearedResult is StudentScanResult.Success && clearedResult.isApproved)
         assertNull(viewModel.scanError.value)
@@ -243,13 +243,14 @@ class ExampleRobolectricTest {
         assertFalse((outstandingResult as StudentScanResult.Success).reason.contains("fee", ignoreCase = true))
 
         // Scan invalid barcode format
+        viewModel.dismissScanResult()
         viewModel.handleBarcodeScan("NON_SCHOOL_BARCODE_XYZ")
-        val invalidResult = viewModel.activeScanResult.value
+        val invalidResult = viewModel.activeScanResult.first { it != null }
         assertNotNull(invalidResult)
         assertTrue(invalidResult is StudentScanResult.InvalidQr)
 
         // Verify logs contain all scans (newest first)
-        val logs = repository.scanLogsFlow.first()
+        val logs = repository.scanLogsFlow.first { it.size == 3 }
         assertEquals(3, logs.size)
         assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
         assertEquals(GateVerificationDecision.APPROVED, logs[1].decision)
