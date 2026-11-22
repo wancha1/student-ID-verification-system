@@ -236,35 +236,17 @@ class RoomStudentRepository(
 
                 val student = studentEntity.toDomain()
 
-                // 5. Evaluate fee and day-scholar gate access rules
-                if (!student.isDayScholar) {
-                    StudentScanResult.Success(
-                        student = student,
-                        card = card,
-                        isApproved = false,
-                        reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
-                        isOfflineData = isOffline,
-                        lastSyncTimestamp = lastSync
-                    )
-                } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-                    StudentScanResult.Success(
-                        student = student,
-                        card = card,
-                        isApproved = false,
-                        reason = "School fees are outstanding. Refer the student to the school office.",
-                        isOfflineData = isOffline,
-                        lastSyncTimestamp = lastSync
-                    )
-                } else {
-                    StudentScanResult.Success(
-                        student = student,
-                        card = card,
-                        isApproved = true,
-                        reason = "Entry Approved: Authentic V2 Card (${card.cardIdentifier}) verified & Fees Cleared.",
-                        isOfflineData = isOffline,
-                        lastSyncTimestamp = lastSync
-                    )
-                }
+                // Gate verification establishes identity and card validity only.
+                // Fee and boarding restrictions are policy decisions and must not be
+                // enforced until LTC formally approves the gate policy.
+                StudentScanResult.Success(
+                    student = student,
+                    card = card,
+                    isApproved = true,
+                    reason = "Identity verified. Authentic active V2 card confirmed.",
+                    isOfflineData = isOffline,
+                    lastSyncTimestamp = lastSync
+                )
             }
         }
     }
