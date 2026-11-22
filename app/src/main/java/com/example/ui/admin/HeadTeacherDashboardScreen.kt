@@ -103,7 +103,7 @@ fun HeadTeacherDashboardScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF14263D)),
+                colors = CardDefaults.cardColors(containerColor = roleTheme.primaryColor),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
             ) {
@@ -113,10 +113,10 @@ fun HeadTeacherDashboardScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(shape = RoundedCornerShape(10.dp), color = Color.White.copy(alpha = 0.12f)) {
-                            Icon(Icons.Default.School, null, tint = Color(0xFFE8C77A), modifier = Modifier.padding(9.dp).size(23.dp))
+                            Icon(Icons.Default.School, null, tint = roleTheme.accentGlowColor, modifier = Modifier.padding(9.dp).size(23.dp))
                         }
                         Spacer(Modifier.size(10.dp))
-                        Text("HEAD TEACHER WORKSPACE", color = Color(0xFFE8C77A), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                        Text("HEAD TEACHER WORKSPACE", color = roleTheme.accentGlowColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
                     }
                     Text("Good day, ${user.name}", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("School operations overview • Lira Town College", color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)

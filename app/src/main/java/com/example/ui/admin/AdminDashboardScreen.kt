@@ -79,7 +79,6 @@ import com.example.ui.theme.ApprovedGreen
 import com.example.ui.theme.ApprovedGreenDark
 import com.example.ui.theme.ApprovedGreenLight
 import com.example.ui.theme.ApprovedGreenText
-import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedDark
 import com.example.ui.theme.RejectedRedLight
@@ -132,11 +131,11 @@ fun AdminDashboardScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1726)),
+                    colors = CardDefaults.cardColors(containerColor = roleTheme.primaryColor),
                     elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.2.dp, GoldAccent.copy(alpha = 0.58f), RoundedCornerShape(20.dp))
+                        .border(1.2.dp, roleTheme.accentGlowColor.copy(alpha = 0.58f), RoundedCornerShape(20.dp))
                 ) {
                     Row(
                         modifier = Modifier
@@ -148,7 +147,7 @@ fun AdminDashboardScreen(
                             modifier = Modifier.size(52.dp),
                             shape = RoundedCornerShape(16.dp),
                             color = Color.White.copy(alpha = 0.08f),
-                            border = BorderStroke(1.2.dp, GoldAccent.copy(alpha = 0.6f))
+                            border = BorderStroke(1.2.dp, roleTheme.accentGlowColor.copy(alpha = 0.6f))
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -157,7 +156,7 @@ fun AdminDashboardScreen(
                                 Icon(
                                     imageVector = roleTheme.icon,
                                     contentDescription = roleTheme.departmentTagline,
-                                    tint = GoldAccent,
+                                    tint = roleTheme.accentGlowColor,
                                     modifier = Modifier.size(30.dp)
                                 )
                             }
@@ -169,7 +168,7 @@ fun AdminDashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = roleTheme.departmentTagline,
-                                    color = GoldAccent,
+                                    color = roleTheme.accentGlowColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     letterSpacing = 1.2.sp
@@ -218,7 +217,7 @@ fun AdminDashboardScreen(
                                 Icon(
                                     imageVector = Icons.Default.History,
                                     contentDescription = "Gate Activity Logs",
-                                    tint = GoldAccent,
+                                    tint = roleTheme.accentGlowColor,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }

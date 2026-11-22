@@ -1060,7 +1060,7 @@ fun StudentAccessApp(
                         allStudents = allStudents,
                         onSelectMealType = { viewModel.setActiveMealType(it) },
                         onOpenScanner = { },
-                        onManualServe = { },
+                        onManualServe = { _, _ -> },
                         onDismissScanOutcome = { },
                         onExport = { format -> viewModel.exportDataset("MEALS", format, context) },
                         readOnly = true
@@ -1080,12 +1080,13 @@ fun StudentAccessApp(
                                     user = user,
                                     activeScanResult = activeScanResult,
                                     activeScannedStudent = activeScannedStudent,
+                                    allStudents = allStudents,
                                     scanError = scanError,
                                     scanLogs = scanLogs,
                                     syncInfo = syncInfo,
                                     onOpenScanner = { viewModel.openScanner() },
-                                    onManualLookup = { studentId ->
-                                        viewModel.handleBarcodeScan(studentId, context)
+                                    onManualLookup = { studentNumber, reason ->
+                                        viewModel.handleManualGateLookup(studentNumber, reason, context)
                                     },
                                     onDismissScanResult = { viewModel.dismissScanResult() },
                                     onTriggerSync = { viewModel.triggerCloudSync() },
@@ -1258,8 +1259,8 @@ fun StudentAccessApp(
                                     allStudents = allStudents,
                                     onSelectMealType = { viewModel.setActiveMealType(it) },
                                     onOpenScanner = { viewModel.openMealScanner() },
-                                    onManualServe = { studentNumber ->
-                                        viewModel.verifyAndServeMeal(studentNumber, context)
+                                    onManualServe = { studentNumber, reason ->
+                                        viewModel.verifyAndServeMealManually(studentNumber, reason, context)
                                     },
                                     onDismissScanOutcome = { viewModel.dismissMealOutcome() },
                                     onExport = { format ->

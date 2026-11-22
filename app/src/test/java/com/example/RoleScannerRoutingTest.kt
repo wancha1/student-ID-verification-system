@@ -16,6 +16,7 @@ import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.DepartmentVerificationResult
 import com.example.model.FeeStatus
+import com.example.model.GateVerificationDecision
 import com.example.model.MealServingStatus
 import com.example.model.MealType
 import com.example.model.ScanDepartment
@@ -207,4 +208,37 @@ class RoleScannerRoutingTest {
         SecurityManager.clearActiveSession(context)
         assertNull("Restored session should be null after logout", SecurityManager.getActiveSession(context))
     }
+    @Test
+    fun manualGateLookupIsRecordedAsManualAndOmitsFinanceStatus() = runBlocking {
+        assertTrue(viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222"))
+        viewModel.handleManualGateLookup("LTC-2026-9001", "QR code damaged")
+
+        val log = repository.scanLogsFlow.first { logs ->
+            logs.any { it.reason.contains("MANUAL_ENTRY: QR code damaged") }
+        }.first { it.reason.contains("MANUAL_ENTRY: QR code damaged") }
+        assertEquals("MANUAL_ENTRY", log.qrPayload)
+        assertEquals(GateVerificationDecision.NOT_APPROVED, log.decision)
+        assertNull(log.feeStatus)
+    }
+
+    // Meal workflows are deliberately excluded from the gate-only pilot and are not
+    // exercised by this pilot acceptance test suite.
+
+    @Test
+    fun manualGateLookupKeepsDecisionOnHoldUntilSchoolPolicyIsApproved() = runBlocking {
+        assertTrue(viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222"))
+
+        viewModel.handleManualGateLookup("LTC-2026-9001", "Badge unreadable")
+
+        val result = viewModel.activeScanResult.first { it is StudentScanResult.Success } as StudentScanResult.Success
+        assertFalse(result.isApproved)
+        assertTrue(result.reason.contains("authorised school exception", ignoreCase = true))
+        assertFalse(result.reason.contains("fee", ignoreCase = true))
+        val log = repository.scanLogsFlow.first { logs ->
+            logs.any { it.reason.contains("MANUAL_ENTRY: Badge unreadable") }
+        }.first { it.reason.contains("MANUAL_ENTRY: Badge unreadable") }
+        assertEquals(GateVerificationDecision.NOT_APPROVED, log.decision)
+        assertNull(log.feeStatus)
+    }
+
 }

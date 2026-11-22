@@ -167,7 +167,7 @@ class QrSecurityTrustModelTest {
         val scanResult = roomRepository.verifyStudentByQr(validPayload1)
         assertTrue("Scan result must be Success", scanResult is StudentScanResult.Success)
         val success = scanResult as StudentScanResult.Success
-        assertTrue("Eligible student with cleared fees must be approved", success.isApproved)
+        assertFalse("A valid card verifies identity only; entry policy is still pending", success.isApproved)
         assertEquals("Julius Okot", success.student.fullName)
         assertEquals(cardId1, success.card?.cardIdentifier)
     }
@@ -647,11 +647,20 @@ class QrSecurityTrustModelTest {
         val rogueSigner = SoftwareCardSigner(rogueKeyPair)
 
         val rogueCardId = CardCryptoManager.generateSecureRandomCardId()
-        val roguePayload = CardCryptoManager.signCardPayload(
+        // Build a correctly signed payload directly to model a credential from an
+        // issuer that this device has deliberately not trusted.
+        val rogueCanonical = CardCryptoUtils.buildCanonicalMessage(
+            rogueSigner.keyId, rogueCardId, validFrom, validUntil
+        )
+        val rogueSignature = CardCryptoUtils.encodeBase64UrlNoPadding(
+            rogueSigner.sign(rogueCanonical)
+        )
+        val roguePayload = CardCryptoUtils.buildV2QrPayload(
+            kid = rogueSigner.keyId,
             cardId = rogueCardId,
             validFrom = validFrom,
             validUntil = validUntil,
-            signer = rogueSigner
+            signatureBase64Url = rogueSignature
         )
 
         assertFalse(
@@ -684,6 +693,19 @@ class QrSecurityTrustModelTest {
         val invalid = revokedScan as StudentScanResult.InvalidQr
         assertTrue(invalid.errorReason.contains("Untrusted issuer", ignoreCase = true) ||
                    invalid.errorReason.contains("revoked", ignoreCase = true))
+
+        // Revocation must also disable issuance, not merely verification.
+        try {
+            CardCryptoManager.signCardPayload(
+                cardId = CardCryptoManager.generateSecureRandomCardId(),
+                validFrom = validFrom,
+                validUntil = validUntil,
+                signer = testSigner
+            )
+            fail("A revoked issuer must not be able to sign new cards")
+        } catch (e: IllegalStateException) {
+            assertTrue(e.message.orEmpty().contains("revoked", ignoreCase = true))
+        }
     }
 
     // =========================================================================

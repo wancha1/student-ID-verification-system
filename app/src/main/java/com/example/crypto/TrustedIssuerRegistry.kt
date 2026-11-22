@@ -61,15 +61,23 @@ object TrustedIssuerRegistry {
     ): TrustedIssuerEntry {
         val kid = CardCryptoUtils.computeKeyId(publicKey)
         val base64 = CardCryptoUtils.encodePublicKeyToBase64(publicKey)
+        // Re-registering the same key (for example, restoring this device's
+        // Keystore signer after process restart) must never clear a prior revocation.
+        // A newly rotated key has a new kid and can be enrolled independently.
+        val previouslyEnrolled = entryCache[kid] ?: loadEntryFromStorage(kid)
         val entry = TrustedIssuerEntry(
             kid = kid,
             publicKeyBase64 = base64,
             label = label,
-            enrolledAt = enrolledAt,
-            isRevoked = false
+            enrolledAt = previouslyEnrolled?.enrolledAt ?: enrolledAt,
+            isRevoked = previouslyEnrolled?.isRevoked ?: false
         )
 
-        keyCache[kid] = publicKey
+        if (entry.isRevoked) {
+            keyCache.remove(kid)
+        } else {
+            keyCache[kid] = publicKey
+        }
         entryCache[kid] = entry
         persistEntry(entry)
         return entry

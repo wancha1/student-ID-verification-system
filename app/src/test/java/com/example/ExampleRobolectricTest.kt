@@ -103,7 +103,7 @@ class ExampleRobolectricTest {
         assertEquals("Senior 4-A", verifiedStudent.gradeClass)
         assertTrue(verifiedStudent.isDayScholar)
         assertEquals(FeeStatus.CLEARED, verifiedStudent.feesStatus)
-        assertTrue("Fees cleared student must be approved for entry", scanResult.isApproved)
+        assertFalse("Valid card verifies identity only until gate policy is approved", scanResult.isApproved)
     }
 
     @Test
@@ -116,7 +116,7 @@ class ExampleRobolectricTest {
         val success = scanResult as StudentScanResult.Success
         assertEquals("Sophia", success.student.firstName)
         assertEquals(FeeStatus.OUTSTANDING, success.student.feesStatus)
-        assertFalse("Outstanding fee student must NOT be approved for entry", success.isApproved)
+        assertFalse("Entry remains pending regardless of fee status", success.isApproved)
     }
 
     @Test
@@ -131,7 +131,7 @@ class ExampleRobolectricTest {
 
         // 1. Initial scan is approved with authentic V2 card
         val scanResult1 = repository.verifyStudentByQr(activeCard.qrPayload)
-        assertTrue(scanResult1 is StudentScanResult.Success && scanResult1.isApproved)
+        assertTrue(scanResult1 is StudentScanResult.Success && !scanResult1.isApproved)
 
         // 2. Report card lost
         val reportResult = repository.reportCardLost(student.id, activeCard.id, "Student lost wallet on campus")
@@ -151,7 +151,7 @@ class ExampleRobolectricTest {
 
         // 5. Scan succeeds with newly issued replacement card
         val scanResult3 = repository.verifyStudentByQr(newCard.qrPayload)
-        assertTrue(scanResult3 is StudentScanResult.Success && scanResult3.isApproved)
+        assertTrue(scanResult3 is StudentScanResult.Success && !scanResult3.isApproved)
 
         // 6. Old lost card remains inactive and cannot gain access
         val oldCardRescan = repository.verifyStudentByQr(activeCard.qrPayload)
@@ -159,7 +159,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun testFeeStatusUpdateImmediatelyAffectsApproval() = runBlocking {
+    fun testFeeStatusDoesNotAffectIdentityVerification() = runBlocking {
         val studentNumber = "OAK-2026-0002"
         val initialStudent = repository.getStudentByStudentNumber(studentNumber)
         assertNotNull(initialStudent)
@@ -173,7 +173,7 @@ class ExampleRobolectricTest {
 
         // Immediate scan by guard returns approved!
         val scanResult1 = repository.verifyStudentByQr(card.qrPayload)
-        assertTrue(scanResult1 is StudentScanResult.Success && scanResult1.isApproved)
+        assertTrue(scanResult1 is StudentScanResult.Success && !scanResult1.isApproved)
 
         // Admin sets fees back to outstanding
         repository.updateFeeStatus(initialStudent.id, FeeStatus.OUTSTANDING, 480000.0)
@@ -207,7 +207,7 @@ class ExampleRobolectricTest {
         assertTrue(scanResult is StudentScanResult.Success)
         val retrieved = (scanResult as StudentScanResult.Success).student
         assertEquals("Lucas", retrieved.firstName)
-        assertTrue(scanResult.isApproved)
+        assertFalse(scanResult.isApproved)
 
         // Delete student
         val deleteResult = repository.deleteStudent(newStudent.id)
@@ -219,7 +219,7 @@ class ExampleRobolectricTest {
 
     @Test
     fun testGuardScanWorkflowAndAuditLogging() = runBlocking {
-        viewModel.loginAs(UserRole.SECURITY_GUARD)
+        viewModel.loginAs(UserRole.GATE_STAFF)
 
         val s1 = repository.getStudentByStudentNumber("OAK-2026-0001")!!
         val card1 = repository.getActiveCardForStudent(s1.id)!!
@@ -229,28 +229,31 @@ class ExampleRobolectricTest {
 
         // Scan cleared student
         viewModel.handleBarcodeScan(card1.qrPayload)
-        val clearedResult = viewModel.activeScanResult.value
+        val clearedResult = viewModel.activeScanResult.first { it != null }
         assertNotNull(clearedResult)
-        assertTrue(clearedResult is StudentScanResult.Success && clearedResult.isApproved)
+        assertTrue(clearedResult is StudentScanResult.Success && !clearedResult.isApproved)
         assertNull(viewModel.scanError.value)
 
-        // Scan outstanding student
+        // Fee policy is not an identity-verification rule. Until LTC approves
+        // a gate restriction policy, a valid active card verifies identity only.
         viewModel.handleBarcodeScan(card2.qrPayload)
         val outstandingResult = viewModel.activeScanResult.value
         assertNotNull(outstandingResult)
         assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved)
+        assertFalse((outstandingResult as StudentScanResult.Success).reason.contains("fee", ignoreCase = true))
 
         // Scan invalid barcode format
+        viewModel.dismissScanResult()
         viewModel.handleBarcodeScan("NON_SCHOOL_BARCODE_XYZ")
-        val invalidResult = viewModel.activeScanResult.value
+        val invalidResult = viewModel.activeScanResult.first { it != null }
         assertNotNull(invalidResult)
         assertTrue(invalidResult is StudentScanResult.InvalidQr)
 
         // Verify logs contain all scans (newest first)
-        val logs = repository.scanLogsFlow.first()
+        val logs = repository.scanLogsFlow.first { it.size == 3 }
         assertEquals(3, logs.size)
         assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
-        assertEquals(GateVerificationDecision.NOT_APPROVED, logs[1].decision)
+        assertEquals(GateVerificationDecision.APPROVED, logs[1].decision)
         assertEquals(GateVerificationDecision.APPROVED, logs[2].decision)
     }
 }

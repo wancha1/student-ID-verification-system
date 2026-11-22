@@ -20,6 +20,7 @@ import com.example.model.DepartmentVerificationResult
 import com.example.model.AttendanceRecord
 import com.example.model.ExamException
 import com.example.model.ExamClearanceStatus
+import com.example.data.local.MealRecordEntity
 import com.example.data.database
 import com.example.data.syncManagerInstance
 import com.example.util.QrUnifiedVerifier
@@ -63,6 +64,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class FeeFilter { ALL, CLEARED, OUTSTANDING }
@@ -404,12 +406,16 @@ class MainViewModel(
         _isScannerOpen.value = false
     }
 
+    private val gateScanThrottle = GateScanThrottle(cooldownMs = 2_000L)
+    private val departmentScanThrottle = GateScanThrottle(cooldownMs = 2_000L)
+
     fun handleBarcodeScan(rawCode: String, context: Context? = null) {
         if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Gate verification scanning")) {
             _scanError.value = "Access Denied: Gate verification scanning requires Gate Staff authorization."
             return
         }
-        viewModelScope.launch {
+        if (!gateScanThrottle.tryBegin(rawCode)) return
+        val scanJob = viewModelScope.launch {
             _isScannerOpen.value = false
             val scanResult = repository.verifyStudentByQr(rawCode)
             _activeScanResult.value = scanResult
@@ -555,6 +561,105 @@ class MainViewModel(
                     }
                 }
             }
+
+            // Approved students get a brief acknowledgement, then the scanner resumes.
+            // Denials and verification errors remain visible until an officer dismisses them.
+            if (scanResult is StudentScanResult.Success && scanResult.isApproved) {
+                delay(1_500L)
+                dismissScanResult()
+                openScanner()
+            }
+        }
+        scanJob.invokeOnCompletion { gateScanThrottle.finish() }
+    }
+
+    /**
+     * Manual gate fallback is deliberately separate from QR verification. It looks up
+     * an enrolled student by admission number and records the officer's reason in the
+     * existing persistent scan audit log.
+     */
+    fun handleManualGateLookup(studentNumber: String, reason: String, context: Context? = null) {
+        if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Manual gate verification")) return
+        if (reason.isBlank()) {
+            _userFeedbackMessage.value = "A reason is required for manual verification."
+            return
+        }
+        viewModelScope.launch {
+            val student = repository.getStudentByStudentNumber(studentNumber.trim())
+            val guard = _currentUser.value?.name ?: "Security Guard"
+            if (student == null) {
+                _currentScannedStudent.value = null
+                _currentScannedCard.value = null
+                _scanError.value = "No enrolled student matches that admission number."
+                _activeScanResult.value = StudentScanResult.StudentNotFound(
+                    parsedIdentifier = studentNumber.trim(),
+                    reason = "Manual lookup: student record not found.",
+                    isOfflineData = !syncInfo.value.isOnline,
+                    lastSyncTimestamp = syncInfo.value.lastSyncTimestamp
+                )
+                repository.logVerificationScan(
+                    ScanLog(
+                        studentId = null,
+                        studentNumber = studentNumber.trim(),
+                        studentName = "Manual lookup - no matching student",
+                        gradeClass = "Unknown",
+                        qrPayload = "MANUAL_ENTRY",
+                        decision = GateVerificationDecision.STUDENT_NOT_FOUND,
+                        feeStatus = null,
+                        cardStatus = null,
+                        isDayScholar = false,
+                        isApproved = false,
+                        reason = "MANUAL_ENTRY: ${reason.trim()} | Student not found",
+                        isOfflineDecision = !syncInfo.value.isOnline,
+                        dataSyncTimestampAtScan = syncInfo.value.lastSyncTimestamp,
+                        guardName = guard,
+                        deviceIdentifier = "GateTerminal-01",
+                        gateLocation = "Gate 1 (Main Entrance)"
+                    )
+                )
+                context?.let { FeedbackHelper.playFeedback(it, false) }
+                return@launch
+            }
+
+            // A manual admission-number lookup is not proof of possession of a valid
+            // card and must never grant entry automatically. Hold for the school's
+            // approved manual-exception procedure; do not infer fee policy here.
+            val approved = false
+            val resultReason = "Student identity matched. Entry decision requires an authorised school exception."
+            _currentScannedStudent.value = student
+            _currentScannedCard.value = null
+            _scanError.value = if (approved) null else resultReason
+            _activeScanResult.value = StudentScanResult.Success(
+                student = student,
+                card = null,
+                isApproved = approved,
+                reason = resultReason,
+                isOfflineData = !syncInfo.value.isOnline,
+                lastSyncTimestamp = syncInfo.value.lastSyncTimestamp
+            )
+            repository.logVerificationScan(
+                ScanLog(
+                    studentId = student.id,
+                    studentNumber = student.studentNumber,
+                    studentName = student.fullName,
+                    gradeClass = student.gradeClass,
+                    cardId = null,
+                    cardIdentifier = null,
+                    qrPayload = "MANUAL_ENTRY",
+                    decision = if (approved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
+                    feeStatus = null,
+                    cardStatus = null,
+                    isDayScholar = student.isDayScholar,
+                    isApproved = approved,
+                    reason = "MANUAL_ENTRY: ${reason.trim()} | $resultReason",
+                    isOfflineDecision = !syncInfo.value.isOnline,
+                    dataSyncTimestampAtScan = syncInfo.value.lastSyncTimestamp,
+                    guardName = guard,
+                    deviceIdentifier = "GateTerminal-01",
+                    gateLocation = "Gate 1 (Main Entrance)"
+                )
+            )
+            context?.let { FeedbackHelper.playFeedback(it, approved) }
         }
     }
 
@@ -1020,6 +1125,86 @@ class MainViewModel(
         dismissMealScanOutcome()
     }
 
+    /**
+     * Manual meal fallback mirrors the meal entitlement and duplicate-serving checks
+     * used by the QR workflow. The reason is persisted in MealRecord.notes.
+     */
+    fun verifyAndServeMealManually(studentNumber: String, reason: String, context: Context? = null) {
+        val mealType = _activeMealType.value
+        val user = _currentUser.value
+        if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
+            _userFeedbackMessage.value = "Access Denied: Meal staff authorization is required."
+            return
+        }
+        if (!mealType.isEnabledForServing) {
+            _userFeedbackMessage.value = "${mealType.label} is disabled. Only lunch and supper can be served."
+            return
+        }
+        if (reason.isBlank()) {
+            _userFeedbackMessage.value = "A reason is required for manual meal serving."
+            return
+        }
+
+        viewModelScope.launch {
+            val student = repository.getStudentByStudentNumber(studentNumber.trim())
+            if (student == null) {
+                _mealScanOutcome.value = MealVerificationResult.StudentNotFound(studentNumber.trim())
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val eligible = if (student.isDayScholar) {
+                mealType == MealType.LUNCH
+            } else {
+                mealType == MealType.LUNCH || mealType == MealType.DINNER
+            }
+            if (!eligible) {
+                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                    student,
+                    if (student.isDayScholar) "Day scholars are eligible for lunch only." else "Not eligible for this meal session."
+                )
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val existing = repository.database?.mealRecordDao()
+                ?.findServing(student.id, mealType.name, today)
+                ?.toDomain()
+                ?: _mealRecords.value.firstOrNull {
+                    it.studentId == student.id && it.mealType == mealType &&
+                        it.mealDate == today && it.status == MealServingStatus.SERVED
+                }
+            if (existing != null) {
+                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, mealType, existing)
+                FeedbackHelper.playWarningSoundAndHaptic(context)
+                return@launch
+            }
+
+            val record = MealRecord(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                gradeClass = student.gradeClass,
+                mealType = mealType,
+                mealDate = today,
+                timestamp = System.currentTimeMillis(),
+                serverName = user.name,
+                status = MealServingStatus.SERVED,
+                notes = "MANUAL_ENTRY: ${reason.trim()}"
+            )
+            val db = repository.database
+            if (db != null) {
+                db.mealRecordDao().insertOrUpdate(MealRecordEntity.fromDomain(record, isSynced = false))
+                repository.syncManagerInstance?.notifyLocalLogAdded()
+            } else {
+                _mealRecords.value = listOf(record) + _mealRecords.value
+            }
+            _mealScanOutcome.value = MealVerificationResult.Success(record)
+            FeedbackHelper.playApprovedSoundAndHaptic(context)
+        }
+    }
+
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         val selectedMeal = _activeMealType.value
         if (!selectedMeal.isEnabledForServing) {
@@ -1292,11 +1477,17 @@ class MainViewModel(
             }
             val signer = KeystoreIssuerManager.getSigner()
                 ?: throw IllegalStateException("The enrolled Android Keystore signing key could not be loaded.")
-            CardCryptoManager.setActiveSigner(signer)
             val entry = TrustedIssuerRegistry.registerTrustedKey(
                 signer.publicKey,
                 "LTC Authoritative Issuer"
             )
+            if (entry.isRevoked) {
+                CardCryptoManager.clearIssuerPrivateKey()
+                throw IllegalStateException(
+                    "This issuer key is revoked. Do not issue cards with it; complete an explicit key-rotation procedure first."
+                )
+            }
+            CardCryptoManager.setActiveSigner(signer)
             _userFeedbackMessage.value = "Issuer key created locally. Publishing its public verification key to the LTC cloud…"
             val context = appContext
                 ?: throw IllegalStateException("App context unavailable; public-key distribution cannot be started.")
@@ -1311,15 +1502,19 @@ class MainViewModel(
                                 publicKeyBase64 = entry.publicKeyBase64,
                                 label = entry.label,
                                 enrolledAtMs = entry.enrolledAt,
-                                isRevoked = false
+                                isRevoked = entry.isRevoked
                             )
                         ) { onConflict = "school_id,key_id" }
                     _userFeedbackMessage.value = "Issuer key published. Other LTC staff devices will trust it after their next successful sync."
                 } catch (e: Exception) {
-                    _userFeedbackMessage.value = "Issuer key exists on this device, but cloud publication failed: ${e.localizedMessage ?: "unknown error"}. Do not issue cards until publication succeeds."
+                    // Keep the private key in Android Keystore for retry, but disable
+                    // signing until its public key is confirmed in the cloud registry.
+                    CardCryptoManager.clearIssuerPrivateKey()
+                    _userFeedbackMessage.value = "Issuer key exists on this device, but cloud publication failed: ${e.localizedMessage ?: "unknown error"}. Signing has been disabled; retry publication before issuing cards."
                 }
             }
         } catch (e: Exception) {
+            CardCryptoManager.clearIssuerPrivateKey()
             _userFeedbackMessage.value = "Failed to enroll issuer key: ${e.message}"
         }
     }
@@ -1337,6 +1532,9 @@ class MainViewModel(
                 rows.forEach { row ->
                     if (row.isRevoked) {
                         TrustedIssuerRegistry.revokeIssuer(row.keyId)
+                        if (KeystoreIssuerManager.getSigner()?.keyId?.equals(row.keyId, ignoreCase = true) == true) {
+                            CardCryptoManager.clearIssuerPrivateKey()
+                        }
                     } else {
                         TrustedIssuerRegistry.registerTrustedKeyBase64(
                             row.publicKeyBase64,
@@ -1365,6 +1563,9 @@ class MainViewModel(
         if (!requireAdminRole("Revoking trusted issuer key")) return
         val existing = TrustedIssuerRegistry.getIssuerEntry(kid)
         val success = TrustedIssuerRegistry.revokeIssuer(kid)
+        if (success && KeystoreIssuerManager.getSigner()?.keyId?.equals(kid, ignoreCase = true) == true) {
+            CardCryptoManager.clearIssuerPrivateKey()
+        }
         if (success && existing != null) {
             val context = appContext
             if (context != null) {
@@ -1422,7 +1623,8 @@ class MainViewModel(
             return
         }
 
-        viewModelScope.launch {
+        if (!departmentScanThrottle.tryBegin(rawCode)) return
+        val scanJob = viewModelScope.launch {
             _isScannerOpen.value = false
             _isMealScannerOpen.value = false
             _isRequirementScannerOpen.value = false
@@ -1503,6 +1705,7 @@ class MainViewModel(
                 handleBarcodeScan(rawCode, context)
             }
         }
+        scanJob.invokeOnCompletion { departmentScanThrottle.finish() }
     }
 
     fun recommendExamException(studentId: String, studentNumber: String, studentName: String, reason: String = "Financial clearance pending bursar review") {

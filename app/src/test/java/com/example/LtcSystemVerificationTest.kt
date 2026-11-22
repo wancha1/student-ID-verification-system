@@ -58,10 +58,11 @@ class LtcSystemVerificationTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
-        if (!CardCryptoManager.hasIssuerPrivateKey()) {
-            val keyPair = TestCardCryptoHelper.generateKeyPair()
-            TestCardCryptoHelper.configureTestKeyPair(keyPair)
-        }
+        // Each test must start with a signer whose public key is trusted in this test's registry.
+        // Reusing a process-global signer lets earlier tests that revoke/clear issuers poison later tests.
+        TrustedIssuerRegistry.clearAll()
+        val keyPair = TestCardCryptoHelper.generateKeyPair()
+        TestCardCryptoHelper.configureTestKeyPair(keyPair)
     }
 
     @After
@@ -150,6 +151,33 @@ class LtcSystemVerificationTest {
 
         assertNotNull("ZXing reader must successfully decode QR with centered LTC monogram", result)
         assertEquals("Decoded payload must exactly match original payload", payload, result.text)
+    }
+
+    @Test
+    fun testRestoringPreviouslyRevokedIssuerDoesNotReenableTrust() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        TrustedIssuerRegistry.initialize(context)
+        TrustedIssuerRegistry.clearAll()
+
+        val keyPair = TestCardCryptoHelper.generateKeyPair()
+        val enrolled = TrustedIssuerRegistry.registerTrustedKey(
+            keyPair.public,
+            "Test issuer"
+        )
+        assertTrue(TrustedIssuerRegistry.isTrusted(enrolled.kid))
+
+        assertTrue(TrustedIssuerRegistry.revokeIssuer(enrolled.kid))
+        assertFalse(TrustedIssuerRegistry.isTrusted(enrolled.kid))
+        assertNull(TrustedIssuerRegistry.getPublicKey(enrolled.kid))
+
+        // Simulate MainActivity restoring the same Keystore public key after restart.
+        val restored = TrustedIssuerRegistry.registerTrustedKey(
+            keyPair.public,
+            "Restored local issuer"
+        )
+        assertTrue("A revoked key must remain revoked after signer restoration", restored.isRevoked)
+        assertFalse(TrustedIssuerRegistry.isTrusted(enrolled.kid))
+        assertNull(TrustedIssuerRegistry.getPublicKey(enrolled.kid))
     }
 
     // =========================================================================
@@ -321,128 +349,29 @@ class LtcSystemVerificationTest {
     }
 
     @Test
-    fun testEmergencySupervisorOverrideWorkflow() {
-        runBlocking {
-            val repository = MockStudentRepository()
-            val outstandingStudent = Student(
-                id = "stu-002",
-                studentNumber = "LTC-2026-0002",
-                firstName = "Sophia",
-                lastName = "Nanteza",
-                gradeClass = "Senior 3-B",
-                isDayScholar = true,
-                dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
-                feesStatus = FeeStatus.OUTSTANDING,
-                outstandingAmount = 450000.0,
-                accessStatus = AccessStatus.RESTRICTED_FEES
-            )
-            repository.addStudent(outstandingStudent)
-            val card = repository.issueCard(outstandingStudent.id, "CRD-0002", "Initial card").getOrThrow()
+    fun testGateVerificationDoesNotEnforceUnapprovedFeePolicy() = runBlocking {
+        val repository = MockStudentRepository()
+        val student = Student(
+            id = "policy-student",
+            studentNumber = "LTC-2026-POLICY",
+            firstName = "Auma",
+            lastName = "Grace",
+            gradeClass = "Senior 4",
+            isDayScholar = true,
+            feesStatus = FeeStatus.OUTSTANDING,
+            outstandingAmount = 450000.0,
+            accessStatus = AccessStatus.RESTRICTED_FEES
+        )
+        repository.addStudent(student)
+        val card = repository.issueCard(student.id, "CRD-POLICY", "Policy test").getOrThrow()
+        val result = repository.verifyStudentByQr(card.qrPayload)
 
-            val viewModel = MainViewModel(repository)
-            val context = ApplicationProvider.getApplicationContext<Context>()
-            SecurityManager.configureTestCredentials(context, adminPin = "7891", supervisorPin = "7891")
-
-            viewModel.loginAs(UserRole.GATE_STAFF)
-
-            // Student with outstanding fees scanned via authentic V2 card
-            val studentNumber = outstandingStudent.studentNumber
-            viewModel.handleBarcodeScan(card.qrPayload, context)
-
-            val initialScan = viewModel.activeScanResult.value
-            assertTrue(initialScan is StudentScanResult.Success)
-            assertFalse("Outstanding fee student must initially be denied", (initialScan as StudentScanResult.Success).isApproved)
-
-            // 1. Override with invalid supervisor PIN -> Rejected!
-            var overrideSuccess = false
-            viewModel.authorizeEmergencyOverride(
-                studentId = studentNumber,
-                supervisorName = "Mrs. Clara Nambi",
-                overridePin = "0000",
-                reason = "Guardian promises payment tomorrow",
-                context = context
-            ) { success, _ -> overrideSuccess = success }
-            assertFalse("Override with invalid PIN must fail", overrideSuccess)
-            assertFalse("Scan result must remain unapproved after failed override", (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved)
-
-            // Gate staff cannot authorize an override even with the supervisor PIN.
-            var gateOverrideSuccess = false
-            viewModel.authorizeEmergencyOverride(
-                studentId = studentNumber,
-                supervisorName = "Mrs. Clara Nambi",
-                overridePin = "7891",
-                reason = "Gate staff must not self-authorize a supervisor override",
-                context = context
-            ) { success, _ -> gateOverrideSuccess = success }
-            assertFalse("Gate staff must not authorize an emergency override", gateOverrideSuccess)
-
-            // 2. Unknown QR remains blocked even when a senior supervisor is signed in.
-            viewModel.loginAs(UserRole.ADMINISTRATOR)
-            viewModel.handleBarcodeScan("INVALID_MALFORMED_QR_XYZ", context)
-            var invalidOverrideSuccess = false
-            viewModel.authorizeEmergencyOverride(
-                studentId = "unknown-id",
-                supervisorName = "Mrs. Clara Nambi",
-                overridePin = "7891",
-                reason = "Manual bypass attempt",
-                context = context
-            ) { success, _ -> invalidOverrideSuccess = success }
-            assertFalse("Emergency override must NEVER authorize an invalid or unknown QR code", invalidOverrideSuccess)
-
-            // 3. A valid scan for one student must never authorize a different target.
-            viewModel.handleBarcodeScan(card.qrPayload, context)
-            var mismatchedTargetSuccess = false
-            viewModel.authorizeEmergencyOverride(
-                studentId = "STU-OTHER-0001",
-                supervisorName = "Mrs. Clara Nambi",
-                overridePin = "7891",
-                reason = "Attempt to reuse the scan for another student",
-                context = context
-            ) { success, _ -> mismatchedTargetSuccess = success }
-            assertFalse("Override target must match the student on the scanned card", mismatchedTargetSuccess)
-            assertFalse(
-                "Mismatched target must not approve the current scan",
-                (viewModel.activeScanResult.value as StudentScanResult.Success).isApproved
-            )
-
-            // 4. Valid supervisor override on the identified student -> Approved & Logged!
-            var validOverrideSuccess = false
-            viewModel.authorizeEmergencyOverride(
-                studentId = studentNumber,
-                supervisorName = "Mrs. Clara Nambi",
-                overridePin = "7891",
-                reason = "Guardian signed payment commitment note with Principal",
-                context = context
-            ) { success, _ -> validOverrideSuccess = success }
-
-            assertTrue("Emergency override with valid PIN must succeed", validOverrideSuccess)
-            val approvedResult = viewModel.activeScanResult.value
-            assertTrue(approvedResult is StudentScanResult.Success)
-            assertTrue("Scan result must now be Approved", (approvedResult as StudentScanResult.Success).isApproved)
-            assertTrue(approvedResult.reason.contains("EMERGENCY SUPERVISOR OVERRIDE"))
-
-            // Verify audit log entry
-            val logs = repository.scanLogsFlow.first()
-            val latestLog = logs.first()
-            assertEquals(GateVerificationDecision.APPROVED, latestLog.decision)
-            assertTrue("Audit attribution must use the authenticated session identity", latestLog.guardName.contains("System Administrator"))
-            assertFalse("Caller-supplied supervisor names must not be trusted", latestLog.guardName.contains("Mrs. Clara Nambi"))
-            assertTrue(latestLog.reason.contains("EMERGENCY SUPERVISOR OVERRIDE"))
-
-            // Inactive/revoked cards are not a fee exception and must never be overridden.
-            assertTrue(repository.deactivateCard(outstandingStudent.id, card.id, "Test card revocation").isSuccess)
-            viewModel.handleBarcodeScan(card.qrPayload, context)
-            assertTrue("Revoked card scan should be classified as inactive", viewModel.activeScanResult.value is StudentScanResult.CardInactive)
-            var inactiveOverrideSuccess = false
-            viewModel.authorizeEmergencyOverride(
-                studentId = studentNumber,
-                supervisorName = "Forged Supervisor Name",
-                overridePin = "7891",
-                reason = "Attempt to bypass revoked card",
-                context = context
-            ) { success, _ -> inactiveOverrideSuccess = success }
-            assertFalse("Inactive/revoked cards must not be overridden", inactiveOverrideSuccess)
-        }
+        assertTrue("Valid active card should verify identity while fee policy is undecided", result is StudentScanResult.Success)
+        val success = result as StudentScanResult.Success
+        assertFalse("Identity verification must not grant entry approval", success.isApproved)
+        assertTrue(success.reason.contains("Entry decision pending", ignoreCase = true))
+        assertFalse(success.reason.contains("fee", ignoreCase = true))
+        assertFalse(success.reason.contains("boarding", ignoreCase = true))
     }
 
     @Test

@@ -98,11 +98,12 @@ fun GuardDashboardScreen(
     user: AuthUser,
     activeScanResult: StudentScanResult?,
     activeScannedStudent: Student?,
+    allStudents: List<Student>,
     scanError: String?,
     scanLogs: List<ScanLog>,
     syncInfo: SyncInfo,
     onOpenScanner: () -> Unit,
-    onManualLookup: (String) -> Unit,
+    onManualLookup: (String, String) -> Unit,
     onDismissScanResult: () -> Unit,
     onTriggerSync: () -> Unit,
     onToggleOnline: (Boolean) -> Unit,
@@ -111,6 +112,8 @@ fun GuardDashboardScreen(
 ) {
     var showManualInputDialog by remember { mutableStateOf(false) }
     var manualIdText by remember { mutableStateOf("") }
+    var manualReason by remember { mutableStateOf("") }
+    var selectedManualStudent by remember { mutableStateOf<Student?>(null) }
     val roleTheme = LocalRoleTheme.current
 
     // If a student verification is active, display the full-bleed Verification result view
@@ -147,16 +150,6 @@ fun GuardDashboardScreen(
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
     ) {
-        // 1. SYNC STATUS & OFFLINE FRESHNESS BANNER
-        item {
-            SyncStatusHeaderCard(
-                syncInfo = syncInfo,
-                onTriggerSync = onTriggerSync,
-                onToggleOnline = onToggleOnline
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-        }
-
         // 2. GATE & GUARD STATION BANNER
         item {
             Card(
@@ -334,6 +327,17 @@ fun GuardDashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
+        // Sync health remains visible immediately after the primary scan action.
+        // 1. SYNC STATUS & OFFLINE FRESHNESS BANNER
+        item {
+            SyncStatusHeaderCard(
+                syncInfo = syncInfo,
+                onTriggerSync = onTriggerSync,
+                onToggleOnline = onToggleOnline
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
         // 4. RECENT GATE SCAN LOGS
         item {
             Row(
@@ -476,34 +480,94 @@ fun GuardDashboardScreen(
             text = {
                 Column {
                     Text(
-                        text = "Enter the student registration number (e.g. OAK-2026-0001):",
+                        text = "Search by student name or admission number, select the matching student, then record why manual verification is needed.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = manualIdText,
-                        onValueChange = { manualIdText = it.uppercase() },
-                        placeholder = { Text("OAK-2026-0001") },
+                        onValueChange = {
+                            manualIdText = it
+                            selectedManualStudent = null
+                        },
+                        label = { Text("Student name or admission number") },
+                        placeholder = { Text("Search student…") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("input_manual_student_id")
+                    )
+                    if (selectedManualStudent == null && manualIdText.isNotBlank()) {
+                        allStudents.filter {
+                            it.fullName.contains(manualIdText, ignoreCase = true) ||
+                                it.studentNumber.contains(manualIdText, ignoreCase = true)
+                        }.take(5).forEach { student ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedManualStudent = student
+                                        manualIdText = student.studentNumber
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                StudentAvatar(student = student, size = 42.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(student.fullName, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${student.studentNumber} • ${student.gradeClass}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    selectedManualStudent?.let { student ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StudentAvatar(student = student, size = 48.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Selected: ${student.fullName}", fontWeight = FontWeight.Bold)
+                                Text("${student.studentNumber} • ${student.gradeClass}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = manualReason,
+                        onValueChange = { manualReason = it },
+                        label = { Text("Reason for manual verification") },
+                        placeholder = { Text("e.g. QR code damaged") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_manual_lookup_reason"),
+                        minLines = 2
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val input = manualIdText.trim()
-                        if (input.isNotBlank()) {
+                        val selected = selectedManualStudent
+                        val reason = manualReason.trim()
+                        if (selected != null && reason.isNotBlank()) {
                             showManualInputDialog = false
-                            onManualLookup(input)
+                            onManualLookup(selected.studentNumber, reason)
+                            manualIdText = ""
+                            manualReason = ""
+                            selectedManualStudent = null
                         }
                     },
                     modifier = Modifier.testTag("button_confirm_manual_lookup")
                 ) {
-                    Text("Verify")
+                    Text("Record manual check")
                 }
             },
             dismissButton = {
