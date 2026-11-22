@@ -301,6 +301,10 @@ class MockStudentRepository : StudentRepository {
                     student.copy(
                         feesStatus = newStatus,
                         outstandingAmount = if (newStatus == FeeStatus.CLEARED) 0.0 else if (outstandingAmount > 0) outstandingAmount else 450000.0,
+                        accessStatus = if (student.accessStatus in setOf(
+                            com.example.model.AccessStatus.SUSPENDED,
+                            com.example.model.AccessStatus.INACTIVE
+                        )) student.accessStatus else com.example.model.AccessStatus.PENDING_POLICY,
                         updatedAt = now
                     )
                 } else {
