@@ -796,6 +796,30 @@ class MainViewModel(
         }
     }
 
+    fun registerImportedStudent(student: Student, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
+        if (!requireAdminRole("Importing roster students")) {
+            onComplete(false, "Access Denied: Administrator role required.")
+            return
+        }
+        viewModelScope.launch {
+            val result = repository.addStudentWithoutCard(student)
+            if (result.isFailure) {
+                val message = result.exceptionOrNull()?.localizedMessage ?: "Failed to import student"
+                _userFeedbackMessage.value = message
+                onComplete(false, message)
+                return@launch
+            }
+            val syncResult = repository.syncWithCloud()
+            val message = if (syncResult.isSuccess) {
+                "Student ${student.fullName} (${student.studentNumber}) imported and synchronized. No ID card was issued."
+            } else {
+                "Student ${student.fullName} (${student.studentNumber}) saved locally; cloud sync is pending. No ID card was issued."
+            }
+            _userFeedbackMessage.value = message
+            onComplete(true, message)
+        }
+    }
+
     fun updateStudentDetails(student: Student, onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
         if (!requireAdminRole("Updating student records")) {
             onComplete(false, "Access Denied: Administrator role required.")
