@@ -79,6 +79,7 @@ import java.util.Locale
 private enum class DecisionFilter(val label: String) {
     ALL("All"),
     APPROVED("Approved"),
+    POLICY_PENDING("Policy Pending"),
     NOT_APPROVED("Not Approved"),
     CARD_INACTIVE("Card Inactive"),
     NOT_FOUND("Not Found"),
@@ -100,6 +101,7 @@ fun AdminScanLogsScreen(
     val totalCount = scanLogs.size
     val approvedCount = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
     val deniedCount = scanLogs.count { it.decision == GateVerificationDecision.NOT_APPROVED }
+    val policyPendingCount = scanLogs.count { it.decision == GateVerificationDecision.POLICY_PENDING }
     val cardInactiveCount = scanLogs.count { it.decision == GateVerificationDecision.CARD_INACTIVE }
     val notFoundCount = scanLogs.count { it.decision == GateVerificationDecision.STUDENT_NOT_FOUND }
     val invalidQrCount = scanLogs.count { it.decision == GateVerificationDecision.INVALID_QR }
@@ -110,6 +112,7 @@ fun AdminScanLogsScreen(
         val matchesFilter = when (selectedDecisionFilter) {
             DecisionFilter.ALL -> true
             DecisionFilter.APPROVED -> log.decision == GateVerificationDecision.APPROVED
+            DecisionFilter.POLICY_PENDING -> log.decision == GateVerificationDecision.POLICY_PENDING
             DecisionFilter.NOT_APPROVED -> log.decision == GateVerificationDecision.NOT_APPROVED
             DecisionFilter.CARD_INACTIVE -> log.decision == GateVerificationDecision.CARD_INACTIVE
             DecisionFilter.NOT_FOUND -> log.decision == GateVerificationDecision.STUDENT_NOT_FOUND
