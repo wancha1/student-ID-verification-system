@@ -18,8 +18,8 @@ class RosterImportParserTest {
 
     @Test
     fun csvImportMapsSupportedFieldsAndPreservesUnsupportedFields() {
-        val csv = """admission_number,first_name,last_name,other_names,gender,date_of_birth,class_name,stream,student_phone,guardian_name,guardian_phone,email,status
-LTC-001,Alice,Okello,"Grace, Mary",Female,2009-04-12,Senior 3,A,0700000001,John Okello,0770000001,alice@example.com,ACTIVE
+        val csv = """admission_number,first_name,last_name,other_names,gender,date_of_birth,class_name,stream,student_phone,guardian_name,guardian_phone,email,status,house
+LTC-001,Alice,Okello,"Grace, Mary",Female,2009-04-12,Senior 3,A,0700000001,John Okello,0770000001,alice@example.com,ACTIVE,Pakwach
 """
         val preview = RosterImportParser.parse(
             ByteArrayInputStream(csv.toByteArray()),
@@ -39,6 +39,7 @@ LTC-001,Alice,Okello,"Grace, Mary",Female,2009-04-12,Senior 3,A,0700000001,John 
         assertTrue(student.notes.contains("0700000001"))
         assertTrue(student.notes.contains("alice@example.com"))
         assertTrue(student.notes.contains("ACTIVE"))
+        assertTrue(student.notes.contains("Pakwach"))
         assertTrue(student.notes.contains("not used to grant gate access"))
     }
 
