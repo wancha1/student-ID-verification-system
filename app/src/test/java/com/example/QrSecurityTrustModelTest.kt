@@ -167,7 +167,7 @@ class QrSecurityTrustModelTest {
         val scanResult = roomRepository.verifyStudentByQr(validPayload1)
         assertTrue("Scan result must be Success", scanResult is StudentScanResult.Success)
         val success = scanResult as StudentScanResult.Success
-        assertTrue("Eligible student with cleared fees must be approved", success.isApproved)
+        assertFalse("A valid card verifies identity only; entry policy is still pending", success.isApproved)
         assertEquals("Julius Okot", success.student.fullName)
         assertEquals(cardId1, success.card?.cardIdentifier)
     }
