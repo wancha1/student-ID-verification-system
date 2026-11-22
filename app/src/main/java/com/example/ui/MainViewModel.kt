@@ -621,12 +621,11 @@ class MainViewModel(
                 return@launch
             }
 
-            val approved = student.isEntryApproved
-            val resultReason = if (approved) {
-                "Manual identity check recorded. Student record permits entry."
-            } else {
-                "Manual identity check recorded. Hold entry and refer to the school office."
-            }
+            // A manual admission-number lookup is not proof of possession of a valid
+            // card and must never grant entry automatically. Hold for the school's
+            // approved manual-exception procedure; do not infer fee policy here.
+            val approved = false
+            val resultReason = "Student identity matched. Entry decision requires an authorised school exception."
             _currentScannedStudent.value = student
             _currentScannedCard.value = null
             _scanError.value = if (approved) null else resultReason
