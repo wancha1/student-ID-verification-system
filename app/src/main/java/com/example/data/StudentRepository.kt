@@ -37,6 +37,8 @@ interface StudentRepository {
     // Student CRUD
     suspend fun updateFeeStatus(studentId: String, newStatus: FeeStatus, outstandingAmount: Double = 0.0): Result<Unit>
     suspend fun addStudent(student: Student): Result<Unit>
+    /** Register a roster record without issuing a physical/signed ID card. */
+    suspend fun addStudentWithoutCard(student: Student): Result<Unit>
     suspend fun updateStudent(student: Student): Result<Unit>
     suspend fun deleteStudent(studentId: String): Result<Unit>
 
