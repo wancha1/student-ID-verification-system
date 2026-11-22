@@ -48,8 +48,7 @@ enum class AccessStatus(
 
         fun fromString(value: String?): AccessStatus {
             if (value.isNullOrBlank()) return PENDING_POLICY
-            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
-                ?: if (value.equals("CLEARED", ignoreCase = true)) APPROVED else PENDING_POLICY
+            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: PENDING_POLICY
         }
     }
 }
