@@ -76,6 +76,7 @@ fun VerificationResultDisplay(
                 student = scanResult.student,
                 card = scanResult.card,
                 isApproved = scanResult.isApproved,
+                isPolicyPending = scanResult.isPolicyPending,
                 reason = scanResult.reason,
                 isOffline = scanResult.isOfflineData,
                 lastSyncTimestamp = scanResult.lastSyncTimestamp,
@@ -131,6 +132,7 @@ fun VerificationResultDisplay(
         student = student,
         card = null,
         isApproved = student.isEntryApproved,
+        isPolicyPending = false,
         reason = if (student.isEntryApproved) "Student record verified." else "Access requires review by the school office.",
         isOffline = false,
         lastSyncTimestamp = System.currentTimeMillis(),
@@ -145,6 +147,7 @@ private fun StudentSuccessVerificationView(
     student: Student,
     card: StudentCard?,
     isApproved: Boolean,
+    isPolicyPending: Boolean = false,
     reason: String,
     isOffline: Boolean,
     lastSyncTimestamp: Long,
@@ -164,11 +167,11 @@ private fun StudentSuccessVerificationView(
         // PROMINENT TOP DECISION BANNER (HUGE FOR IMMEDIATE GLANCE AT THE GATE)
         Surface(
             modifier = Modifier
-                .testTag(if (isApproved) "banner_entry_approved" else "banner_entry_not_approved")
+                .testTag(when { isPolicyPending -> "banner_policy_pending"; isApproved -> "banner_entry_approved"; else -> "banner_entry_not_approved" })
                 .fillMaxWidth()
                 .shadow(8.dp, RoundedCornerShape(20.dp)),
             shape = RoundedCornerShape(20.dp),
-            color = if (isApproved) ApprovedGreen else RejectedRed
+            color = when { isPolicyPending -> Color(0xFFB45309); isApproved -> ApprovedGreen; else -> RejectedRed }
         ) {
             Column(
                 modifier = Modifier
@@ -188,8 +191,8 @@ private fun StudentSuccessVerificationView(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (isApproved) Icons.Default.CheckCircle else Icons.Default.Block,
-                            contentDescription = if (isApproved) "Approved" else "Denied",
+                            imageVector = when { isPolicyPending -> Icons.Default.Warning; isApproved -> Icons.Default.CheckCircle; else -> Icons.Default.Block },
+                            contentDescription = when { isPolicyPending -> "Policy pending"; isApproved -> "Approved"; else -> "Denied" },
                             tint = Color.White,
                             modifier = Modifier.size(34.dp)
                         )
@@ -197,14 +200,14 @@ private fun StudentSuccessVerificationView(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = if (isApproved) "ENTRY APPROVED" else "ENTRY NOT APPROVED",
+                            text = when { isPolicyPending -> "POLICY DECISION PENDING"; isApproved -> "ENTRY APPROVED"; else -> "ENTRY NOT APPROVED" },
                             color = Color.White,
                             fontWeight = FontWeight.Black,
                             fontSize = 24.sp,
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = if (isApproved) "Student identity verified" else "Verification requires staff review",
+                            text = when { isPolicyPending -> "Identity and card verified • Entry not yet authorised"; isApproved -> "Student identity verified"; else -> "Verification requires staff review" },
                             color = Color.White.copy(alpha = 0.9f),
                             fontWeight = FontWeight.Medium,
                             fontSize = 12.sp
@@ -312,8 +315,8 @@ private fun StudentSuccessVerificationView(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isApproved) ApprovedGreenLight else RejectedRedLight)
-                            .border(1.dp, if (isApproved) ApprovedGreen else RejectedRed, RoundedCornerShape(12.dp))
+                            .background(when { isPolicyPending -> Color(0xFFFFF7ED); isApproved -> ApprovedGreenLight; else -> RejectedRedLight })
+                            .border(1.dp, when { isPolicyPending -> Color(0xFFF59E0B); isApproved -> ApprovedGreen; else -> RejectedRed }, RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
                         Column {
@@ -321,15 +324,15 @@ private fun StudentSuccessVerificationView(
                                 text = "STUDENT STATUS",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isApproved) ApprovedGreenDark else RejectedRedDark,
+                                color = when { isPolicyPending -> Color(0xFF92400E); isApproved -> ApprovedGreenDark; else -> RejectedRedDark },
                                 letterSpacing = 0.5.sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (isApproved) "VERIFIED" else "REVIEW",
+                                text = when { isPolicyPending -> "IDENTITY VERIFIED"; isApproved -> "VERIFIED"; else -> "REVIEW" },
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Black,
-                                color = if (isApproved) ApprovedGreenText else RejectedRedText
+                                color = when { isPolicyPending -> Color(0xFF9A3412); isApproved -> ApprovedGreenText; else -> RejectedRedText }
                             )
                         }
                     }
@@ -380,14 +383,14 @@ private fun StudentSuccessVerificationView(
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = if (isApproved) Icons.Default.DirectionsBus else Icons.Default.ErrorOutline,
+                                imageVector = when { isPolicyPending -> Icons.Default.Warning; isApproved -> Icons.Default.DirectionsBus; else -> Icons.Default.ErrorOutline },
                                 contentDescription = null,
-                                tint = if (isApproved) MaterialTheme.colorScheme.primary else RejectedRed,
+                                tint = when { isPolicyPending -> Color(0xFFB45309); isApproved -> MaterialTheme.colorScheme.primary; else -> RejectedRed },
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isApproved) "Access Instruction:" else "Security Action Required:",
+                                text = when { isPolicyPending -> "Policy instruction:"; isApproved -> "Access Instruction:"; else -> "Security Action Required:" },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -395,10 +398,11 @@ private fun StudentSuccessVerificationView(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = if (isApproved)
-                                "Allow entry through the gate."
-                            else
-                                "Hold entry and refer the student to the school office for assistance.",
+                            text = when {
+                                isPolicyPending -> "Do not treat this scan as an approval or denial. Hold the entry decision and follow the current written school gate procedure or contact the authorised administrator."
+                                isApproved -> "Allow entry through the gate."
+                                else -> "Hold entry and refer the student to the school office for assistance."
+                            },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
