@@ -440,7 +440,7 @@ class MainViewModel(
                             cardId = card?.id,
                             cardIdentifier = card?.cardIdentifier ?: "CRD-UNKNOWN",
                             qrPayload = card?.qrPayload ?: rawCode,
-                            decision = if (scanResult.isApproved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
+                            decision = when { scanResult.isPolicyPending -> GateVerificationDecision.POLICY_PENDING; scanResult.isApproved -> GateVerificationDecision.APPROVED; else -> GateVerificationDecision.NOT_APPROVED },
                             feeStatus = student.feesStatus,
                             cardStatus = card?.status ?: CardStatus.ACTIVE,
                             isDayScholar = student.isDayScholar,
@@ -455,7 +455,7 @@ class MainViewModel(
                     )
 
                     context?.let { ctx ->
-                        FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
+                        if (!scanResult.isPolicyPending) FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
                     }
                 }
 
