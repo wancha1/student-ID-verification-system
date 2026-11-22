@@ -368,7 +368,8 @@ class LtcSystemVerificationTest {
 
         assertTrue("Valid active card should verify identity while fee policy is undecided", result is StudentScanResult.Success)
         val success = result as StudentScanResult.Success
-        assertTrue(success.isApproved)
+        assertFalse("Identity verification must not grant entry approval", success.isApproved)
+        assertTrue(success.reason.contains("Entry decision pending", ignoreCase = true))
         assertFalse(success.reason.contains("fee", ignoreCase = true))
         assertFalse(success.reason.contains("boarding", ignoreCase = true))
     }
