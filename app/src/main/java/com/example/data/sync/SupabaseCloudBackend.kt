@@ -377,10 +377,20 @@ class SupabaseCloudBackend(
                 offset += PAGE_SIZE
             }
         }
-        rows.filter { !it.photoPath.isNullOrBlank() }.mapNotNull { row ->
-            val local = downloadPhotoToCache(row.photoPath, row.id)
-            if (local.isNullOrBlank()) null else row.id to local
-        }.toMap()
+        // Do not report a successful backfill when even one cloud photo failed.
+        // SyncManager writes its one-time completion marker only on success; throwing
+        // here keeps that marker unset so a later sync retries missing photos.
+        buildMap {
+            rows.filter { !it.photoPath.isNullOrBlank() }.forEach { row ->
+                val local = downloadPhotoToCache(row.photoPath, row.id)
+                if (local.isNullOrBlank()) {
+                    throw IllegalStateException(
+                        "Student photo for record '${row.id}' could not be downloaded; photo backfill will retry."
+                    )
+                }
+                put(row.id, local)
+            }
+        }
     }
 
     private suspend fun uploadPhotoIfLocal(student: StudentEntity): String? {
