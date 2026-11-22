@@ -204,8 +204,9 @@ class MockStudentRepository : StudentRepository {
                 StudentScanResult.Success(
                     student = student,
                     card = card,
-                    isApproved = true,
-                    reason = "Identity verified. Authentic active V2 card confirmed.",
+                    // A valid card confirms identity, not permission to enter.
+                    isApproved = false,
+                    reason = "Identity verified. Entry decision pending approved LTC gate policy.",
                     isOfflineData = isOffline,
                     lastSyncTimestamp = lastSync
                 )
