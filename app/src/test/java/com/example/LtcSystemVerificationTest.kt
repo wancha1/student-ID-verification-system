@@ -152,6 +152,33 @@ class LtcSystemVerificationTest {
         assertEquals("Decoded payload must exactly match original payload", payload, result.text)
     }
 
+    @Test
+    fun testRestoringPreviouslyRevokedIssuerDoesNotReenableTrust() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        TrustedIssuerRegistry.initialize(context)
+        TrustedIssuerRegistry.clearAll()
+
+        val keyPair = TestCardCryptoHelper.generateKeyPair()
+        val enrolled = TrustedIssuerRegistry.registerTrustedKey(
+            keyPair.public,
+            "Test issuer"
+        )
+        assertTrue(TrustedIssuerRegistry.isTrusted(enrolled.kid))
+
+        assertTrue(TrustedIssuerRegistry.revokeIssuer(enrolled.kid))
+        assertFalse(TrustedIssuerRegistry.isTrusted(enrolled.kid))
+        assertNull(TrustedIssuerRegistry.getPublicKey(enrolled.kid))
+
+        // Simulate MainActivity restoring the same Keystore public key after restart.
+        val restored = TrustedIssuerRegistry.registerTrustedKey(
+            keyPair.public,
+            "Restored local issuer"
+        )
+        assertTrue("A revoked key must remain revoked after signer restoration", restored.isRevoked)
+        assertFalse(TrustedIssuerRegistry.isTrusted(enrolled.kid))
+        assertNull(TrustedIssuerRegistry.getPublicKey(enrolled.kid))
+    }
+
     // =========================================================================
     // PRIORITY 2: DATA PERSISTENCE ACROSS APPLICATION/PROCESS RESTARTS
     // =========================================================================
