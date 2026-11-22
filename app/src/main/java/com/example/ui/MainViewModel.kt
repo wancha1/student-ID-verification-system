@@ -571,6 +571,97 @@ class MainViewModel(
         scanJob.invokeOnCompletion { gateScanThrottle.finish() }
     }
 
+    /**
+     * Manual gate fallback is deliberately separate from QR verification. It looks up
+     * an enrolled student by admission number and records the officer's reason in the
+     * existing persistent scan audit log.
+     */
+    fun handleManualGateLookup(studentNumber: String, reason: String, context: Context? = null) {
+        if (!requirePermission(StaffPermission.VERIFY_GATE_ACCESS, "Manual gate verification")) return
+        if (reason.isBlank()) {
+            _userFeedbackMessage.value = "A reason is required for manual verification."
+            return
+        }
+        viewModelScope.launch {
+            val student = repository.getStudentByStudentNumber(studentNumber.trim())
+            val guard = _currentUser.value?.name ?: "Security Guard"
+            if (student == null) {
+                _currentScannedStudent.value = null
+                _currentScannedCard.value = null
+                _scanError.value = "No enrolled student matches that admission number."
+                _activeScanResult.value = StudentScanResult.StudentNotFound(
+                    parsedIdentifier = studentNumber.trim(),
+                    reason = "Manual lookup: student record not found.",
+                    isOfflineData = !syncInfo.value.isOnline,
+                    lastSyncTimestamp = syncInfo.value.lastSyncTimestamp
+                )
+                repository.logVerificationScan(
+                    ScanLog(
+                        studentId = null,
+                        studentNumber = studentNumber.trim(),
+                        studentName = "Manual lookup - no matching student",
+                        gradeClass = "Unknown",
+                        qrPayload = "MANUAL_ENTRY",
+                        decision = GateVerificationDecision.STUDENT_NOT_FOUND,
+                        feeStatus = null,
+                        cardStatus = null,
+                        isDayScholar = false,
+                        isApproved = false,
+                        reason = "MANUAL_ENTRY: ${reason.trim()} | Student not found",
+                        isOfflineDecision = !syncInfo.value.isOnline,
+                        dataSyncTimestampAtScan = syncInfo.value.lastSyncTimestamp,
+                        guardName = guard,
+                        deviceIdentifier = "GateTerminal-01",
+                        gateLocation = "Gate 1 (Main Entrance)"
+                    )
+                )
+                context?.let { FeedbackHelper.playFeedback(it, false) }
+                return@launch
+            }
+
+            val approved = student.isEntryApproved
+            val resultReason = if (approved) {
+                "Manual identity check recorded. Student record permits entry."
+            } else {
+                "Manual identity check recorded. Hold entry and refer to the school office."
+            }
+            _currentScannedStudent.value = student
+            _currentScannedCard.value = null
+            _scanError.value = if (approved) null else resultReason
+            _activeScanResult.value = StudentScanResult.Success(
+                student = student,
+                card = null,
+                isApproved = approved,
+                reason = resultReason,
+                isOfflineData = !syncInfo.value.isOnline,
+                lastSyncTimestamp = syncInfo.value.lastSyncTimestamp
+            )
+            repository.logVerificationScan(
+                ScanLog(
+                    studentId = student.id,
+                    studentNumber = student.studentNumber,
+                    studentName = student.fullName,
+                    gradeClass = student.gradeClass,
+                    cardId = null,
+                    cardIdentifier = null,
+                    qrPayload = "MANUAL_ENTRY",
+                    decision = if (approved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
+                    feeStatus = null,
+                    cardStatus = null,
+                    isDayScholar = student.isDayScholar,
+                    isApproved = approved,
+                    reason = "MANUAL_ENTRY: ${reason.trim()} | $resultReason",
+                    isOfflineDecision = !syncInfo.value.isOnline,
+                    dataSyncTimestampAtScan = syncInfo.value.lastSyncTimestamp,
+                    guardName = guard,
+                    deviceIdentifier = "GateTerminal-01",
+                    gateLocation = "Gate 1 (Main Entrance)"
+                )
+            )
+            context?.let { FeedbackHelper.playFeedback(it, approved) }
+        }
+    }
+
     fun dismissScanResult() {
         _currentScannedStudent.value = null
         _currentScannedCard.value = null
