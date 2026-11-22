@@ -287,7 +287,7 @@ fun GuardScannerScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Type Code",
+                        text = "Enter Badge Code",
                         color = Color(0xFF60A5FA),
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
@@ -301,12 +301,12 @@ fun GuardScannerScreen(
     if (showManualDialog) {
         AlertDialog(
             onDismissRequest = { showManualDialog = false },
-            title = { Text("Manual QR Code Lookup", fontWeight = FontWeight.Bold) },
+            title = { Text("Enter Full Signed Badge Code", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
                     value = manualStudentId,
-                    onValueChange = { manualStudentId = it.uppercase() },
-                    placeholder = { Text("e.g. STU-2026-0001") },
+                    onValueChange = { manualStudentId = it.trim() },
+                    placeholder = { Text("LTC:V2:…") },
                     singleLine = true,
                     modifier = Modifier
                         .testTag("input_scanner_manual_code")
