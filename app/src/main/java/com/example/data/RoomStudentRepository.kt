@@ -350,9 +350,21 @@ class RoomStudentRepository(
             }
         }
 
+        if (student.accessStatus in setOf(AccessStatus.SUSPENDED, AccessStatus.INACTIVE)) {
+            return StudentScanResult.Success(
+                student = student,
+                card = activeCard,
+                isApproved = false,
+                isPolicyPending = false,
+                reason = "Student record is ${student.accessStatus.label.lowercase()}. Refer to school administration.",
+                isOfflineData = isOffline,
+                lastSyncTimestamp = lastSync
+            )
+        }
+
         // Identity and card are valid. This helper must not infer entry policy
         // from fees or boarding fields before LTC formally approves that policy.
-        StudentScanResult.Success(
+        return StudentScanResult.Success(
             student = student,
             card = activeCard,
             isApproved = false,
