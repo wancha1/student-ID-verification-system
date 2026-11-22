@@ -261,4 +261,24 @@ class ExampleRobolectricTest {
         assertEquals(GateVerificationDecision.POLICY_PENDING, logs[1].decision)
         assertEquals(GateVerificationDecision.POLICY_PENDING, logs[2].decision)
     }
+    @Test
+    fun testSuspendedStudentRemainsDeniedWhileGeneralEntryPolicyIsPending() = runBlocking {
+        val suspended = Student(
+            studentNumber = "OAK-2026-0198",
+            firstName = "Test",
+            lastName = "Suspended",
+            gradeClass = "Senior 4-A",
+            accessStatus = com.example.model.AccessStatus.SUSPENDED
+        )
+        assertTrue(repository.addStudent(suspended).isSuccess)
+
+        val card = repository.getActiveCardForStudent(suspended.id)!!
+        val result = repository.verifyStudentByQr(card.qrPayload)
+        assertTrue(result is StudentScanResult.Success)
+        val success = result as StudentScanResult.Success
+        assertFalse(success.isApproved)
+        assertFalse(success.isPolicyPending)
+        assertTrue(success.reason.contains("suspended", ignoreCase = true))
+    }
+
 }
