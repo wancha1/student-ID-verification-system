@@ -168,6 +168,7 @@ class QrSecurityTrustModelTest {
         assertTrue("Scan result must be Success", scanResult is StudentScanResult.Success)
         val success = scanResult as StudentScanResult.Success
         assertFalse("A valid card verifies identity only; entry policy is still pending", success.isApproved)
+        assertTrue("A valid identity with no approved entry policy must be explicitly pending", success.isPolicyPending)
         assertEquals("Julius Okot", success.student.fullName)
         assertEquals(cardId1, success.card?.cardIdentifier)
     }
