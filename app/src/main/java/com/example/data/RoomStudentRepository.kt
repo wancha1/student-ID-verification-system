@@ -488,28 +488,38 @@ class RoomStudentRepository(
         }
     }
 
-    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> = withContext(ioDispatcher) {
+    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> =
+        addStudentsWithoutCards(listOf(student))
+
+    override suspend fun addStudentsWithoutCards(students: List<Student>): Result<Unit> = withContext(ioDispatcher) {
+        if (students.isEmpty()) return@withContext Result.success(Unit)
+        val normalizedNumbers = students.map { it.studentNumber.trim().uppercase() }
+        if (normalizedNumbers.size != normalizedNumbers.toSet().size) {
+            return@withContext Result.failure(IllegalArgumentException("The import contains duplicate admission numbers."))
+        }
         val now = System.currentTimeMillis()
-        val studentWithTimestamp = student.copy(updatedAt = now)
-        val entity = StudentEntity.fromDomain(studentWithTimestamp)
+        val timestamped = students.map { it.copy(updatedAt = now) }
         try {
             database.withTransaction {
-                val existing = database.studentDao().getStudentByStudentNumber(student.studentNumber.trim())
-                if (existing != null && existing.id != student.id) {
-                    throw IllegalArgumentException("Admission number '${student.studentNumber}' is already registered.")
-                }
-                database.studentDao().insertOrUpdateStudent(entity)
-                database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
-                testFailureInterceptor?.invoke("addStudentWithoutCard_afterLocalWrites")
-                database.pendingChangeDao().enqueueChange(
-                    PendingChangeEntity(
-                        changeId = UUID.randomUUID().toString(),
-                        entityType = SyncEntityType.STUDENT,
-                        recordId = student.id,
-                        operationType = SyncOperationType.CREATE,
-                        createdAt = now
+                timestamped.forEach { student ->
+                    val existingByNumber = database.studentDao().getStudentByStudentNumber(student.studentNumber.trim())
+                    val existingById = database.studentDao().getStudentById(student.id)
+                    if (existingByNumber != null || existingById != null) {
+                        throw IllegalArgumentException("Admission number '${student.studentNumber}' is already registered.")
+                    }
+                    database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
+                    database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(student))
+                    testFailureInterceptor?.invoke("addStudentsWithoutCards_afterLocalWrite")
+                    database.pendingChangeDao().enqueueChange(
+                        PendingChangeEntity(
+                            changeId = UUID.randomUUID().toString(),
+                            entityType = SyncEntityType.STUDENT,
+                            recordId = student.id,
+                            operationType = SyncOperationType.CREATE,
+                            createdAt = now
+                        )
                     )
-                )
+                }
             }
             syncManager.notifyLocalLogAdded()
             Result.success(Unit)
