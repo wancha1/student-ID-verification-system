@@ -230,7 +230,7 @@ class RoleScannerRoutingTest {
 
         viewModel.handleManualGateLookup("LTC-2026-9001", "Badge unreadable")
 
-        val result = viewModel.activeScanResult.value as StudentScanResult.Success
+        val result = viewModel.activeScanResult.first { it is StudentScanResult.Success } as StudentScanResult.Success
         assertFalse(result.isApproved)
         assertTrue(result.reason.contains("authorised school exception", ignoreCase = true))
         assertFalse(result.reason.contains("fee", ignoreCase = true))
