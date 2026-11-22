@@ -213,7 +213,8 @@ class MultiDepartmentScanningTest {
 
         assertTrue(entryResult is DepartmentVerificationResult.Success)
         val successEntry = entryResult as DepartmentVerificationResult.Success
-        assertTrue(successEntry.isAllowed)
+        assertFalse("Valid card identity alone must not authorize entry while policy is pending", successEntry.isAllowed)
+        assertTrue(successEntry.statusHeadline.contains("Policy Review", ignoreCase = true))
         assertEquals(GateDirection.ENTRY, successEntry.gateDirection)
 
         // 2. Exit scan
