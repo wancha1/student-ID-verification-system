@@ -265,7 +265,20 @@ class SupabaseCloudBackend(
                 }
             }.decodeSingleOrNull<GateLogRow>()
             if (existing == null) {
-                client.from("gate_logs").insert(GateLogRow.from(log, schoolId))
+                try {
+                    client.from("gate_logs").insert(GateLogRow.from(log, schoolId))
+                } catch (insertError: Exception) {
+                    // A second device may have inserted this immutable event after
+                    // the read above. Confirm the ID now exists before treating the
+                    // conflict (or an acknowledged-but-timed-out retry) as success.
+                    val confirmed = client.from("gate_logs").select {
+                        filter {
+                            eq("school_id", schoolId)
+                            eq("id", log.id)
+                        }
+                    }.decodeSingleOrNull<GateLogRow>()
+                    if (confirmed == null) throw insertError
+                }
             }
         }
     }
