@@ -752,7 +752,7 @@ fun AdminDashboardScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "Unsupported fields (other names, date of birth, student phone, email, roster status and unknown columns) are preserved in the private student Notes metadata. They are not treated as gate approval or fee decisions.",
+                        "Unsupported fields (other names, date of birth, student phone, email, roster status and unknown columns) are preserved in the private student Notes metadata. They are not treated as gate approval or fee decisions. Fee status, boarding/day-scholar status and transport are not in this 13-column template; the app's existing defaults apply until authorised staff verify those details. Do not rely on imported defaults for finance or transport decisions.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
