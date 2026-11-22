@@ -236,6 +236,18 @@ class RoomStudentRepository(
 
                 val student = studentEntity.toDomain()
 
+                if (student.accessStatus in setOf(com.example.model.AccessStatus.SUSPENDED, com.example.model.AccessStatus.INACTIVE)) {
+                    return@withContext StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        isPolicyPending = false,
+                        reason = "Student record is ${student.accessStatus.label.lowercase()}. Refer to school administration.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
                 // Gate verification establishes identity and card validity only.
                 // Fee and boarding restrictions are policy decisions and must not be
                 // enforced until LTC formally approves the gate policy.
@@ -359,10 +371,9 @@ class RoomStudentRepository(
         val now = System.currentTimeMillis()
         try {
             val student = database.studentDao().getStudentById(studentId)?.toDomain()
-            val newAccessStatus = if (student != null) {
-                AccessStatus.evaluate(student.isDayScholar, newStatus)
-            } else {
-                if (newStatus == FeeStatus.CLEARED) AccessStatus.APPROVED else AccessStatus.RESTRICTED_FEES
+            val newAccessStatus = when (student?.accessStatus) {
+                AccessStatus.SUSPENDED, AccessStatus.INACTIVE -> student.accessStatus
+                else -> AccessStatus.PENDING_POLICY
             }
 
             database.withTransaction {
