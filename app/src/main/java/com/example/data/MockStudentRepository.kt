@@ -337,6 +337,18 @@ class MockStudentRepository : StudentRepository {
         return Result.success(Unit)
     }
 
+    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> {
+        val existing = _students.value.firstOrNull {
+            it.id.equals(student.id.trim(), ignoreCase = true) ||
+                it.studentNumber.equals(student.studentNumber.trim(), ignoreCase = true)
+        }
+        if (existing != null) {
+            return Result.failure(Exception("Student with number '${student.studentNumber}' already exists"))
+        }
+        _students.update { list -> listOf(student) + list }
+        return Result.success(Unit)
+    }
+
     override suspend fun updateStudent(student: Student): Result<Unit> {
         var found = false
         _students.update { list ->
