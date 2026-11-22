@@ -98,6 +98,7 @@ fun GuardDashboardScreen(
     user: AuthUser,
     activeScanResult: StudentScanResult?,
     activeScannedStudent: Student?,
+    allStudents: List<Student>,
     scanError: String?,
     scanLogs: List<ScanLog>,
     syncInfo: SyncInfo,
@@ -112,6 +113,7 @@ fun GuardDashboardScreen(
     var showManualInputDialog by remember { mutableStateOf(false) }
     var manualIdText by remember { mutableStateOf("") }
     var manualReason by remember { mutableStateOf("") }
+    var selectedManualStudent by remember { mutableStateOf<Student?>(null) }
     val roleTheme = LocalRoleTheme.current
 
     // If a student verification is active, display the full-bleed Verification result view
@@ -478,21 +480,65 @@ fun GuardDashboardScreen(
             text = {
                 Column {
                     Text(
-                        text = "Search the enrolled student by admission number. This does not validate or replace a QR badge.",
+                        text = "Search by student name or admission number, select the matching student, then record why manual verification is needed.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = manualIdText,
-                        onValueChange = { manualIdText = it.uppercase() },
-                        label = { Text("Admission number") },
-                        placeholder = { Text("LTC001") },
+                        onValueChange = {
+                            manualIdText = it
+                            selectedManualStudent = null
+                        },
+                        label = { Text("Student name or admission number") },
+                        placeholder = { Text("Search student…") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("input_manual_student_id")
                     )
+                    if (selectedManualStudent == null && manualIdText.isNotBlank()) {
+                        allStudents.filter {
+                            it.fullName.contains(manualIdText, ignoreCase = true) ||
+                                it.studentNumber.contains(manualIdText, ignoreCase = true)
+                        }.take(5).forEach { student ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedManualStudent = student
+                                        manualIdText = student.studentNumber
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                StudentAvatar(student = student, size = 42.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(student.fullName, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${student.studentNumber} • ${student.gradeClass}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    selectedManualStudent?.let { student ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StudentAvatar(student = student, size = 48.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Selected: ${student.fullName}", fontWeight = FontWeight.Bold)
+                                Text("${student.studentNumber} • ${student.gradeClass}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = manualReason,
@@ -509,13 +555,14 @@ fun GuardDashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val input = manualIdText.trim()
+                        val selected = selectedManualStudent
                         val reason = manualReason.trim()
-                        if (input.isNotBlank() && reason.isNotBlank()) {
+                        if (selected != null && reason.isNotBlank()) {
                             showManualInputDialog = false
-                            onManualLookup(input, reason)
+                            onManualLookup(selected.studentNumber, reason)
                             manualIdText = ""
                             manualReason = ""
+                            selectedManualStudent = null
                         }
                     },
                     modifier = Modifier.testTag("button_confirm_manual_lookup")
