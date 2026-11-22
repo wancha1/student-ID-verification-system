@@ -1080,6 +1080,7 @@ fun StudentAccessApp(
                                     user = user,
                                     activeScanResult = activeScanResult,
                                     activeScannedStudent = activeScannedStudent,
+                                    allStudents = allStudents,
                                     scanError = scanError,
                                     scanLogs = scanLogs,
                                     syncInfo = syncInfo,
