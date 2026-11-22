@@ -501,12 +501,16 @@ class RoomStudentRepository(
         val timestamped = students.map { it.copy(updatedAt = now) }
         try {
             database.withTransaction {
+                val existingStudents = database.studentDao().getAllStudentsSnapshot()
+                val existingNumbers = existingStudents.map { it.studentNumber.trim().uppercase() }.toSet()
+                val existingIds = existingStudents.map { it.id }.toSet()
+                val conflict = timestamped.firstOrNull {
+                    it.studentNumber.trim().uppercase() in existingNumbers || it.id in existingIds
+                }
+                if (conflict != null) {
+                    throw IllegalArgumentException("Admission number '${conflict.studentNumber}' is already registered.")
+                }
                 timestamped.forEach { student ->
-                    val existingByNumber = database.studentDao().getStudentByStudentNumber(student.studentNumber.trim())
-                    val existingById = database.studentDao().getStudentById(student.id)
-                    if (existingByNumber != null || existingById != null) {
-                        throw IllegalArgumentException("Admission number '${student.studentNumber}' is already registered.")
-                    }
                     database.studentDao().insertOrUpdateStudent(StudentEntity.fromDomain(student))
                     database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(student))
                     testFailureInterceptor?.invoke("addStudentsWithoutCards_afterLocalWrite")
