@@ -1343,7 +1343,7 @@ class MainViewModel(
                 rows.forEach { row ->
                     if (row.isRevoked) {
                         TrustedIssuerRegistry.revokeIssuer(row.keyId)
-                        if (KeystoreIssuerManager.getSigner()?.keyId.equals(row.keyId, ignoreCase = true) == true) {
+                        if (KeystoreIssuerManager.getSigner()?.keyId?.equals(row.keyId, ignoreCase = true) == true) {
                             CardCryptoManager.clearIssuerPrivateKey()
                         }
                     } else {
@@ -1374,7 +1374,7 @@ class MainViewModel(
         if (!requireAdminRole("Revoking trusted issuer key")) return
         val existing = TrustedIssuerRegistry.getIssuerEntry(kid)
         val success = TrustedIssuerRegistry.revokeIssuer(kid)
-        if (success && KeystoreIssuerManager.getSigner()?.keyId.equals(kid, ignoreCase = true) == true) {
+        if (success && KeystoreIssuerManager.getSigner()?.keyId?.equals(kid, ignoreCase = true) == true) {
             CardCryptoManager.clearIssuerPrivateKey()
         }
         if (success && existing != null) {
