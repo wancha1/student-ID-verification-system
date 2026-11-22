@@ -199,6 +199,18 @@ class MockStudentRepository : StudentRepository {
                     )
                 }
 
+                if (student.accessStatus in setOf(com.example.model.AccessStatus.SUSPENDED, com.example.model.AccessStatus.INACTIVE)) {
+                    return StudentScanResult.Success(
+                        student = student,
+                        card = card,
+                        isApproved = false,
+                        isPolicyPending = false,
+                        reason = "Student record is ${student.accessStatus.label.lowercase()}. Refer to school administration.",
+                        isOfflineData = isOffline,
+                        lastSyncTimestamp = lastSync
+                    )
+                }
+
                 // Gate verification establishes identity and card validity only.
                 // Fee and boarding restrictions require formal school policy approval.
                 StudentScanResult.Success(
