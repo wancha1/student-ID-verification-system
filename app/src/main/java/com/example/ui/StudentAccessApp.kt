@@ -1060,7 +1060,7 @@ fun StudentAccessApp(
                         allStudents = allStudents,
                         onSelectMealType = { viewModel.setActiveMealType(it) },
                         onOpenScanner = { },
-                        onManualServe = { },
+                        onManualServe = { _, _ -> },
                         onDismissScanOutcome = { },
                         onExport = { format -> viewModel.exportDataset("MEALS", format, context) },
                         readOnly = true
@@ -1258,8 +1258,8 @@ fun StudentAccessApp(
                                     allStudents = allStudents,
                                     onSelectMealType = { viewModel.setActiveMealType(it) },
                                     onOpenScanner = { viewModel.openMealScanner() },
-                                    onManualServe = { studentNumber ->
-                                        viewModel.verifyAndServeMeal(studentNumber, context)
+                                    onManualServe = { studentNumber, reason ->
+                                        viewModel.verifyAndServeMealManually(studentNumber, reason, context)
                                     },
                                     onDismissScanOutcome = { viewModel.dismissMealOutcome() },
                                     onExport = { format ->
