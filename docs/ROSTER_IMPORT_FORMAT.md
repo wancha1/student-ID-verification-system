@@ -1,6 +1,6 @@
 # Scholink roster import
 
-The Administrator can import a UTF-8 CSV file or an Excel workbook in modern `.xlsx` format from the Student Directory quick-access area.
+The Administrator can import a UTF-8 CSV file or an Excel workbook in modern `.xlsx` format from the Student Directory quick-access area. Use the [13-column CSV template](templates/scholink-13-column-roster-template.csv); the older 14-column export template is a separate format.
 
 ## Required columns
 
