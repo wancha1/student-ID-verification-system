@@ -464,7 +464,7 @@ class SupabaseCloudBackend(
         @SerialName("first_name") val firstName: String? = null,
         @SerialName("last_name") val lastName: String? = null,
         @SerialName("photo_path") val photoPath: String? = null,
-        @SerialName("access_status") val accessStatus: String = "APPROVED",
+        @SerialName("access_status") val accessStatus: String = "PENDING_POLICY",
         @SerialName("fee_status") val feeStatus: String = "CLEARED",
         @SerialName("grade_class") val gradeClass: String = "",
         @SerialName("class_name") val className: String? = null,
