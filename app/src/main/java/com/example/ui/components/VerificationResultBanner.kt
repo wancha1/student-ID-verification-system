@@ -131,7 +131,7 @@ fun VerificationResultDisplay(
         student = student,
         card = null,
         isApproved = student.isEntryApproved,
-        reason = if (student.isEntryApproved) "School fees cleared. Day scholar access approved." else "School fees outstanding. Direct to Bursar.",
+        reason = if (student.isEntryApproved) "Student record verified." else "Access requires review by the school office.",
         isOffline = false,
         lastSyncTimestamp = System.currentTimeMillis(),
         onScanNext = onScanNext,
@@ -204,7 +204,7 @@ private fun StudentSuccessVerificationView(
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = if (isApproved) "School fees cleared • Day scholar access granted" else "School fees outstanding • Entry restricted",
+                            text = if (isApproved) "Student identity verified" else "Verification requires staff review",
                             color = Color.White.copy(alpha = 0.9f),
                             fontWeight = FontWeight.Medium,
                             fontSize = 12.sp
@@ -302,7 +302,7 @@ private fun StudentSuccessVerificationView(
                 Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Verification Badges & Attributes
+                // Gate-facing result deliberately excludes financial and guardian information
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -318,7 +318,7 @@ private fun StudentSuccessVerificationView(
                     ) {
                         Column {
                             Text(
-                                text = "FEES STATUS",
+                                text = "STUDENT STATUS",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isApproved) ApprovedGreenDark else RejectedRedDark,
@@ -326,7 +326,7 @@ private fun StudentSuccessVerificationView(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (isApproved) "CLEARED" else "OUTSTANDING",
+                                text = if (isApproved) "VERIFIED" else "REVIEW",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Black,
                                 color = if (isApproved) ApprovedGreenText else RejectedRedText
@@ -345,7 +345,7 @@ private fun StudentSuccessVerificationView(
                     ) {
                         Column {
                             Text(
-                                text = "DAY SCHOLAR STATUS",
+                                text = "STUDENT CATEGORY",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -353,7 +353,7 @@ private fun StudentSuccessVerificationView(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (student.isDayScholar) "VERIFIED" else "BOARDER",
+                                text = if (student.isDayScholar) "DAY SCHOLAR" else "BOARDER",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Black,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -396,9 +396,9 @@ private fun StudentSuccessVerificationView(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = if (isApproved)
-                                "Allow entry through gate. Proceed to classroom (${student.homeroomTeacher})."
+                                "Allow entry through the gate."
                             else
-                                "Do NOT admit student through gate. Direct student to Bursar's Office (Admin Rm 104) with guardian.",
+                                "Hold entry and refer the student to the school office for assistance.",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -410,11 +410,6 @@ private fun StudentSuccessVerificationView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Guardian: ${student.guardianName} (${student.guardianPhone})",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                             Text(
                                 text = "Verified: $currentTimeStr",
                                 fontSize = 11.sp,
