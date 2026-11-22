@@ -132,6 +132,7 @@ class ExampleRobolectricTest {
         // 1. Initial scan is approved with authentic V2 card
         val scanResult1 = repository.verifyStudentByQr(activeCard.qrPayload)
         assertTrue(scanResult1 is StudentScanResult.Success && !scanResult1.isApproved)
+        assertTrue((scanResult1 as StudentScanResult.Success).isPolicyPending)
 
         // 2. Report card lost
         val reportResult = repository.reportCardLost(student.id, activeCard.id, "Student lost wallet on campus")
@@ -179,6 +180,7 @@ class ExampleRobolectricTest {
         repository.updateFeeStatus(initialStudent.id, FeeStatus.OUTSTANDING, 480000.0)
         val scanResult2 = repository.verifyStudentByQr(card.qrPayload)
         assertTrue(scanResult2 is StudentScanResult.Success && !scanResult2.isApproved)
+        assertTrue((scanResult2 as StudentScanResult.Success).isPolicyPending)
     }
 
     @Test
@@ -208,6 +210,7 @@ class ExampleRobolectricTest {
         val retrieved = (scanResult as StudentScanResult.Success).student
         assertEquals("Lucas", retrieved.firstName)
         assertFalse(scanResult.isApproved)
+        assertTrue(scanResult.isPolicyPending)
 
         // Delete student
         val deleteResult = repository.deleteStudent(newStudent.id)
@@ -232,6 +235,7 @@ class ExampleRobolectricTest {
         val clearedResult = viewModel.activeScanResult.first { it != null }
         assertNotNull(clearedResult)
         assertTrue(clearedResult is StudentScanResult.Success && !clearedResult.isApproved)
+        assertTrue((clearedResult as StudentScanResult.Success).isPolicyPending)
         assertNull(viewModel.scanError.value)
 
         // Fee policy is not an identity-verification rule. Until LTC approves
@@ -240,6 +244,7 @@ class ExampleRobolectricTest {
         val outstandingResult = viewModel.activeScanResult.value
         assertNotNull(outstandingResult)
         assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved)
+        assertTrue((outstandingResult as StudentScanResult.Success).isPolicyPending)
         assertFalse((outstandingResult as StudentScanResult.Success).reason.contains("fee", ignoreCase = true))
 
         // Scan invalid barcode format
@@ -253,7 +258,7 @@ class ExampleRobolectricTest {
         val logs = repository.scanLogsFlow.first { it.size == 3 }
         assertEquals(3, logs.size)
         assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
-        assertEquals(GateVerificationDecision.APPROVED, logs[1].decision)
-        assertEquals(GateVerificationDecision.APPROVED, logs[2].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs[1].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs[2].decision)
     }
 }
