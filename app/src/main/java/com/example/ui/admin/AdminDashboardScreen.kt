@@ -1,5 +1,18 @@
 package com.example.ui.admin
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.util.RosterImportParser
+import com.example.util.RosterImportPreview
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -118,6 +131,37 @@ fun AdminDashboardScreen(
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var studentToEdit by remember { mutableStateOf<Student?>(null) }
     var studentToDelete by remember { mutableStateOf<Student?>(null) }
+    var rosterPreview by remember { mutableStateOf<RosterImportPreview?>(null) }
+    var rosterImportError by remember { mutableStateOf<String?>(null) }
+    var rosterImportNotice by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val importScope = rememberCoroutineScope()
+    val rosterPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            rosterImportError = null
+            rosterPreview = null
+            importScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        val mime = context.contentResolver.getType(uri)
+                        val segment = Uri.decode(uri.lastPathSegment.orEmpty()).substringAfterLast('/')
+                        val fileName = when {
+                            segment.endsWith(".csv", ignoreCase = true) -> segment
+                            segment.endsWith(".xlsx", ignoreCase = true) -> segment
+                            mime == "text/csv" -> "roster.csv"
+                            else -> "roster.xlsx"
+                        }
+                        val stream = context.contentResolver.openInputStream(uri)
+                            ?: error("The selected roster file could not be opened.")
+                        RosterImportParser.parse(stream, fileName, mime)
+                    }
+                }.onSuccess { rosterPreview = it }
+                    .onFailure { rosterImportError = it.message ?: "Roster import failed." }
+            }
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -360,6 +404,27 @@ fun AdminDashboardScreen(
                                 testTag = "button_hub_print_badges",
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+                        if (user.role == UserRole.ADMINISTRATOR) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                HubButton(
+                                    icon = Icons.Default.PersonAdd,
+                                    title = "Import CSV / Excel Roster",
+                                    onClick = {
+                                        rosterPicker.launch(
+                                            arrayOf(
+                                                "text/csv",
+                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                            )
+                                        )
+                                    },
+                                    testTag = "button_import_roster",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -660,6 +725,84 @@ fun AdminDashboardScreen(
                 onEditStudent(updatedStudent)
                 studentToEdit = null
             }
+        )
+    }
+
+    // Roster import preview. Existing admission numbers are skipped, never overwritten.
+    rosterPreview?.let { preview ->
+        val existingNumbers = allStudents.map { it.studentNumber.trim().uppercase() }.toSet()
+        val newRecords = preview.records.filterNot {
+            it.admissionNumber.trim().uppercase() in existingNumbers
+        }
+        val existingDuplicates = preview.records.size - newRecords.size
+        AlertDialog(
+            onDismissRequest = { rosterPreview = null },
+            title = { Text("Review student roster", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text("${preview.validCount} valid row(s) • ${preview.errorCount} row error(s)")
+                    Text("${newRecords.size} new student(s) ready to import")
+                    if (existingDuplicates > 0) {
+                        Text("$existingDuplicates admission number(s) already exist and will be skipped.")
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Unsupported fields (other names, date of birth, student phone, email, roster status and unknown columns) are preserved in the private student Notes metadata. They are not treated as gate approval or fee decisions.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (preview.errors.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text("Rows requiring correction", fontWeight = FontWeight.Bold)
+                        preview.errors.take(8).forEach { error ->
+                            Text("• $error", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (preview.errors.size > 8) {
+                            Text("…and ${preview.errors.size - 8} more row error(s).", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    if (newRecords.isEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("No new valid students are available to import.")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        newRecords.forEach { record -> onAddStudent(record.toStudent()) }
+                        rosterImportNotice = "${newRecords.size} student record(s) submitted for registration. Existing admission numbers were skipped."
+                        rosterPreview = null
+                    },
+                    enabled = newRecords.isNotEmpty(),
+                    modifier = Modifier.testTag("button_confirm_roster_import")
+                ) { Text("Import ${newRecords.size} students") }
+            },
+            dismissButton = {
+                TextButton(onClick = { rosterPreview = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    rosterImportError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { rosterImportError = null },
+            title = { Text("Could not read roster") },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = { rosterImportError = null }) { Text("OK") } }
+        )
+    }
+
+    rosterImportNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = { rosterImportNotice = null },
+            title = { Text("Roster import submitted") },
+            text = { Text(notice) },
+            confirmButton = { TextButton(onClick = { rosterImportNotice = null }) { Text("OK") } }
         )
     }
 
