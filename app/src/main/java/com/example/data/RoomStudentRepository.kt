@@ -372,7 +372,8 @@ class RoomStudentRepository(
         try {
             val student = database.studentDao().getStudentById(studentId)?.toDomain()
             val newAccessStatus = when (student?.accessStatus) {
-                AccessStatus.SUSPENDED, AccessStatus.INACTIVE -> student.accessStatus
+                AccessStatus.SUSPENDED -> AccessStatus.SUSPENDED
+                AccessStatus.INACTIVE -> AccessStatus.INACTIVE
                 else -> AccessStatus.PENDING_POLICY
             }
 
