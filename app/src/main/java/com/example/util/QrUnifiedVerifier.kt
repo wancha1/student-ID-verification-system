@@ -177,9 +177,16 @@ object QrUnifiedVerifier {
         // Step 8: Apply Department Workflows
         when (department) {
             ScanDepartment.GATE -> {
-                // Direction-based event
+                // Exits are recorded normally. Entry remains on hold until LTC
+                // formally approves the gate policy; card validity alone is not permission.
                 val directionLabel = if (gateDirection == GateDirection.ENTRY) "ENTRY" else "EXIT"
+                val isExit = gateDirection == GateDirection.EXIT
                 val eventId = UUID.randomUUID().toString()
+                val decisionReason = if (isExit) {
+                    "Gate EXIT recorded after identity verification."
+                } else {
+                    "Identity verified. Entry decision pending approved LTC gate policy."
+                }
                 val logEntity = ScanLogEntity(
                     id = eventId,
                     studentId = student.id,
@@ -190,12 +197,12 @@ object QrUnifiedVerifier {
                     cardIdentifier = card.cardIdentifier,
                     qrPayload = card.qrPayload,
                     timestamp = now,
-                    decision = "APPROVED",
+                    decision = if (isExit) "APPROVED" else "NOT_APPROVED",
                     feeStatus = student.feesStatus.name,
                     cardStatus = card.status.name,
                     isDayScholar = student.isDayScholar,
-                    isApproved = true,
-                    reason = "Gate $directionLabel authorized for ${student.fullName} (${if (student.isDayScholar) "Day Scholar" else "Boarder"})",
+                    isApproved = isExit,
+                    reason = decisionReason,
                     isOfflineDecision = isOffline,
                     dataSyncTimestampAtScan = lastSync,
                     guardName = currentUser.name,
@@ -210,9 +217,13 @@ object QrUnifiedVerifier {
                     student = student,
                     card = card,
                     department = ScanDepartment.GATE,
-                    isAllowed = true,
-                    statusHeadline = "Gate $directionLabel Cleared",
-                    statusDetail = "Student ${student.fullName} (${student.gradeClass}) recorded for $directionLabel at ${currentUser.station}.",
+                    isAllowed = isExit,
+                    statusHeadline = if (isExit) "Gate EXIT Recorded" else "Identity Verified — Policy Review Required",
+                    statusDetail = if (isExit) {
+                        "Student ${student.fullName} (${student.gradeClass}) recorded exiting at ${currentUser.station}."
+                    } else {
+                        "Valid active card confirmed for ${student.fullName}. Follow the approved school procedure before entry."
+                    },
                     isOffline = isOffline,
                     syncTimestamp = lastSync,
                     gateDirection = gateDirection
