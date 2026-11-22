@@ -186,28 +186,26 @@ fun MealsMasterScreen(
                         }
                     }
 
-                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = onOpenScanner,
-                            modifier = Modifier.testTag("button_meals_scan_qr"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = roleTheme.primaryColor
-                            ),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                if (!readOnly) {
+                    Button(
+                        onClick = onOpenScanner,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("button_meals_scan_qr"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("SCAN STUDENT CARD", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
 
                 // Meal Session Selector Pills
                 Text(
@@ -226,7 +224,7 @@ fun MealsMasterScreen(
                         val isSelected = activeMealType == type
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) Color(0xFFE11D48) else MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
                                 .weight(1f)
                                 .then(if (readOnly) Modifier else Modifier.clickable { onSelectMealType(type) })
