@@ -488,6 +488,36 @@ class RoomStudentRepository(
         }
     }
 
+    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> = withContext(ioDispatcher) {
+        val now = System.currentTimeMillis()
+        val studentWithTimestamp = student.copy(updatedAt = now)
+        val entity = StudentEntity.fromDomain(studentWithTimestamp)
+        try {
+            database.withTransaction {
+                val existing = database.studentDao().getStudentByStudentNumber(student.studentNumber.trim())
+                if (existing != null && existing.id != student.id) {
+                    throw IllegalArgumentException("Admission number '${student.studentNumber}' is already registered.")
+                }
+                database.studentDao().insertOrUpdateStudent(entity)
+                database.studentProfileDao().insertOrUpdateProfile(StudentProfileEntity.fromStudent(studentWithTimestamp))
+                testFailureInterceptor?.invoke("addStudentWithoutCard_afterLocalWrites")
+                database.pendingChangeDao().enqueueChange(
+                    PendingChangeEntity(
+                        changeId = UUID.randomUUID().toString(),
+                        entityType = SyncEntityType.STUDENT,
+                        recordId = student.id,
+                        operationType = SyncOperationType.CREATE,
+                        createdAt = now
+                    )
+                )
+            }
+            syncManager.notifyLocalLogAdded()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun updateStudent(student: Student): Result<Unit> = withContext(ioDispatcher) {
         val now = System.currentTimeMillis()
         val studentWithTimestamp = student.copy(updatedAt = now)
