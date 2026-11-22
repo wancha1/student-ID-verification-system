@@ -39,6 +39,7 @@ Unknown columns are also retained in the private roster metadata. This is intent
 - Admission numbers already in the local student registry are skipped; imports never silently overwrite an existing student.
 - Import does not issue or sign ID cards.
 - Imported status values do not grant gate access.
+- The 13-column template does not contain fee clearance, boarding/day-scholar status, or transport assignment. Existing app defaults apply to those fields until authorized staff verify them; do not treat those defaults as authoritative financial or transport data.
 - Unsupported and unknown source values are preserved in the student's private Notes metadata with the `ROSTER_IMPORT_METADATA_V1` marker. Notes are synchronized through the existing private student profile path.
 - Maximum input file size is 20 MB and maximum data-row count is 10,000.
 
