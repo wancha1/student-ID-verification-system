@@ -27,9 +27,10 @@ interface StudentRepository {
     suspend fun getStudentByCardIdentifier(cardIdentifier: String): Student?
 
     /**
-     * Core Gate Scanning Verification:
-     * Parses QR code -> searches local Room DB -> verifies Card lifecycle (ACTIVE vs LOST/REPLACED/DEACTIVATED)
-     * -> evaluates fee & day-scholar status -> returns typed result.
+     * Core Gate Identity Verification:
+     * Parses the signed V2 QR -> resolves the exact local card/student -> verifies issuer trust,
+     * credential dates, student lifecycle and card lifecycle. Entry permission is a separate
+     * school-policy decision and must not be inferred from fee or boarding fields.
      */
     suspend fun verifyStudentByQr(rawQrCode: String): StudentScanResult
 
