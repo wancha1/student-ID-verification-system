@@ -20,6 +20,7 @@ import com.example.model.DepartmentVerificationResult
 import com.example.model.AttendanceRecord
 import com.example.model.ExamException
 import com.example.model.ExamClearanceStatus
+import com.example.data.local.MealRecordEntity
 import com.example.data.database
 import com.example.data.syncManagerInstance
 import com.example.util.QrUnifiedVerifier
@@ -1122,6 +1123,86 @@ class MainViewModel(
 
     fun dismissMealOutcome() {
         dismissMealScanOutcome()
+    }
+
+    /**
+     * Manual meal fallback mirrors the meal entitlement and duplicate-serving checks
+     * used by the QR workflow. The reason is persisted in MealRecord.notes.
+     */
+    fun verifyAndServeMealManually(studentNumber: String, reason: String, context: Context? = null) {
+        val mealType = _activeMealType.value
+        val user = _currentUser.value
+        if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
+            _userFeedbackMessage.value = "Access Denied: Meal staff authorization is required."
+            return
+        }
+        if (!mealType.isEnabledForServing) {
+            _userFeedbackMessage.value = "${mealType.label} is disabled. Only lunch and supper can be served."
+            return
+        }
+        if (reason.isBlank()) {
+            _userFeedbackMessage.value = "A reason is required for manual meal serving."
+            return
+        }
+
+        viewModelScope.launch {
+            val student = repository.getStudentByStudentNumber(studentNumber.trim())
+            if (student == null) {
+                _mealScanOutcome.value = MealVerificationResult.StudentNotFound(studentNumber.trim())
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val eligible = if (student.isDayScholar) {
+                mealType == MealType.LUNCH
+            } else {
+                mealType == MealType.LUNCH || mealType == MealType.DINNER
+            }
+            if (!eligible) {
+                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                    student,
+                    if (student.isDayScholar) "Day scholars are eligible for lunch only." else "Not eligible for this meal session."
+                )
+                FeedbackHelper.playDeniedSoundAndHaptic(context)
+                return@launch
+            }
+
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val existing = repository.database?.mealRecordDao()
+                ?.findServing(student.id, mealType.name, today)
+                ?.toDomain()
+                ?: _mealRecords.value.firstOrNull {
+                    it.studentId == student.id && it.mealType == mealType &&
+                        it.mealDate == today && it.status == MealServingStatus.SERVED
+                }
+            if (existing != null) {
+                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, mealType, existing)
+                FeedbackHelper.playWarningSoundAndHaptic(context)
+                return@launch
+            }
+
+            val record = MealRecord(
+                studentId = student.id,
+                studentNumber = student.studentNumber,
+                studentName = student.fullName,
+                gradeClass = student.gradeClass,
+                mealType = mealType,
+                mealDate = today,
+                timestamp = System.currentTimeMillis(),
+                serverName = user.name,
+                status = MealServingStatus.SERVED,
+                notes = "MANUAL_ENTRY: ${reason.trim()}"
+            )
+            val db = repository.database
+            if (db != null) {
+                db.mealRecordDao().insertOrUpdate(MealRecordEntity.fromDomain(record, isSynced = false))
+                repository.syncManagerInstance?.notifyLocalLogAdded()
+            } else {
+                _mealRecords.value = listOf(record) + _mealRecords.value
+            }
+            _mealScanOutcome.value = MealVerificationResult.Success(record)
+            FeedbackHelper.playApprovedSoundAndHaptic(context)
+        }
     }
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
