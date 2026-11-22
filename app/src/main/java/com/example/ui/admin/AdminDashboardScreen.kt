@@ -79,7 +79,6 @@ import com.example.ui.theme.ApprovedGreen
 import com.example.ui.theme.ApprovedGreenDark
 import com.example.ui.theme.ApprovedGreenLight
 import com.example.ui.theme.ApprovedGreenText
-import com.example.ui.theme.roleTheme.accentGlowColor
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedDark
 import com.example.ui.theme.RejectedRedLight
