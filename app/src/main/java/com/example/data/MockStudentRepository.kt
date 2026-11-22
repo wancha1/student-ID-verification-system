@@ -337,15 +337,26 @@ class MockStudentRepository : StudentRepository {
         return Result.success(Unit)
     }
 
-    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> {
-        val existing = _students.value.firstOrNull {
-            it.id.equals(student.id.trim(), ignoreCase = true) ||
-                it.studentNumber.equals(student.studentNumber.trim(), ignoreCase = true)
+    override suspend fun addStudentWithoutCard(student: Student): Result<Unit> =
+        addStudentsWithoutCards(listOf(student))
+
+    override suspend fun addStudentsWithoutCards(students: List<Student>): Result<Unit> {
+        if (students.isEmpty()) return Result.success(Unit)
+        val newNumbers = students.map { it.studentNumber.trim().uppercase() }
+        if (newNumbers.size != newNumbers.toSet().size) {
+            return Result.failure(IllegalArgumentException("The import contains duplicate admission numbers."))
         }
-        if (existing != null) {
-            return Result.failure(Exception("Student with number '${student.studentNumber}' already exists"))
+        val existing = _students.value
+        val duplicate = students.firstOrNull { candidate ->
+            existing.any {
+                it.id.equals(candidate.id.trim(), ignoreCase = true) ||
+                    it.studentNumber.equals(candidate.studentNumber.trim(), ignoreCase = true)
+            }
         }
-        _students.update { list -> listOf(student) + list }
+        if (duplicate != null) {
+            return Result.failure(IllegalArgumentException("Admission number '${duplicate.studentNumber}' is already registered."))
+        }
+        _students.update { list -> students + list }
         return Result.success(Unit)
     }
 
