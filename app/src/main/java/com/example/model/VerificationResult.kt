@@ -1,7 +1,7 @@
 package com.example.model
 
 /**
- * The 5 distinct semantic outcomes of a QR scan at the school gate.
+ * The distinct semantic outcomes of a QR scan at the school gate.
  */
 enum class GateVerificationDecision(val title: String) {
     APPROVED("ENTRY APPROVED"),
