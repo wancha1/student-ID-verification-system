@@ -338,35 +338,17 @@ class RoomStudentRepository(
             }
         }
 
-        // Active Card exists: Check student gate authorization criteria
-        return if (!student.isDayScholar) {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "Student is enrolled as a Boarding student and cannot pass Day Scholar gate.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else if (student.feesStatus == FeeStatus.OUTSTANDING) {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = false,
-                reason = "School fees are outstanding. Refer the student to the school office.",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        } else {
-            StudentScanResult.Success(
-                student = student,
-                card = activeCard,
-                isApproved = true,
-                reason = "Entry Approved: Fees Cleared & Card Active (${activeCard.cardIdentifier}).",
-                isOfflineData = isOffline,
-                lastSyncTimestamp = lastSync
-            )
-        }
+        // Identity and card are valid. This helper must not infer entry policy
+        // from fees or boarding fields before LTC formally approves that policy.
+        StudentScanResult.Success(
+            student = student,
+            card = activeCard,
+            isApproved = false,
+            isPolicyPending = true,
+            reason = "Identity verified. Entry decision pending approved LTC gate policy.",
+            isOfflineData = isOffline,
+            lastSyncTimestamp = lastSync
+        )
     }
 
     override suspend fun updateFeeStatus(
