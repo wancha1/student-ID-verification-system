@@ -1225,8 +1225,8 @@ fun StudentAccessApp(
                                     onAddStudent = { newStudent ->
                                         viewModel.registerNewStudent(newStudent)
                                     },
-                                    onImportStudent = { importedStudent ->
-                                        viewModel.registerImportedStudent(importedStudent)
+                                    onImportStudents = { importedStudents ->
+                                        viewModel.registerImportedStudents(importedStudents)
                                     },
                                     onDeleteStudent = { studentId ->
                                         viewModel.deleteStudentRecord(studentId)
