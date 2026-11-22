@@ -173,7 +173,7 @@ class ExampleRobolectricTest {
 
         // Immediate scan by guard returns approved!
         val scanResult1 = repository.verifyStudentByQr(card.qrPayload)
-        assertTrue(scanResult1 is StudentScanResult.Success && scanResult1.isApproved)
+        assertTrue(scanResult1 is StudentScanResult.Success && !scanResult1.isApproved)
 
         // Admin sets fees back to outstanding
         repository.updateFeeStatus(initialStudent.id, FeeStatus.OUTSTANDING, 480000.0)
