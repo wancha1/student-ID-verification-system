@@ -24,14 +24,17 @@ class MainActivity : ComponentActivity() {
         // If this device was previously enrolled as an authoritative Issuer, load its Keystore signer
         if (KeystoreIssuerManager.hasIssuerKey()) {
             KeystoreIssuerManager.getSigner()?.let { signer ->
-                CardCryptoManager.setActiveSigner(signer)
-                // Restore the matching public key locally as a trusted verifier key.
-                // This keeps cards issued by this device verifiable after app restarts.
-                // Other devices still obtain issuer trust from the authenticated cloud registry.
-                TrustedIssuerRegistry.registerTrustedKey(
+                // Restore local trust before enabling signing. A previously revoked
+                // issuer must not regain signing capability after an app restart.
+                val entry = TrustedIssuerRegistry.registerTrustedKey(
                     signer.publicKey,
                     "LTC Local Issuer"
                 )
+                if (entry.isRevoked) {
+                    CardCryptoManager.clearIssuerPrivateKey()
+                } else {
+                    CardCryptoManager.setActiveSigner(signer)
+                }
             }
         }
 
