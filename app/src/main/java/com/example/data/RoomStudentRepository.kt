@@ -242,8 +242,10 @@ class RoomStudentRepository(
                 StudentScanResult.Success(
                     student = student,
                     card = card,
-                    isApproved = true,
-                    reason = "Identity verified. Authentic active V2 card confirmed.",
+                    // Identity verification is not an entry decision. Until LTC approves
+                    // a gate policy, the officer must hold and follow the school's procedure.
+                    isApproved = false,
+                    reason = "Identity verified. Entry decision pending approved LTC gate policy.",
                     isOfflineData = isOffline,
                     lastSyncTimestamp = lastSync
                 )
