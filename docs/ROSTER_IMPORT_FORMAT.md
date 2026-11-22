@@ -40,7 +40,7 @@ Unknown columns are also retained in the private roster metadata. This is intent
 - Import does not issue or sign ID cards.
 - Imported status values do not grant gate access.
 - Unsupported and unknown source values are preserved in the student's private Notes metadata with the `ROSTER_IMPORT_METADATA_V1` marker. Notes are synchronized through the existing private student profile path.
-- Maximum input file size is 20 MB.
+- Maximum input file size is 20 MB and maximum data-row count is 10,000.
 
 ## Spreadsheet compatibility
 
