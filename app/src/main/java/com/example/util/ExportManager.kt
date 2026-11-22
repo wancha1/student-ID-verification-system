@@ -250,6 +250,7 @@ object ExportManager {
                 td { padding: 6px 8px; border: 1px solid #E2E8F0; font-size: 11pt; }
                 .approved { color: #047857; font-weight: bold; }
                 .denied { color: #DC2626; font-weight: bold; }
+                .pending { color: #B45309; font-weight: bold; }
             </style>
             </head>
             <body>
@@ -271,7 +272,11 @@ object ExportManager {
 
         logs.forEachIndexed { i, log ->
             val isApp = log.decision == GateVerificationDecision.APPROVED
-            val decClass = if (isApp) "approved" else "denied"
+            val decClass = when (log.decision) {
+                GateVerificationDecision.APPROVED -> "approved"
+                GateVerificationDecision.POLICY_PENDING -> "pending"
+                else -> "denied"
+            }
             val timeStr = dateTimeFormatter.format(Date(log.timestamp))
             sb.append("""
                 <tr>
