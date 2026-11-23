@@ -75,9 +75,22 @@ fun DepartmentScanResultBanner(
         when (result) {
             is DepartmentVerificationResult.Success -> {
                 val isSuccess = result.isAllowed
-                val bgColor = if (isSuccess) ApprovedGreenLight else RejectedRedLight
-                val borderColor = if (isSuccess) ApprovedGreen else RejectedRed
-                val iconColor = if (isSuccess) ApprovedGreenText else RejectedRedText
+                val isPolicyPending = result.isPolicyPending
+                val bgColor = when {
+                    isPolicyPending -> PendingAmberLight
+                    isSuccess -> ApprovedGreenLight
+                    else -> RejectedRedLight
+                }
+                val borderColor = when {
+                    isPolicyPending -> PendingAmber
+                    isSuccess -> ApprovedGreen
+                    else -> RejectedRed
+                }
+                val iconColor = when {
+                    isPolicyPending -> PendingAmber
+                    isSuccess -> ApprovedGreenText
+                    else -> RejectedRedText
+                }
 
                 Card(
                     modifier = Modifier
@@ -100,7 +113,11 @@ fun DepartmentScanResultBanner(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                                    imageVector = when {
+                                        isPolicyPending -> Icons.Default.Warning
+                                        isSuccess -> Icons.Default.CheckCircle
+                                        else -> Icons.Default.Error
+                                    },
                                     contentDescription = null,
                                     tint = iconColor,
                                     modifier = Modifier.size(28.dp)
