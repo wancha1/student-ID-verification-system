@@ -7,8 +7,12 @@ on:
     branches: [main, "fix/**", "feat/**", "release/**"]
   workflow_dispatch:
 
+# Keep push and pull_request validation independent. GitHub emits both events
+# for a PR branch; grouping only by branch causes the second event to cancel
+# the first before its tests finish. New commits still supersede older runs
+# within the same event and PR/ref.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
