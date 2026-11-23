@@ -85,7 +85,9 @@ sealed class DepartmentVerificationResult {
         val mealStatus: MealServingStatus? = null,
         val examStatus: ExamClearanceStatus? = null,
         val attendanceSubject: String? = null,
-        val attendanceSession: String? = null
+        val attendanceSession: String? = null,
+        /** True when identity is verified but school policy has not authorized the requested action. */
+        val isPolicyPending: Boolean = false
     ) : DepartmentVerificationResult()
 
     data class PermissionDenied(
