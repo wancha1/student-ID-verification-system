@@ -39,6 +39,8 @@ Merge in dependency order; reconcile follow-up branches after PR #65. Do not mer
 | Production environment staff passwords and signing keys | AUDIT-REPORTED; NOT INDEPENDENTLY VERIFIED | Inspect GitHub environment settings directly; rotate exposed credentials; enforce reviewer protection. |
 | Firebase key in Git history / old project | AUDIT-REPORTED; NOT INDEPENDENTLY VERIFIED | Restrict/rotate key, audit Firebase rules and project usage, then disable or delete the obsolete project after confirming no dependency. |
 | Gate direction, boarders and exeat policy | BLOCKED — school policy; safe interim behavior in PR #70 | PR #70 keeps both ENTRY and EXIT as POLICY_PENDING, records neither as approved, and uses an explicit amber result. Final direction-aware evaluator and exeat rules remain blocked until LTC signs its policy. |
+| Meal eligibility and serving policy | BLOCKED — school decision; safe interim behavior in PR #71 | PR #71 removes inferred day-scholar/boarder entitlements and station-name heuristics. No meal is recorded as served until meal periods, eligibility, exceptions and fallback are approved. |
+| Examination admission policy | BLOCKED — school decision; safe interim behavior in PR #71 | PR #71 removes automatic clearance based only on fee status or an exception record. Admission remains pending until requirements, authority and exceptions are approved. |
 | Roster import | IMPLEMENTED IN PR #64; CI NOT GREEN | CSV/XLSX parser, preview and batch import exist; fix CI test failures and complete dry-run/idempotency/second-person approval tests. |
 | Manual gate fallback | PRESENT IN PR #64; VERIFY | Confirm lookup scope, mandatory reason, audit-log integrity, privacy controls and real-device usability. |
 
