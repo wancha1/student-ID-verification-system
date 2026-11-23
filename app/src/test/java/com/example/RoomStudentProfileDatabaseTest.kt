@@ -44,6 +44,21 @@ class RoomStudentProfileDatabaseTest {
     }
 
     @Test
+    fun explicitAccessApprovalIsNotRecomputedFromFeesOrBoardingFields() {
+        val student = Student(
+            studentNumber = "LTC-POLICY-001",
+            firstName = "Test",
+            lastName = "Student",
+            gradeClass = "S1",
+            isDayScholar = false,
+            feesStatus = FeeStatus.OUTSTANDING,
+            accessStatus = AccessStatus.APPROVED
+        )
+
+        assertTrue(student.isEntryApproved)
+    }
+
+    @Test
     fun testInsertAndRetrieveStudentProfile() = runBlocking {
         val studentId = UUID.randomUUID().toString()
         val profile = StudentProfileEntity(
