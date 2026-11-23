@@ -8,9 +8,12 @@ This tracker distinguishes code changes visible in GitHub from external configur
 
 - PR #62: scholink/v1-clean-modern-fixes
 - PR #64: feat/scholink-production-readiness (stacked on PR #62)
-- Follow-on hardening branch: fix/scholink-production-gates (based on PR #64)
+- PR #65: fix/scholink-production-gates (based on PR #64)
+- PR #67: fix/ci-event-concurrency (based on PR #65)
+- PR #68: fix/finance-membership-guard-complete (based on PR #65)
+- PR #66: docs/ltc-pilot-plan (retargeted to PR #67)
 
-Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not merge around failed required checks.
+Merge in dependency order. PR #68 is a separate follow-up against the PR #65 branch and must be reconciled after #65; do not merge around failed required checks.
 
 ## Gate 0 — school and product decisions
 
@@ -26,7 +29,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 | Audit item | Current assessment | Required closure evidence |
 |---|---|---|
 | Gate/meal upsert UPDATE permission mismatch | PARTIALLY ADDRESSED in PR #62 by append-only/idempotent writes | Authenticated real-backend insert-twice tests; prove no UPDATE grant is needed. |
-| Finance capability privilege escalation | CODE CHANGE PRESENT in PR #62; extended in PR #65 | The trigger now also requires finance authority to change the active state, role or school of a finance-enabled membership. It is not applied to live DB. Test non-finance Admin grant/deactivation attempts and finance Admin success in an isolated Supabase branch before production migration. |
+| Finance capability privilege escalation | CODE CHANGE PRESENT in PR #62; further hardening proposed in PR #68 | The PR #62 trigger protects finance capability, role and school changes. PR #68 additionally protects user_id and is_active, which otherwise permit account transfer or deactivation paths. Neither guard is applied to the live DB. Test grant, revoke, identity-transfer, deactivation and role/school changes with authenticated synthetic accounts in staging. |
 | Canonical Supabase baseline schema and RLS | REPOSITORY DRIFT CONFIRMED | Live migration history includes the initial schema migration 20261111131447, but that migration file is absent from current main and PR #64. Restore the exact original migration from source/history; do not reconstruct it by guesswork. Live RLS is enabled on all inspected public tables; role-specific policy testing remains open. |
 | Static QR bearer token / anti-passback | OPEN | Threat model and approved design for replay, duplicate scans and concurrent devices. |
 | Issuer key storage, trust and signing controls | PARTIALLY ADDRESSED in PR #62 | Review SharedPreferences trust persistence, require protected key operations, define secure enrollment, revocation and rotation; add tests. |
@@ -60,12 +63,12 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 - Split oversized UI/view-model components after correctness and security gates.
 - Add other modules only after gate operation is stable.
 
-## CI status at start of this follow-on branch
+## CI status (2026-11-24)
 
-Workflow run 45059800590:
-- Debug and release APK compilation: PASS.
-- Android unit tests: FAIL — 10 of 15 test classes failed at Robolectric SDK artifact acquisition (MavenArtifactFetcher / java.io.IOException); this run does not establish application test failures or passes.
-- Android emulator smoke tests: SKIPPED because the unit-test step failed.
+- Earlier run 45059800590: debug/release compilation passed; unit tests failed during Robolectric SDK artifact acquisition (MavenArtifactFetcher / java.io.IOException); emulator tests were skipped. This does not establish application test failures or passes.
+- Subsequent runs for PRs #65 and #66 were cancelled before producing a complete test result.
+- PR #67 changes the concurrency key so push and pull_request events no longer cancel each other. Its latest observed run was still in progress at the time of this update.
+- PR #68's latest run was queued/pending; no test result is yet available.
 - Physical devices: NOT TESTED.
 
 Do not describe the build as production-ready until the required CI, backend, security, policy, signing and physical-device evidence is complete.
