@@ -8,9 +8,14 @@ This tracker distinguishes code changes visible in GitHub from external configur
 
 - PR #62: scholink/v1-clean-modern-fixes
 - PR #64: feat/scholink-production-readiness (stacked on PR #62)
-- Follow-on hardening branch: fix/scholink-production-gates (based on PR #64)
+- PR #65: fix/scholink-production-gates (based on PR #64)
+- PR #67: fix/ci-event-concurrency (based on PR #65)
+- PR #68: fix/finance-membership-guard-complete (based on PR #65)
+- PR #69: docs/offline-session-safety (based on PR #65)
+- PR #70: fix/gate-policy-pending-both-directions (based on PR #65)
+- PR #66: docs/ltc-pilot-plan (retargeted to PR #67)
 
-Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not merge around failed required checks.
+Merge in dependency order; reconcile follow-up branches after PR #65. Do not merge around failed required checks.
 
 ## Gate 0 — school and product decisions
 
@@ -33,7 +38,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 | Offline session restore | OPEN | Test reboot without network; define bounded offline session policy and revocation freshness. |
 | Production environment staff passwords and signing keys | AUDIT-REPORTED; NOT INDEPENDENTLY VERIFIED | Inspect GitHub environment settings directly; rotate exposed credentials; enforce reviewer protection. |
 | Firebase key in Git history / old project | AUDIT-REPORTED; NOT INDEPENDENTLY VERIFIED | Restrict/rotate key, audit Firebase rules and project usage, then disable or delete the obsolete project after confirming no dependency. |
-| Gate direction, boarders and exeat policy | BLOCKED — policy + implementation | Implement one policy evaluator with explicit ENTRY/EXIT, approved exeat checks and typed result after signed school policy. |
+| Gate direction, boarders and exeat policy | BLOCKED — school policy; safe interim behavior in PR #70 | PR #70 keeps both ENTRY and EXIT as POLICY_PENDING, records neither as approved, and uses an explicit amber result. Final direction-aware evaluator and exeat rules remain blocked until LTC signs its policy. |
 | Roster import | IMPLEMENTED IN PR #64; CI NOT GREEN | CSV/XLSX parser, preview and batch import exist; fix CI test failures and complete dry-run/idempotency/second-person approval tests. |
 | Manual gate fallback | PRESENT IN PR #64; VERIFY | Confirm lookup scope, mandatory reason, audit-log integrity, privacy controls and real-device usability. |
 
@@ -60,12 +65,11 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 - Split oversized UI/view-model components after correctness and security gates.
 - Add other modules only after gate operation is stable.
 
-## CI status at start of this follow-on branch
+## CI status (2026-11-24)
 
-Workflow run 45059800590:
-- Debug and release APK compilation: PASS.
-- Android unit tests: FAIL — 10 of 15 test classes failed at Robolectric SDK artifact acquisition (MavenArtifactFetcher / java.io.IOException); this run does not establish application test failures or passes.
-- Android emulator smoke tests: SKIPPED because the unit-test step failed.
+- Earlier run 45059800590: debug/release compilation passed; unit tests failed during Robolectric SDK artifact acquisition (MavenArtifactFetcher / java.io.IOException); emulator tests were skipped. This does not establish application test failures or passes.
+- PR #67 separates push and pull_request concurrency groups. Its latest observed runs were still in progress at unit tests; no complete result was available at last check.
+- PR #68 and PR #70 require their own completed CI runs; do not infer success from earlier compilation.
 - Physical devices: NOT TESTED.
 
 Do not describe the build as production-ready until the required CI, backend, security, policy, signing and physical-device evidence is complete.
