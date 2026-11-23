@@ -177,18 +177,13 @@ object QrUnifiedVerifier {
         // Step 8: Apply Department Workflows
         when (department) {
             ScanDepartment.GATE -> {
-                // Exits are recorded normally. Entry remains on hold until LTC
-                // formally approves the gate policy; card validity alone is not permission.
-                val directionLabel = if (gateDirection == GateDirection.ENTRY) "ENTRY" else "EXIT"
-                val isExit = gateDirection == GateDirection.EXIT
-                val eventId = UUID.randomUUID().toString()
-                val decisionReason = if (isExit) {
-                    "Gate EXIT recorded after identity verification."
-                } else {
-                    "Identity verified. Entry decision pending approved LTC gate policy."
-                }
+                // Neither entry nor exit is authorized until LTC approves and configures
+                // direction-aware gate policy. A valid identity is not movement permission.
+                val directionLabel = gateDirection.name
+                val decisionReason =
+                    "Identity and active card verified. $directionLabel movement is not authorized by this app until LTC approves the gate policy."
                 val logEntity = ScanLogEntity(
-                    id = eventId,
+                    id = UUID.randomUUID().toString(),
                     studentId = student.id,
                     studentNumber = student.studentNumber,
                     studentName = student.fullName,
@@ -197,17 +192,17 @@ object QrUnifiedVerifier {
                     cardIdentifier = card.cardIdentifier,
                     qrPayload = card.qrPayload,
                     timestamp = now,
-                    decision = if (isExit) "APPROVED" else "NOT_APPROVED",
+                    decision = "POLICY_PENDING",
                     feeStatus = student.feesStatus.name,
                     cardStatus = card.status.name,
                     isDayScholar = student.isDayScholar,
-                    isApproved = isExit,
+                    isApproved = false,
                     reason = decisionReason,
                     isOfflineDecision = isOffline,
                     dataSyncTimestampAtScan = lastSync,
                     guardName = currentUser.name,
                     deviceIdentifier = currentUser.station,
-                    gateLocation = "Gate 1 (Main Entrance)",
+                    gateLocation = currentUser.station,
                     isSyncedToCloud = false
                 )
                 database.scanLogDao().insertScanLog(logEntity)
@@ -217,16 +212,13 @@ object QrUnifiedVerifier {
                     student = student,
                     card = card,
                     department = ScanDepartment.GATE,
-                    isAllowed = isExit,
-                    statusHeadline = if (isExit) "Gate EXIT Recorded" else "Identity Verified — Policy Review Required",
-                    statusDetail = if (isExit) {
-                        "Student ${student.fullName} (${student.gradeClass}) recorded exiting at ${currentUser.station}."
-                    } else {
-                        "Valid active card confirmed for ${student.fullName}. Follow the approved school procedure before entry."
-                    },
+                    isAllowed = false,
+                    statusHeadline = "$directionLabel POLICY DECISION PENDING",
+                    statusDetail = "Identity and active card verified. No movement authorization was issued. Follow the school's approved procedure; this scan is recorded for audit only.",
                     isOffline = isOffline,
                     syncTimestamp = lastSync,
-                    gateDirection = gateDirection
+                    gateDirection = gateDirection,
+                    isPolicyPending = true
                 )
             }
 
