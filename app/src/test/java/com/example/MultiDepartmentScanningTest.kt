@@ -214,7 +214,8 @@ class MultiDepartmentScanningTest {
         assertTrue(entryResult is DepartmentVerificationResult.Success)
         val successEntry = entryResult as DepartmentVerificationResult.Success
         assertFalse("Valid card identity alone must not authorize entry while policy is pending", successEntry.isAllowed)
-        assertTrue(successEntry.statusHeadline.contains("Policy Review", ignoreCase = true))
+        assertTrue(successEntry.isPolicyPending)
+        assertTrue(successEntry.statusHeadline.contains("PENDING", ignoreCase = true))
         assertEquals(GateDirection.ENTRY, successEntry.gateDirection)
 
         // 2. Exit scan
@@ -229,12 +230,16 @@ class MultiDepartmentScanningTest {
 
         assertTrue(exitResult is DepartmentVerificationResult.Success)
         val successExit = exitResult as DepartmentVerificationResult.Success
-        assertTrue(successExit.isAllowed)
+        assertFalse("Exit must not be authorized before LTC approves exit policy", successExit.isAllowed)
+        assertTrue(successExit.isPolicyPending)
+        assertTrue(successExit.statusHeadline.contains("PENDING", ignoreCase = true))
         assertEquals(GateDirection.EXIT, successExit.gateDirection)
 
-        // 3. Verify logs in database
+        // 3. Both directions are audit records, not authorization decisions.
         val logs = database.scanLogDao().getAllLogsFlow().first()
         assertEquals(2, logs.size)
+        assertTrue(logs.all { it.decision == "POLICY_PENDING" && !it.isApproved })
+        assertTrue(logs.all { it.gateLocation == "Main Gate 1" })
     }
 
     @Test
