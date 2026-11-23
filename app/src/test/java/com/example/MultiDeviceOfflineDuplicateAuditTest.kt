@@ -140,12 +140,11 @@ class MultiDeviceOfflineDuplicateAuditTest {
     }
 
     @Test
-    fun auditSameDeviceDuplicatePreventionBlocksImmediateDoubleClaim() = runBlocking {
+    fun mealClaimsRemainPendingOfflineUntilPolicyIsApproved() = runBlocking {
         val serverA = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server A", station = "Dining Hall")
         syncManagerDeviceA.setNetworkConnectivity(false)
 
-        // 1. First claim succeeds
-        val serve1 = QrUnifiedVerifier.verifyAndProcessScan(
+        val first = QrUnifiedVerifier.verifyAndProcessScan(
             rawQrCode = qrPayload,
             department = ScanDepartment.MEALS,
             currentUser = serverA,
@@ -153,11 +152,13 @@ class MultiDeviceOfflineDuplicateAuditTest {
             syncManager = syncManagerDeviceA,
             mealType = MealType.LUNCH
         )
-        assertTrue("First meal serving on device must be allowed", serve1 is DepartmentVerificationResult.Success)
-        assertTrue((serve1 as DepartmentVerificationResult.Success).isAllowed)
+        assertTrue(first is DepartmentVerificationResult.Success)
+        val firstResult = first as DepartmentVerificationResult.Success
+        assertFalse(firstResult.isAllowed)
+        assertTrue(firstResult.isPolicyPending)
+        assertEquals(MealServingStatus.POLICY_PENDING, firstResult.mealStatus)
 
-        // 2. Second claim for same student, same meal, same day is immediately BLOCKED locally
-        val serve2 = QrUnifiedVerifier.verifyAndProcessScan(
+        val second = QrUnifiedVerifier.verifyAndProcessScan(
             rawQrCode = qrPayload,
             department = ScanDepartment.MEALS,
             currentUser = serverA,
@@ -165,87 +166,67 @@ class MultiDeviceOfflineDuplicateAuditTest {
             syncManager = syncManagerDeviceA,
             mealType = MealType.LUNCH
         )
-        assertTrue("Same-device duplicate must be rejected locally", serve2 is DepartmentVerificationResult.DuplicateAction)
-        assertEquals(ScanDepartment.MEALS, (serve2 as DepartmentVerificationResult.DuplicateAction).department)
+        assertTrue(second is DepartmentVerificationResult.Success)
+        assertTrue((second as DepartmentVerificationResult.Success).isPolicyPending)
+        assertFalse(second.isAllowed)
     }
 
     @Test
-    fun auditStationPartitioningPreventsCrossStationOfflineDoubleServing() = runBlocking {
-        // Station 1 is partitioned for Odd student numbers; Station 2 for Even student numbers
+    fun stationNamesDoNotCreateMealEntitlementRules() = runBlocking {
         val serverStation1 = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server 1", station = "Station 1 (Odd)")
         val serverStation2 = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server 2", station = "Station 2 (Even)")
-
-        // Both devices operate offline
         syncManagerDeviceA.setNetworkConnectivity(false)
         syncManagerDeviceB.setNetworkConnectivity(false)
 
-        // Student has studentNumber LTC-2026-0777 (ending with odd digit 7)
-        // 1. Serving at Station 1 (Odd) succeeds
-        val serveAtStation1 = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = qrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = serverStation1,
-            database = databaseDeviceA,
-            syncManager = syncManagerDeviceA,
-            mealType = MealType.LUNCH
-        )
-        assertTrue("Serving at assigned Station 1 (Odd) must be allowed", serveAtStation1 is DepartmentVerificationResult.Success)
-        assertTrue((serveAtStation1 as DepartmentVerificationResult.Success).isAllowed)
-
-        // 2. Student attempts to scan at Station 2 (Even) while both are offline
-        // Deterministic station assignment blocks the student from obtaining a second meal!
-        val serveAtStation2 = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = qrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = serverStation2,
-            database = databaseDeviceB,
-            syncManager = syncManagerDeviceB,
-            mealType = MealType.LUNCH
-        )
-        assertTrue("Serving at wrong station must be blocked by deterministic partition", serveAtStation2 is DepartmentVerificationResult.Success)
-        val result = serveAtStation2 as DepartmentVerificationResult.Success
-        assertFalse("Must be denied", result.isAllowed)
-        assertEquals(MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE, result.mealStatus)
-        assertTrue(result.statusHeadline.contains("Mismatch"))
+        for ((database, syncManager, staff) in listOf(
+            Triple(databaseDeviceA, syncManagerDeviceA, serverStation1),
+            Triple(databaseDeviceB, syncManagerDeviceB, serverStation2)
+        )) {
+            val result = QrUnifiedVerifier.verifyAndProcessScan(
+                rawQrCode = qrPayload,
+                department = ScanDepartment.MEALS,
+                currentUser = staff,
+                database = database,
+                syncManager = syncManager,
+                mealType = MealType.LUNCH
+            )
+            assertTrue(result is DepartmentVerificationResult.Success)
+            val pending = result as DepartmentVerificationResult.Success
+            assertFalse(pending.isAllowed)
+            assertTrue(pending.isPolicyPending)
+            assertEquals(MealServingStatus.POLICY_PENDING, pending.mealStatus)
+        }
     }
 
     @Test
-    fun auditOfflineConcurrentMealClaimsAcrossIndependentDevicesAndSyncConflictDetection() = runBlocking {
+    fun independentOfflineDevicesDoNotIssueUnapprovedMealClaims() = runBlocking {
         val serverA = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server A", station = "Dining Point A")
         val serverB = AuthUser(role = UserRole.MEAL_SERVING_STAFF, name = "Server B", station = "Dining Point B")
-
         syncManagerDeviceA.setNetworkConnectivity(false)
         syncManagerDeviceB.setNetworkConnectivity(false)
 
-        // Student scans at Point A
-        val serveA = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = qrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = serverA,
-            database = databaseDeviceA,
-            syncManager = syncManagerDeviceA,
-            mealType = MealType.LUNCH
+        val results = listOf(
+            QrUnifiedVerifier.verifyAndProcessScan(
+                rawQrCode = qrPayload,
+                department = ScanDepartment.MEALS,
+                currentUser = serverA,
+                database = databaseDeviceA,
+                syncManager = syncManagerDeviceA,
+                mealType = MealType.LUNCH
+            ),
+            QrUnifiedVerifier.verifyAndProcessScan(
+                rawQrCode = qrPayload,
+                department = ScanDepartment.MEALS,
+                currentUser = serverB,
+                database = databaseDeviceB,
+                syncManager = syncManagerDeviceB,
+                mealType = MealType.LUNCH
+            )
         )
-        assertTrue(serveA is DepartmentVerificationResult.Success)
-
-        // Student scans at Point B (unpartitioned stations, disconnected)
-        val serveB = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = qrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = serverB,
-            database = databaseDeviceB,
-            syncManager = syncManagerDeviceB,
-            mealType = MealType.LUNCH
-        )
-        assertTrue(serveB is DepartmentVerificationResult.Success)
-
-        // Synchronize both devices to cloud backend
-        syncManagerDeviceA.setNetworkConnectivity(true)
-        val syncA = syncManagerDeviceA.syncNow()
-        assertTrue(syncA.isSuccess)
-
-        syncManagerDeviceB.setNetworkConnectivity(true)
-        val syncB = syncManagerDeviceB.syncNow()
-        assertTrue(syncB.isSuccess)
+        assertTrue(results.all { it is DepartmentVerificationResult.Success })
+        assertTrue(results.filterIsInstance<DepartmentVerificationResult.Success>().all {
+            it.isPolicyPending && !it.isAllowed
+        })
     }
+
 }
