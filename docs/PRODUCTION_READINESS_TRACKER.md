@@ -18,7 +18,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 |---|---|---|
 | Written entry/exit/boarder/exeat/override/lost-card policy | BLOCKED — school decision | Complete and sign GATE_POLICY_DECISION_RECORD.md with Head Teacher, Bursar and Gate lead. |
 | Final Android applicationId | BLOCKED — owner decision | Current value is com.aistudio.studentaccess.xpkz; choose the permanent identifier before first production install. |
-| Supabase plan, region, backup and recovery target | BLOCKED — owner decision | Verify current plan terms and recovery requirements; do not upgrade or create paid resources without cost approval. |
+| Supabase plan, region, backup and recovery target | PARTIALLY VERIFIED | Live project is in eu-central-1 on PostgreSQL 17 and is ACTIVE_HEALTHY; plan/billing status is not exposed. Verify plan in dashboard, confirm backups, and test off-site restore before choosing any paid upgrade. |
 | Accountable data owner and backup admin | BLOCKED — school decision | Name both and define access recovery. |
 
 ## Gate 1 — engineering blockers
@@ -27,7 +27,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 |---|---|---|
 | Gate/meal upsert UPDATE permission mismatch | PARTIALLY ADDRESSED in PR #62 by append-only/idempotent writes | Authenticated real-backend insert-twice tests; prove no UPDATE grant is needed. |
 | Finance capability privilege escalation | CODE CHANGE PRESENT in PR #62 migration | Apply only after review; test Admin without finance cannot grant/revoke it; test finance Admin and trusted provisioning path. |
-| Canonical Supabase baseline schema and RLS | OPEN / VERIFY | Commit a reproducible baseline or schema snapshot after comparing against the actual project; verify RLS and grants for every exposed table. |
+| Canonical Supabase baseline schema and RLS | REPOSITORY DRIFT CONFIRMED | Live migration history includes the initial schema migration 20261111131447, but that migration file is absent from current main and PR #64. Restore the exact original migration from source/history; do not reconstruct it by guesswork. Live RLS is enabled on all inspected public tables; role-specific policy testing remains open. |
 | Static QR bearer token / anti-passback | OPEN | Threat model and approved design for replay, duplicate scans and concurrent devices. |
 | Issuer key storage, trust and signing controls | PARTIALLY ADDRESSED in PR #62 | Review SharedPreferences trust persistence, require protected key operations, define secure enrollment, revocation and rotation; add tests. |
 | Offline session restore | OPEN | Test reboot without network; define bounded offline session policy and revocation freshness. |
@@ -49,7 +49,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 | Privacy, retention, correction, export and incident response | OPEN | Obtain qualified Ugandan data-protection advice and school sign-off; record regulator obligations and operational procedures. |
 | Synthetic dry run and supervised pilot | NOT RUN | Start only after all critical gates pass; use a small, supervised cohort and rollback plan. |
 
-## Gate 3 — hardening before expansion
+## Live Supabase observations (2026-11-23)\n\nSee LIVE_SUPABASE_AUDIT_2026-11-23.md for the read-only evidence. Highlights: RLS is enabled on all inspected public tables; authenticated gate_logs/meals grants are SELECT+INSERT only; the PR #62 finance-membership guard is not yet applied; leaked-password protection is disabled; and the live initial schema migration is missing from the repository migration chain. The live student-finance fee-status default is CLEARED while the student roster default is OUTSTANDING, which requires review.\n\n## Gate 3 — hardening before expansion
 
 - Anti-passback and campus occupancy view.
 - Issuer key biometric / hardware-backed access, rotation and recovery.
