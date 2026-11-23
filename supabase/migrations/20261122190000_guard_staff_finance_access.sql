@@ -42,7 +42,8 @@ BEGIN
      OR (
        OLD.has_finance_access
        AND (
-         NEW.role IS DISTINCT FROM OLD.role
+         NEW.is_active IS DISTINCT FROM OLD.is_active
+         OR NEW.role IS DISTINCT FROM OLD.role
          OR NEW.school_id IS DISTINCT FROM OLD.school_id
        )
      ) THEN

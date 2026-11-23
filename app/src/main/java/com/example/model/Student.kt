@@ -52,8 +52,11 @@ data class Student(
     val qrPayload: String get() = uniqueQrCode
 
     /**
-     * Legacy convenience property. It can only be true when an explicit approved access
-     * status has been assigned; fee and boarding fields alone do not establish entry policy.
+     * Compatibility projection of the explicit access decision.
+     *
+     * Fee and boarding attributes are not authorization decisions. They may be
+     * inputs to a school-approved policy evaluator, but must never silently
+     * override an explicit AccessStatus or act as a substitute for that policy.
      */
-    val isEntryApproved: Boolean get() = (accessStatus.isApproved && feesStatus == FeeStatus.CLEARED && isDayScholar)
+    val isEntryApproved: Boolean get() = accessStatus.isApproved
 }

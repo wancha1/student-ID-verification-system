@@ -103,15 +103,18 @@ class RoomStudentRepository(
     }
 
     /**
-     * Complete Hierarchical Gate Verification Decision Tree:
-     * 1. QR valid format? -> NO: INVALID QR CODE
-     * 2. Cryptographic signature authentic? -> NO: INVALID QR CODE
-     * 3. QR recognized (Exact Card record found)? -> NO: STUDENT NOT FOUND / UNREGISTERED CARD
-     * 4. Card active? -> NO: CARD INACTIVE (LOST, REPLACED, DEACTIVATED) - NO fallback to another card!
-     * 5. Associated student active and not deleted? -> NO: STUDENT NOT FOUND
-     * 6. Student day scholar eligible? -> NO: NOT APPROVED
-     * 7. Fees cleared? -> NO: NOT APPROVED (OUTSTANDING)
-     * 8. Everything valid? -> YES: ENTRY APPROVED
+     * Identity/card verification only:
+     * 1. Parse the signed V2 credential and validate its date window.
+     * 2. Verify the signature against a currently trusted issuer key.
+     * 3. Resolve the exact card record; never fall back to another card.
+     * 4. Reject lost, replaced or deactivated cards.
+     * 5. Resolve the associated active student record.
+     * 6. Return POLICY_PENDING for a valid identity while school gate policy is
+     *    unapproved. Explicit SUSPENDED and INACTIVE student states remain denials.
+     *
+     * This method does not receive a movement direction and does not evaluate
+     * fees, boarding status or exeat permissions. Those require an approved,
+     * direction-aware school policy evaluator before production use.
      */
     override suspend fun verifyStudentByQr(rawQrCode: String): StudentScanResult = withContext(ioDispatcher) {
         val lastSync = syncManager.getLastSyncTimestamp()
