@@ -26,7 +26,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 | Audit item | Current assessment | Required closure evidence |
 |---|---|---|
 | Gate/meal upsert UPDATE permission mismatch | PARTIALLY ADDRESSED in PR #62 by append-only/idempotent writes | Authenticated real-backend insert-twice tests; prove no UPDATE grant is needed. |
-| Finance capability privilege escalation | CODE CHANGE PRESENT in PR #62 migration | Apply only after review; test Admin without finance cannot grant/revoke it; test finance Admin and trusted provisioning path. |
+| Finance capability privilege escalation | CODE CHANGE PRESENT in PR #62; extended in PR #65 | The trigger now also requires finance authority to change the active state, role or school of a finance-enabled membership. It is not applied to live DB. Test non-finance Admin grant/deactivation attempts and finance Admin success in an isolated Supabase branch before production migration. |
 | Canonical Supabase baseline schema and RLS | REPOSITORY DRIFT CONFIRMED | Live migration history includes the initial schema migration 20261111131447, but that migration file is absent from current main and PR #64. Restore the exact original migration from source/history; do not reconstruct it by guesswork. Live RLS is enabled on all inspected public tables; role-specific policy testing remains open. |
 | Static QR bearer token / anti-passback | OPEN | Threat model and approved design for replay, duplicate scans and concurrent devices. |
 | Issuer key storage, trust and signing controls | PARTIALLY ADDRESSED in PR #62 | Review SharedPreferences trust persistence, require protected key operations, define secure enrollment, revocation and rotation; add tests. |
@@ -49,7 +49,7 @@ Merge order remains PR #62, then PR #64, then the follow-on hardening PR. Do not
 | Privacy, retention, correction, export and incident response | OPEN | Obtain qualified Ugandan data-protection advice and school sign-off; record regulator obligations and operational procedures. |
 | Synthetic dry run and supervised pilot | NOT RUN | Start only after all critical gates pass; use a small, supervised cohort and rollback plan. |
 
-## Live Supabase observations (2026-11-23)\n\nSee LIVE_SUPABASE_AUDIT_2026-11-23.md for the read-only evidence. Highlights: RLS is enabled on all inspected public tables; authenticated gate_logs/meals grants are SELECT+INSERT only; the PR #62 finance-membership guard is not yet applied; leaked-password protection is disabled; and the live initial schema migration is missing from the repository migration chain. The live student-finance fee-status default is CLEARED while the student roster default is OUTSTANDING, which requires review.\n\n## Gate 3 — hardening before expansion
+## Live Supabase observations (2026-11-23)\n\nSee LIVE_SUPABASE_AUDIT_2026-11-23.md for the read-only evidence. Highlights: RLS is enabled on all inspected public tables; authenticated gate_logs/meals grants are SELECT+INSERT only; the finance-membership guard is not yet applied; leaked-password protection is disabled; and the live initial schema migration is missing from the repository migration chain. The live student-finance fee-status default is CLEARED while the student roster default is OUTSTANDING, which requires review.\n\n## Gate 3 — hardening before expansion
 
 - Anti-passback and campus occupancy view.
 - Issuer key biometric / hardware-backed access, rotation and recovery.
