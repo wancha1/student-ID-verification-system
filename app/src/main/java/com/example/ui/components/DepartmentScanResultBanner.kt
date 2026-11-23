@@ -54,7 +54,6 @@ import com.example.ui.theme.RejectedRedText
 import com.example.ui.theme.SchoolPrimary
 import com.example.ui.theme.PendingAmber
 import com.example.ui.theme.PendingAmberLight
-import com.example.ui.theme.PendingAmber
 
 @Composable
 fun DepartmentScanResultBanner(

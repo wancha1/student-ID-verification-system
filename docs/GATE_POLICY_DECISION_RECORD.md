@@ -50,3 +50,25 @@ The signatories confirm that the table above reflects the school's authorised po
 | Bursar / Finance lead |  |  |  |
 | Gate / Security lead |  |  |  |
 | Data owner |  |  |  |
+
+## Other department policies required before enforcement
+
+These decisions are separate from gate movement policy. Do not assume the examples below are approved LTC rules.
+
+### Meal service
+
+- Which meal periods are actually served (breakfast, lunch, supper, special meals)?
+- Are entitlements different for day scholars, boarders, staff, visitors or students with approved exceptions?
+- Are meal entitlements tied to fees, meal plans, attendance, medical/dietary needs or another record?
+- Who can grant a temporary meal exception, for how long, and how is it audited?
+- What is the manual fallback when policy or roster data is unavailable?
+
+### Examination admission
+
+- What are the actual admission requirements, and which are academic, financial or administrative?
+- Does fee status affect examination admission? If so, what is the authorised decision process and what exceptions or safeguards apply?
+- Which documents or other requirements are checked, and who owns each status?
+- Who may recommend, approve, revoke or expire an exception?
+- What is the manual fallback for disputed or stale records?
+
+Until the relevant school policy is documented and approved, the app must not automatically serve/deny meals or admit/deny examination entry based on inferred rules. It may verify identity and direct staff to the approved manual process.

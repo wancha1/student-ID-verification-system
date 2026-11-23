@@ -1154,22 +1154,17 @@ class MainViewModel(
     }
 
     /**
-     * Manual meal fallback mirrors the meal entitlement and duplicate-serving checks
-     * used by the QR workflow. The reason is persisted in MealRecord.notes.
+     * Manual meal lookup is identity assistance only until the school approves
+     * and configures meal eligibility rules. It must not record a serving.
      */
     fun verifyAndServeMealManually(studentNumber: String, reason: String, context: Context? = null) {
-        val mealType = _activeMealType.value
         val user = _currentUser.value
         if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
             _userFeedbackMessage.value = "Access Denied: Meal staff authorization is required."
             return
         }
-        if (!mealType.isEnabledForServing) {
-            _userFeedbackMessage.value = "${mealType.label} is disabled. Only lunch and supper can be served."
-            return
-        }
         if (reason.isBlank()) {
-            _userFeedbackMessage.value = "A reason is required for manual meal serving."
+            _userFeedbackMessage.value = "A reason is required for manual meal lookup."
             return
         }
 
@@ -1181,55 +1176,12 @@ class MainViewModel(
                 return@launch
             }
 
-            val eligible = if (student.isDayScholar) {
-                mealType == MealType.LUNCH
-            } else {
-                mealType == MealType.LUNCH || mealType == MealType.DINNER
-            }
-            if (!eligible) {
-                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
-                    student,
-                    if (student.isDayScholar) "Day scholars are eligible for lunch only." else "Not eligible for this meal session."
-                )
-                FeedbackHelper.playDeniedSoundAndHaptic(context)
-                return@launch
-            }
-
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val existing = repository.database?.mealRecordDao()
-                ?.findServing(student.id, mealType.name, today)
-                ?.toDomain()
-                ?: _mealRecords.value.firstOrNull {
-                    it.studentId == student.id && it.mealType == mealType &&
-                        it.mealDate == today && it.status == MealServingStatus.SERVED
-                }
-            if (existing != null) {
-                _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(student, mealType, existing)
-                FeedbackHelper.playWarningSoundAndHaptic(context)
-                return@launch
-            }
-
-            val record = MealRecord(
-                studentId = student.id,
-                studentNumber = student.studentNumber,
-                studentName = student.fullName,
-                gradeClass = student.gradeClass,
-                mealType = mealType,
-                mealDate = today,
-                timestamp = System.currentTimeMillis(),
-                serverName = user.name,
-                status = MealServingStatus.SERVED,
-                notes = "MANUAL_ENTRY: ${reason.trim()}"
+            _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                student,
+                "Meal policy is not approved/configured. No meal was recorded. Follow the school's approved manual procedure. Lookup reason: ${reason.trim()}"
             )
-            val db = repository.database
-            if (db != null) {
-                db.mealRecordDao().insertOrUpdate(MealRecordEntity.fromDomain(record, isSynced = false))
-                repository.syncManagerInstance?.notifyLocalLogAdded()
-            } else {
-                _mealRecords.value = listOf(record) + _mealRecords.value
-            }
-            _mealScanOutcome.value = MealVerificationResult.Success(record)
-            FeedbackHelper.playApprovedSoundAndHaptic(context)
+            _userFeedbackMessage.value = "Student identity found. Meal eligibility remains pending school policy; no serving was recorded."
+            FeedbackHelper.playWarningSoundAndHaptic(context)
         }
     }
 
@@ -1256,39 +1208,16 @@ class MainViewModel(
             return
         }
 
-        // Test/demo repositories have no Room database. Still use the repository's full
-        // credential and card-lifecycle verifier rather than trusting the QR signature alone.
+        // Test/demo repositories have no Room database. Do not bypass the
+        // unconfigured meal policy in this fallback path either.
         viewModelScope.launch {
             when (val verification = repository.verifyStudentByQr(rawCode)) {
                 is StudentScanResult.Success -> {
-                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                    val meal = _activeMealType.value
-                    val previous = _mealRecords.value.find {
-                        it.studentId == verification.student.id &&
-                            it.mealType == meal && it.mealDate == today &&
-                            it.status == MealServingStatus.SERVED
-                    }
-                    if (previous != null) {
-                        _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
-                            verification.student, meal, previous
-                        )
-                        FeedbackHelper.playWarningSoundAndHaptic(context)
-                    } else {
-                        val record = MealRecord(
-                            studentId = verification.student.id,
-                            studentNumber = verification.student.studentNumber,
-                            studentName = verification.student.fullName,
-                            gradeClass = verification.student.gradeClass,
-                            mealType = meal,
-                            mealDate = today,
-                            timestamp = System.currentTimeMillis(),
-                            serverName = user.name,
-                            status = MealServingStatus.SERVED
-                        )
-                        _mealRecords.value = listOf(record) + _mealRecords.value
-                        _mealScanOutcome.value = MealVerificationResult.Success(record)
-                        FeedbackHelper.playApprovedSoundAndHaptic(context)
-                    }
+                    _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                        verification.student,
+                        "Meal policy is not approved/configured. No meal was recorded. Follow the school's approved manual procedure."
+                    )
+                    FeedbackHelper.playWarningSoundAndHaptic(context)
                 }
                 else -> {
                     _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
@@ -1682,17 +1611,26 @@ class MainViewModel(
                         _currentScannedCard.value = result.card
                         _scanError.value = null
                         if (result.department == ScanDepartment.MEALS) {
-                            val newMeal = MealRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                mealType = result.mealType ?: MealType.LUNCH,
-                                timestamp = System.currentTimeMillis(),
-                                serverName = user.name,
-                                status = result.mealStatus ?: MealServingStatus.SERVED
-                            )
-                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            if (result.isPolicyPending || result.mealStatus != MealServingStatus.SERVED) {
+                                // Never translate an unresolved or blocked policy result into a
+                                // successful meal-serving outcome for legacy screens.
+                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                    student = result.student,
+                                    reason = result.statusDetail
+                                )
+                            } else {
+                                val newMeal = MealRecord(
+                                    studentId = result.student.id,
+                                    studentNumber = result.student.studentNumber,
+                                    studentName = result.student.fullName,
+                                    gradeClass = result.student.gradeClass,
+                                    mealType = result.mealType ?: MealType.LUNCH,
+                                    timestamp = System.currentTimeMillis(),
+                                    serverName = user.name,
+                                    status = MealServingStatus.SERVED
+                                )
+                                _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
                                 studentId = result.student.id,
@@ -1705,7 +1643,10 @@ class MainViewModel(
                                 teacherName = user.name
                             )
                         }
-                        context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
+                        context?.let {
+                            if (result.isPolicyPending) FeedbackHelper.playWarningSoundAndHaptic(it)
+                            else FeedbackHelper.playFeedback(it, result.isAllowed)
+                        }
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
