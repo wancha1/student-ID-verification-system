@@ -23,10 +23,10 @@
 
 - RLS is enabled on all inspected public tables and on private.staff_invitation_plan.
 - No anon table grants were returned by the role-grant inspection.
-- authenticated has SELECT and INSERT, but not UPDATE, on gate_logs and meals. This matches the append-only/idempotent client strategy in PR #62; verify it with authenticated integration tests.
+- No anon table grants were returned by the role-grant inspection. authenticated has SELECT and INSERT, but not UPDATE, on gate_logs and meals. This matches the append-only/idempotent client strategy in PR #62; verify it with authenticated integration tests. The live RLS policy for staff_memberships allows an active ADMIN to update other staff memberships, including the finance flag and active state.
 - Other tables have role-specific RLS policies and authenticated table grants; a grant alone does not establish access because RLS still applies.
 - Live triggers currently include card reactivation prevention, student fee-status permission enforcement, and synchronisation of finance fee status into the student roster.
-- The finance-membership capability guard from PR #62 is not in the live migration history and no corresponding trigger was found. It remains unapplied and unverified.
+- The finance-membership capability guard from PR #62 is not in the live migration history and no corresponding trigger was found. This confirms the current live database still permits an ordinary active ADMIN to attempt changes to another staff membership's finance flag under the broad UPDATE policy. The PR #62/65 trigger is intended to close this gap, but remains unapplied and unverified.
 
 ## Supabase Security Advisor snapshot
 
