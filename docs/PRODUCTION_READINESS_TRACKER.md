@@ -13,6 +13,7 @@ This tracker distinguishes code changes visible in GitHub from external configur
 - PR #68: fix/finance-membership-guard-complete (based on PR #65)
 - PR #69: docs/offline-session-safety (based on PR #65)
 - PR #70: fix/gate-policy-pending-both-directions (based on PR #65)
+- PR #71: fix/department-policy-pending (based on PR #70)
 - PR #66: docs/ltc-pilot-plan (retargeted to PR #67)
 
 Merge in dependency order; reconcile follow-up branches after PR #65. Do not merge around failed required checks.
@@ -71,7 +72,7 @@ Merge in dependency order; reconcile follow-up branches after PR #65. Do not mer
 
 - Earlier run 45059800590: debug/release compilation passed; unit tests failed during Robolectric SDK artifact acquisition (MavenArtifactFetcher / java.io.IOException); emulator tests were skipped. This does not establish application test failures or passes.
 - PR #67 separates push and pull_request concurrency groups. Its latest observed runs were still in progress at unit tests; no complete result was available at last check.
-- PR #68 and PR #70 require their own completed CI runs; do not infer success from earlier compilation.
+- PR #68, PR #70 and PR #71 require their own completed CI runs; do not infer success from earlier compilation.
 - Physical devices: NOT TESTED.
 
 Do not describe the build as production-ready until the required CI, backend, security, policy, signing and physical-device evidence is complete.
