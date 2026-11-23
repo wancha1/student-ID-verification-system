@@ -1682,17 +1682,26 @@ class MainViewModel(
                         _currentScannedCard.value = result.card
                         _scanError.value = null
                         if (result.department == ScanDepartment.MEALS) {
-                            val newMeal = MealRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                mealType = result.mealType ?: MealType.LUNCH,
-                                timestamp = System.currentTimeMillis(),
-                                serverName = user.name,
-                                status = result.mealStatus ?: MealServingStatus.SERVED
-                            )
-                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            if (result.isPolicyPending || result.mealStatus != MealServingStatus.SERVED) {
+                                // Never translate an unresolved or blocked policy result into a
+                                // successful meal-serving outcome for legacy screens.
+                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                    student = result.student,
+                                    reason = result.statusDetail
+                                )
+                            } else {
+                                val newMeal = MealRecord(
+                                    studentId = result.student.id,
+                                    studentNumber = result.student.studentNumber,
+                                    studentName = result.student.fullName,
+                                    gradeClass = result.student.gradeClass,
+                                    mealType = result.mealType ?: MealType.LUNCH,
+                                    timestamp = System.currentTimeMillis(),
+                                    serverName = user.name,
+                                    status = MealServingStatus.SERVED
+                                )
+                                _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
                                 studentId = result.student.id,
@@ -1705,7 +1714,10 @@ class MainViewModel(
                                 teacherName = user.name
                             )
                         }
-                        context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
+                        context?.let {
+                            if (result.isPolicyPending) FeedbackHelper.playWarningSoundAndHaptic(it)
+                            else FeedbackHelper.playFeedback(it, result.isAllowed)
+                        }
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
