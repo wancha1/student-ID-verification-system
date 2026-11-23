@@ -223,174 +223,37 @@ object QrUnifiedVerifier {
             }
 
             ScanDepartment.MEALS -> {
-                // Rule 1: Day scholars receive Lunch only; boarders receive Lunch and Supper (Dinner)
-                val isEligible = if (student.isDayScholar) {
-                    mealType == MealType.LUNCH
-                } else {
-                    mealType == MealType.LUNCH || mealType == MealType.DINNER
-                }
-
-                if (!isEligible) {
-                    val msg = if (student.isDayScholar) {
-                        "Ineligible: Day scholar students are entitled to Lunch only. Not eligible for ${mealType.displayName}."
-                    } else {
-                        "Ineligible for ${mealType.displayName}."
-                    }
-                    return@withContext DepartmentVerificationResult.Success(
-                        student = student,
-                        card = card,
-                        department = ScanDepartment.MEALS,
-                        isAllowed = false,
-                        statusHeadline = "Meal Serving Ineligible",
-                        statusDetail = msg,
-                        isOffline = isOffline,
-                        syncTimestamp = lastSync,
-                        mealType = mealType,
-                        mealStatus = MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE
-                    )
-                }
-
-                // Rule 1b: Meal Station Partitioning / Assignment (Deterministic offline duplicate prevention)
-                // When multiple offline terminals operate at distinct dining hall points (e.g., Station 1 vs Station 2),
-                // partition students deterministically (e.g. by studentNumber hash, gradeClass, or explicit assignment).
-                // If a terminal has an assigned serving scope (station name formatted like "Station 1 [Senior 1 - Senior 3]" or "Point A"),
-                // it serves its designated cohort, preventing the same student from legitimately scanning at multiple offline stations.
-                val assignedStation = currentUser.station
-                if (assignedStation.isNotBlank() && assignedStation.contains("Station") && student.studentNumber.isNotBlank()) {
-                    // Check if station enforces a cohort partitioning rule
-                    val stationLower = assignedStation.lowercase()
-                    if (stationLower.contains("station 1") || stationLower.contains("point 1") || stationLower.contains("lane 1")) {
-                        // Designated for odd-numbered students or lower classes
-                        val lastDigit = student.studentNumber.filter { it.isDigit() }.lastOrNull()?.digitToInt() ?: 0
-                        if (stationLower.contains("odd") && lastDigit % 2 == 0) {
-                            return@withContext DepartmentVerificationResult.Success(
-                                student = student,
-                                card = card,
-                                department = ScanDepartment.MEALS,
-                                isAllowed = false,
-                                statusHeadline = "Assigned Serving Point Mismatch",
-                                statusDetail = "Student ${student.studentNumber} is assigned to Station 2 (Even). Please direct student to their designated meal point.",
-                                isOffline = isOffline,
-                                syncTimestamp = lastSync,
-                                mealType = mealType,
-                                mealStatus = MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE
-                            )
-                        }
-                    } else if (stationLower.contains("station 2") || stationLower.contains("point 2") || stationLower.contains("lane 2")) {
-                        val lastDigit = student.studentNumber.filter { it.isDigit() }.lastOrNull()?.digitToInt() ?: 0
-                        if (stationLower.contains("even") && lastDigit % 2 != 0) {
-                            return@withContext DepartmentVerificationResult.Success(
-                                student = student,
-                                card = card,
-                                department = ScanDepartment.MEALS,
-                                isAllowed = false,
-                                statusHeadline = "Assigned Serving Point Mismatch",
-                                statusDetail = "Student ${student.studentNumber} is assigned to Station 1 (Odd). Please direct student to their designated meal point.",
-                                isOffline = isOffline,
-                                syncTimestamp = lastSync,
-                                mealType = mealType,
-                                mealStatus = MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE
-                            )
-                        }
-                    }
-                }
-
-                // Rule 2: Prevent duplicate serving for same student, meal period, and service date
-                val existingServing = database.mealRecordDao().findServing(student.id, mealType.name, todayStr)
-                if (existingServing != null) {
-                    val prevTime = SimpleDateFormat("HH:mm", Locale.US).format(Date(existingServing.timestamp))
-                    return@withContext DepartmentVerificationResult.DuplicateAction(
-                        student = student,
-                        department = ScanDepartment.MEALS,
-                        message = "DUPLICATE MEAL CLAIM: ${student.fullName} was already served ${mealType.displayName} today ($todayStr) at $prevTime by ${existingServing.serverName}.",
-                        existingEventTimestamp = existingServing.timestamp
-                    )
-                }
-
-                // Record meal serving event
-                val mealId = UUID.randomUUID().toString()
-                val mealRecord = MealRecord(
-                    id = mealId,
-                    studentId = student.id,
-                    studentNumber = student.studentNumber,
-                    studentName = student.fullName,
-                    gradeClass = student.gradeClass,
-                    mealType = mealType,
-                    mealDate = todayStr,
-                    timestamp = now,
-                    serverName = currentUser.name,
-                    status = MealServingStatus.SERVED,
-                    notes = if (student.isDayScholar) "Day Scholar" else "Boarding Student"
-                )
-                database.mealRecordDao().insertOrUpdate(MealRecordEntity.fromDomain(mealRecord, isSynced = false))
-                syncManager.notifyLocalLogAdded()
-
+                // Meal entitlement is school policy. Do not infer it from boarding status,
+                // meal type or station naming before LTC approves and configures the rules.
                 return@withContext DepartmentVerificationResult.Success(
                     student = student,
                     card = card,
                     department = ScanDepartment.MEALS,
-                    isAllowed = true,
-                    statusHeadline = "${mealType.displayName} Served",
-                    statusDetail = "${mealType.displayName} served to ${student.fullName} (${student.gradeClass}).",
+                    isAllowed = false,
+                    statusHeadline = "MEAL POLICY DECISION PENDING",
+                    statusDetail = "Identity and active card verified. No meal was recorded as served. Follow the school's approved manual procedure until meal eligibility rules are configured.",
                     isOffline = isOffline,
                     syncTimestamp = lastSync,
                     mealType = mealType,
-                    mealStatus = MealServingStatus.SERVED
+                    mealStatus = MealServingStatus.POLICY_PENDING,
+                    isPolicyPending = true
                 )
             }
 
             ScanDepartment.EXAMINATIONS -> {
-                // School exam clearance policy:
-                // Full clearance requires Fees status CLEARED.
-                // If OUTSTANDING, check if an authorized exception has been approved by Head Teacher.
-                val existingException = database.examExceptionDao().findException(student.id, examCode)
-                val isExceptionApproved = existingException?.isApproved == true
-
-                val (isAllowed, examStatus, headline, detail) = when {
-                    student.feesStatus == FeeStatus.CLEARED -> {
-                        Tuple4(
-                            true,
-                            ExamClearanceStatus.CLEARED_FULL,
-                            "Exam Hall Cleared (Financial Clearance)",
-                            "Student has full financial clearance for $examCode."
-                        )
-                    }
-                    isExceptionApproved -> {
-                        Tuple4(
-                            true,
-                            ExamClearanceStatus.CLEARED_SPECIAL_EXCEPTION,
-                            "Exam Hall Cleared (Special Exception)",
-                            "Approved special exception by ${existingException?.approvedByHeadTeacher ?: "Head Teacher"} for $examCode."
-                        )
-                    }
-                    existingException != null && !existingException.isApproved -> {
-                        Tuple4(
-                            false,
-                            ExamClearanceStatus.PENDING_BURSAR_RECOMMENDED,
-                            "Exam Clearance Pending Approval",
-                            "Bursar recommended exception (${existingException.recommendationReason}), awaiting Head Teacher authorization."
-                        )
-                    }
-                    else -> {
-                        Tuple4(
-                            false,
-                            ExamClearanceStatus.BLOCKED_FEES,
-                            "Exam Clearance Blocked (Fees Outstanding)",
-                            "Outstanding fee balance. Bursar exception recommendation required."
-                        )
-                    }
-                }
-
+                // Fees, required documents and exceptions are not sufficient on their own
+                // to authorize exam admission without an approved school clearance policy.
                 return@withContext DepartmentVerificationResult.Success(
                     student = student,
                     card = card,
                     department = ScanDepartment.EXAMINATIONS,
-                    isAllowed = isAllowed,
-                    statusHeadline = headline,
-                    statusDetail = detail,
+                    isAllowed = false,
+                    statusHeadline = "EXAM CLEARANCE POLICY PENDING",
+                    statusDetail = "Identity and active card verified. No examination admission decision was issued. Refer to the approved manual clearance process until school policy is configured.",
                     isOffline = isOffline,
                     syncTimestamp = lastSync,
-                    examStatus = examStatus
+                    examStatus = ExamClearanceStatus.POLICY_PENDING,
+                    isPolicyPending = true
                 )
             }
 
