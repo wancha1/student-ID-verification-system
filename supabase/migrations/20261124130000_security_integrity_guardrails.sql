@@ -18,8 +18,13 @@ BEGIN
     RAISE EXCEPTION 'Trusted issuer identity and public key material are immutable; enroll a new key_id for rotation';
   END IF;
 
+  IF OLD.is_revoked AND NOT NEW.is_revoked THEN
+    RAISE EXCEPTION 'A revoked issuer key cannot be reactivated';
+  END IF;
+
+  -- Idempotent retries against an already-revoked row are harmless.
   IF OLD.is_revoked THEN
-    RAISE EXCEPTION 'A revoked issuer key cannot be modified or reactivated';
+    RETURN NEW;
   END IF;
 
   IF NEW.is_revoked IS DISTINCT FROM OLD.is_revoked
