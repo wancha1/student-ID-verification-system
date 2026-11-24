@@ -22,15 +22,17 @@ BEGIN
     RAISE EXCEPTION 'A revoked issuer key cannot be modified or reactivated';
   END IF;
 
+  IF OLD.is_revoked THEN
+    RAISE EXCEPTION 'A revoked issuer key cannot be modified or reactivated';
+  END IF;
+
   IF NEW.is_revoked IS DISTINCT FROM OLD.is_revoked
      AND NOT (OLD.is_revoked = false AND NEW.is_revoked = true) THEN
     RAISE EXCEPTION 'Issuer revocation is one-way';
   END IF;
 
-  IF NEW.is_revoked = OLD.is_revoked THEN
-    RAISE EXCEPTION 'Trusted issuer rows may only be changed by explicit revocation';
-  END IF;
-
+  -- Permit an idempotent upsert retry that leaves an active row unchanged.
+  -- Any attempt to change identity or key material was rejected above.
   RETURN NEW;
 END;
 $fn$;
@@ -58,8 +60,7 @@ USING (
   AND private.is_active_staff(school_id, ARRAY['ADMIN']::text[])
 )
 WITH CHECK (
-  is_revoked = true
-  AND private.is_active_staff(school_id, ARRAY['ADMIN']::text[])
+  private.is_active_staff(school_id, ARRAY['ADMIN']::text[])
 );
 
 -- 2. Complete finance-membership protection.
