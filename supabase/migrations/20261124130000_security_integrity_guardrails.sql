@@ -22,10 +22,6 @@ BEGIN
     RAISE EXCEPTION 'A revoked issuer key cannot be modified or reactivated';
   END IF;
 
-  IF OLD.is_revoked THEN
-    RAISE EXCEPTION 'A revoked issuer key cannot be modified or reactivated';
-  END IF;
-
   IF NEW.is_revoked IS DISTINCT FROM OLD.is_revoked
      AND NOT (OLD.is_revoked = false AND NEW.is_revoked = true) THEN
     RAISE EXCEPTION 'Issuer revocation is one-way';
