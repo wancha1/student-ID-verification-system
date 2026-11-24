@@ -1045,7 +1045,6 @@ fun StudentAccessApp(
                         searchQuery = requirementsSearchQuery,
                         onSearchQueryChange = { viewModel.setRequirementsSearchQuery(it) },
                         onToggleRequirement = { _, _ -> },
-                        onMarkAllCleared = { },
                         onUpdateNotes = { _, _ -> },
                         onOpenScanner = { },
                         onExport = { format -> viewModel.exportDataset("REQUIREMENTS", format, context) },
@@ -1113,9 +1112,6 @@ fun StudentAccessApp(
                                     onSearchQueryChange = { viewModel.setRequirementsSearchQuery(it) },
                                     onToggleRequirement = { studentId, itemKey ->
                                         viewModel.toggleRequirementItem(studentId, itemKey)
-                                    },
-                                    onMarkAllCleared = { studentId ->
-                                        viewModel.markAllRequirementsCleared(studentId)
                                     },
                                     onUpdateNotes = { studentId, notes ->
                                         viewModel.updateRequirementNotes(studentId, notes)
