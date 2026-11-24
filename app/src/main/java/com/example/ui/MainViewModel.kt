@@ -292,13 +292,9 @@ class MainViewModel(
                 studentNumber = student.studentNumber,
                 studentName = student.fullName,
                 gradeClass = student.gradeClass,
-                uniformComplete = student.feesStatus == FeeStatus.CLEARED,
-                sportsKitComplete = true,
-                textbooksSubmitted = student.feesStatus == FeeStatus.CLEARED,
-                medicalFormSigned = true,
-                schoolIdIssued = true,
-                rulesAgreementSigned = true,
-                busPassCleared = student.isDayScholar,
+                // Requirements are independent records. Fees and boarding status
+                // are not evidence that a uniform, textbook, form, ID or bus pass
+                // has been physically checked or issued.
                 notes = student.notes
             )
         }.filter {
