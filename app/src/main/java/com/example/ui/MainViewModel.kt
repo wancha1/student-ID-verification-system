@@ -1276,23 +1276,6 @@ class MainViewModel(
         _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
     }
 
-    fun markAllRequirementsCleared(studentId: String) {
-        if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Clearing student requirements")) return
-        val current = requirementsList.value.find { it.studentId == studentId } ?: return
-        val updated = current.copy(
-            uniformComplete = true,
-            sportsKitComplete = true,
-            textbooksSubmitted = true,
-            medicalFormSigned = true,
-            schoolIdIssued = true,
-            rulesAgreementSigned = true,
-            busPassCleared = true,
-            updatedAt = System.currentTimeMillis()
-        )
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
-        _userFeedbackMessage.value = "All items marked CLEARED for ${current.studentName}!"
-    }
-
     fun updateRequirementNotes(studentId: String, notes: String) {
         if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Updating requirement notes")) return
         val current = requirementsList.value.find { it.studentId == studentId } ?: return
