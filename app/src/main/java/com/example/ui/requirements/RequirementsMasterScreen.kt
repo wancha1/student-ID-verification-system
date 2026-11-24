@@ -83,7 +83,6 @@ fun RequirementsMasterScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onToggleRequirement: (studentId: String, itemKey: String) -> Unit,
-    onMarkAllCleared: (studentId: String) -> Unit,
     onUpdateNotes: (studentId: String, notes: String) -> Unit,
     onOpenScanner: () -> Unit,
     onExport: (format: ExportFormat) -> Unit,
@@ -327,7 +326,6 @@ fun RequirementsMasterScreen(
                         requirement = req,
                         student = student,
                         onToggle = { itemKey -> onToggleRequirement(req.studentId, itemKey) },
-                        onMarkAll = { onMarkAllCleared(req.studentId) },
                         onEditNotes = { if (!readOnly) editingStudentRequirement = req },
                         readOnly = readOnly
                     )
@@ -421,7 +419,6 @@ private fun StudentRequirementCard(
     requirement: StudentRequirement,
     student: Student?,
     onToggle: (String) -> Unit,
-    onMarkAll: () -> Unit,
     onEditNotes: () -> Unit,
     modifier: Modifier = Modifier,
     readOnly: Boolean = false
@@ -637,19 +634,6 @@ private fun StudentRequirementCard(
                             Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Remarks")
-                        }
-                        if (!isCleared) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = onMarkAll,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF16A34A)
-                                )
-                            ) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Clear All Items")
-                            }
                         }
                     }
                 }
