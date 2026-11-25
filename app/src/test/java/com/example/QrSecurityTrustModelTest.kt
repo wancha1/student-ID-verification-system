@@ -687,7 +687,37 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 20. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+    // 20. A revoked issuer key cannot be re-enrolled or physically deleted.
+    // =========================================================================
+    @Test
+    fun test20_RevokedIssuerKeyCannotBeReEnrolledOrDeleted() {
+        val kid = testSigner.keyId
+        assertTrue("Issuer must initially be trusted", TrustedIssuerRegistry.isTrusted(kid))
+
+        assertTrue("Revocation must succeed", TrustedIssuerRegistry.revokeIssuer(kid))
+        assertFalse("Revoked issuer must no longer be trusted", TrustedIssuerRegistry.isTrusted(kid))
+
+        try {
+            TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Attempted re-enrollment")
+            fail("A revoked key must not be re-enrolled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
+        }
+
+        try {
+            TrustedIssuerRegistry.removeIssuer(kid)
+            fail("Issuer tombstones must not be physically deleted")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("cannot be physically removed", ignoreCase = true))
+        }
+
+        assertFalse("The revoked key must remain untrusted after rejected re-enrollment",
+            TrustedIssuerRegistry.isTrusted(kid))
+    }
+
+    // =========================================================================
+    // 21. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+ multiple concurrent issuer keys without invalidating existing cards.
     // =========================================================================
     @Test
     fun test20_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
