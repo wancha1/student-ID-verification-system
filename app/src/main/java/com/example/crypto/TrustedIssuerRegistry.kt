@@ -54,7 +54,7 @@ object TrustedIssuerRegistry {
     /**
      * Enrolls or updates an authoritative issuer public key in the trusted registry.
      */
-    fun registerTrustedKey(
+    internal fun registerTrustedKey(
         publicKey: PublicKey,
         label: String = "Authoritative LTC Issuer",
         enrolledAt: Long = System.currentTimeMillis()
@@ -88,7 +88,7 @@ object TrustedIssuerRegistry {
     /**
      * Enrolls an issuer public key from its X.509 Base64 representation.
      */
-    fun registerTrustedKeyBase64(
+    internal fun registerTrustedKeyBase64(
         publicKeyBase64: String,
         label: String = "Enrolled Issuer",
         enrolledAt: Long = System.currentTimeMillis()
@@ -140,7 +140,7 @@ object TrustedIssuerRegistry {
     /**
      * Revokes an issuer key. Cards signed by this key will immediately be rejected.
      */
-    fun revokeIssuer(kid: String): Boolean {
+    internal fun revokeIssuer(kid: String): Boolean {
         val cleanKid = kid.trim().lowercase()
         val existing = getIssuerEntry(cleanKid) ?: return false
         val updated = existing.copy(isRevoked = true)
@@ -153,7 +153,7 @@ object TrustedIssuerRegistry {
     /**
      * Removes an issuer key from the registry completely.
      */
-    fun removeIssuer(kid: String): Boolean {
+    internal fun removeIssuer(kid: String): Boolean {
         val cleanKid = kid.trim().lowercase()
         if (getIssuerEntry(cleanKid) == null) return false
         // Keep revoked-key tombstones permanently. Deleting an entry would
@@ -174,7 +174,7 @@ object TrustedIssuerRegistry {
     /**
      * Clears all trusted issuers (for test isolation and clean resetting).
      */
-    fun clearAll() {
+    internal fun clearAll() {
         keyCache.clear()
         entryCache.clear()
         val prefs = getPrefs()
