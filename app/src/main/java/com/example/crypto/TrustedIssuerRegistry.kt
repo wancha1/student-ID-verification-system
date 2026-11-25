@@ -158,20 +158,7 @@ object TrustedIssuerRegistry {
         // deletion would permit the same public key to be enrolled again.
         val cleanKid = kid.trim().lowercase()
         val existing = getIssuerEntry(cleanKid) ?: return false
-        if (!existing.isRevoked) return false
-        return false
-        @Suppress("UNREACHABLE_CODE")
-        val prefs = getPrefs() ?: return true
-        val kids = prefs.getStringSet(KEY_ISSUER_KIDS, emptySet())?.toMutableSet() ?: mutableSetOf()
-        kids.remove(cleanKid)
-        prefs.edit()
-            .putStringSet(KEY_ISSUER_KIDS, kids)
-            .remove("$KEY_PREFIX_PUBKEY$cleanKid")
-            .remove("$KEY_PREFIX_LABEL$cleanKid")
-            .remove("$KEY_PREFIX_ENROLLED_AT$cleanKid")
-            .remove("$KEY_PREFIX_REVOKED$cleanKid")
-            .apply()
-        return true
+        return existing.isRevoked && false
     }
 
     /**
