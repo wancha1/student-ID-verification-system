@@ -899,4 +899,24 @@ class QrSecurityTrustModelTest {
         val justAfterEnd = CardDateUtils.checkValidity(validFrom, validUntil, endOfDayMillis + 1)
         assertTrue("1ms after validUntil day must be Expired", justAfterEnd is com.example.crypto.ValidityCheckResult.Expired)
     }
+    // =========================================================================
+    // 26. Card issuance fails closed when no authorized active signer is present.
+    // =========================================================================
+    @Test
+    fun test26_CardSigningFailsClosedWithoutActiveIssuerAuthorization() {
+        CardCryptoManager.clearIssuerPrivateKey()
+        assertFalse("No issuer authorization means no active signing capability",
+            CardCryptoManager.hasIssuerPrivateKey())
+
+        try {
+            CardCryptoManager.signCardPayload("CRD-FAIL-CLOSED-0001")
+            fail("Card signing must fail when no authorized signer is active")
+        } catch (expected: IllegalStateException) {
+            assertTrue(
+                "Failure must explain that authoritative signing is unavailable",
+                expected.message!!.contains("authoritative Issuer", ignoreCase = true)
+            )
+        }
+    }
+
 }
