@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -59,14 +61,17 @@ android {
   testOptions {
     unitTests {
       isIncludeAndroidResources = true
-      // Avoid Robolectric's rate-limited repo1.maven.org default in CI.
-      all { systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2") }
     }
   }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
   }
+}
+
+// Use the canonical Maven Central hostname for Robolectric runtime downloads.
+tasks.withType<Test>().configureEach {
+  systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
