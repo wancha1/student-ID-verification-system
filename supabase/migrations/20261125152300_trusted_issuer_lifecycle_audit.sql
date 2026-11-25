@@ -138,8 +138,17 @@ CREATE TRIGGER trusted_issuers_lifecycle_audit
   FOR EACH ROW
   EXECUTE FUNCTION private.audit_trusted_issuer_lifecycle();
 
+-- Remove direct client-side enrollment. Until a server-side request/approval
+-- workflow exists, no authenticated Android client may insert trusted issuers.
+-- A future server endpoint must validate the user's school membership, approval
+-- policy and proof of possession before writing the key.
+DROP POLICY IF EXISTS "administrators can enroll issuer public keys"
+  ON public.trusted_issuers;
+REVOKE INSERT ON TABLE public.trusted_issuers
+  FROM PUBLIC, anon, authenticated;
+
 -- Keep public-key distribution readable by active school staff. Admins may
--- request/enroll keys; the only allowed update is a one-way revocation.
+-- revoke existing keys; the only allowed update is a one-way revocation.
 DROP POLICY IF EXISTS "administrators can update issuer public keys"
   ON public.trusted_issuers;
 DROP POLICY IF EXISTS "administrators can revoke issuer public keys"
