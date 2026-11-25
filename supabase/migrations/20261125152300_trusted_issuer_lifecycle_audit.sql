@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS public.trusted_issuer_events (
   event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id text NOT NULL,
   key_id text NOT NULL,
-  event_type text NOT NULL CHECK (event_type IN ('ENROLLED', 'REVOKED')),
+  event_type text NOT NULL CHECK (event_type IN ('BASELINE', 'ENROLLED', 'REVOKED')),
   actor_user_id uuid,
   occurred_at timestamptz NOT NULL DEFAULT now(),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb
@@ -15,6 +15,30 @@ CREATE TABLE IF NOT EXISTS public.trusted_issuer_events (
 
 CREATE INDEX IF NOT EXISTS trusted_issuer_events_school_time_idx
   ON public.trusted_issuer_events (school_id, occurred_at DESC);
+
+-- Preserve a snapshot of keys that existed before lifecycle auditing was enabled.
+-- The original enrollment actor cannot be reconstructed, so these rows are
+-- explicitly marked BASELINE rather than inventing an actor or enrollment time.
+INSERT INTO public.trusted_issuer_events (
+  school_id, key_id, event_type, actor_user_id, metadata
+)
+SELECT
+  ti.school_id,
+  ti.key_id,
+  'BASELINE',
+  NULL,
+  jsonb_build_object(
+    'label', ti.label,
+    'enrolled_at_ms', ti.enrolled_at_ms,
+    'is_revoked_at_migration', ti.is_revoked
+  )
+FROM public.trusted_issuers ti
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.trusted_issuer_events e
+  WHERE e.school_id = ti.school_id
+    AND e.key_id = ti.key_id
+);
 
 ALTER TABLE public.trusted_issuer_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.trusted_issuer_events
