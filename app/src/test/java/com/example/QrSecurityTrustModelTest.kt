@@ -717,7 +717,6 @@ class QrSecurityTrustModelTest {
 
     // =========================================================================
     // 21. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
- multiple concurrent issuer keys without invalidating existing cards.
     // =========================================================================
     @Test
     fun test21_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
