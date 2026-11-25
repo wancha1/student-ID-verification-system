@@ -113,7 +113,6 @@ class RoleScannerRoutingTest {
             cardId = cardId,
             validFrom = "2026-01-01",
             validUntil = "2026-12-31",
-            signer = testSigner
         )
 
         val card = CardEntity(
