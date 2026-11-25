@@ -60,12 +60,22 @@ object TrustedIssuerRegistry {
         enrolledAt: Long = System.currentTimeMillis()
     ): TrustedIssuerEntry {
         val kid = CardCryptoUtils.computeKeyId(publicKey)
+
+        // A revoked key identifier is a permanent tombstone. Re-registering the
+        // same public key must never reactivate credentials signed by it.
+        val existing = getIssuerEntry(kid)
+        if (existing?.isRevoked == true) {
+            throw SecurityException(
+                "Issuer key '$kid' has been revoked and cannot be re-enrolled. Generate and approve a new key."
+            )
+        }
+
         val base64 = CardCryptoUtils.encodePublicKeyToBase64(publicKey)
         val entry = TrustedIssuerEntry(
             kid = kid,
             publicKeyBase64 = base64,
             label = label,
-            enrolledAt = enrolledAt,
+            enrolledAt = existing?.enrolledAt ?: enrolledAt,
             isRevoked = false
         )
 
@@ -144,9 +154,13 @@ object TrustedIssuerRegistry {
      * Removes an issuer key from the registry completely.
      */
     fun removeIssuer(kid: String): Boolean {
+        // Revocation history must remain available as a tombstone. Physical
+        // deletion would permit the same public key to be enrolled again.
         val cleanKid = kid.trim().lowercase()
-        entryCache.remove(cleanKid)
-        keyCache.remove(cleanKid)
+        val existing = getIssuerEntry(cleanKid) ?: return false
+        if (!existing.isRevoked) return false
+        return false
+        @Suppress("UNREACHABLE_CODE")
         val prefs = getPrefs() ?: return true
         val kids = prefs.getStringSet(KEY_ISSUER_KIDS, emptySet())?.toMutableSet() ?: mutableSetOf()
         kids.remove(cleanKid)
