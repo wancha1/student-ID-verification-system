@@ -377,14 +377,16 @@ class RoleFeaturesAndBackendSyncTest {
         assertFalse(guard.hasPermission(StaffPermission.MANAGE_STUDENTS))
         assertFalse(guard.hasPermission(StaffPermission.SERVE_MEALS))
 
-        viewModel.handleBarcodeScan(boardingQrPayload, context)
+        // Use the cleared day-scholar fixture: boarders are intentionally denied
+        // at the day-scholar gate by the repository's access policy.
+        viewModel.handleBarcodeScan(dayScholarQrPayload, context)
         waitUntil { viewModel.activeScanResult.value != null && database.scanLogDao().getAllLogsFlow().first().isNotEmpty() }
         val result = viewModel.activeScanResult.value
         assertTrue(result is StudentScanResult.Success)
         assertTrue((result as StudentScanResult.Success).isApproved)
 
         val logs = database.scanLogDao().getAllLogsFlow().first()
-        assertEquals(boardingStudentId, logs.first().studentId)
+        assertEquals(dayScholarStudentId, logs.first().studentId)
         assertEquals("Guard Ocen", logs.first().guardName)
 
         // Denied meal serving
