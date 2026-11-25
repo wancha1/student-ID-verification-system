@@ -687,7 +687,7 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 21. A revoked issuer key cannot be re-enrolled or physically deleted.
+    // 20. A revoked issuer key cannot be re-enrolled or physically deleted.
     // =========================================================================
     @Test
     fun test20_RevokedIssuerKeyCannotBeReEnrolledOrDeleted() {
@@ -716,7 +716,7 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 22. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+    // 21. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
  multiple concurrent issuer keys without invalidating existing cards.
     // =========================================================================
     @Test
@@ -767,7 +767,7 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 21. Gate devices operate without any private keys.
+    // 22. Gate devices operate without any private keys.
     // =========================================================================
     @Test
     fun test22_GateDeviceHasZeroPrivateKeysAndVerifiesFullyOffline() = runBlocking {
