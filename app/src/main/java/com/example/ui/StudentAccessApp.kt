@@ -580,6 +580,7 @@ fun StudentAccessApp(
                             readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
                         )
                     } else if (showExeatScreen) {
+                        // Issuance is an Admin action; gate departure is a Gate Staff action.
                         ExeatPassScreen(
                             exeatPasses = exeatPasses,
                             students = allStudents,
