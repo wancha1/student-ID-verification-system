@@ -83,3 +83,18 @@ The live Supabase security advisor currently reports:
 - WARN: leaked-password protection is disabled on the current Free plan. Enable it if/when the project is upgraded to a plan that supports the control; in the meantime enforce strong unique staff passwords and protect accounts with operational controls.
 
 The real-token smoke script was corrected to use the database's permitted `OUTSTANDING` fee-status value for its deliberately non-existent student probe. This probe creates no student or finance record: the Admin should reach a foreign-key rejection, while roles without finance permission should be rejected by RLS.
+
+## Migration-history reconciliation — 2026-11-25
+
+The deployed project's `supabase_migrations.schema_migrations` table was compared with the repository migration directory. The source tree has been restored to the deployed version numbers through `20261116154821`, including the issuer public-key distribution migration. Superseded filenames with incorrect timestamps were removed so a future migration push does not attempt to replay already-applied DDL under new version IDs.
+
+The original applied `record_ltc_staff_invitation_plan` migration included staff email seed values. Those addresses were intentionally omitted from the restored source file; the migration retains the private table definition and access revocation only. Provision real invitation rows through the protected provisioning process, not public source control.
+
+The un-applied `mark_clean_ltc_start` migration was removed because the base schema already defaults `student_privacy_migration_complete` to true. It was not part of the deployed migration history and would have introduced an out-of-order pending migration.
+
+Two additional security migrations on draft PR #77 remain **proposed and unapplied**:
+- `20261125152300_trusted_issuer_lifecycle_audit.sql`
+- `20261125153000_block_unapproved_student_school_changes.sql`
+
+Do not push those proposed migrations to production until they have been validated on a disposable database, database authorization tests have passed, and the live schema has been rechecked.
+
