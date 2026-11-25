@@ -1251,6 +1251,7 @@ class MainViewModel(
     // The current app does not yet complete the server-side enrollment/approval
     // and device authorization workflow, so local Admin UI checks must not grant
     // signing or trust authority.
+    @Suppress("UNUSED_PARAMETER")
     fun setupAuthoritativeIssuerKey(preferStrongBox: Boolean = true) {
         if (!requireAdminRole("Enrolling Issuer Signing Key")) return
         CardCryptoManager.clearIssuerPrivateKey()
@@ -1258,6 +1259,7 @@ class MainViewModel(
             "Issuer signing is disabled. Complete school-server enrollment and approval before this device can issue cards."
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun enrollTrustedIssuerPublicKey(base64: String, label: String = "Remote Issuer") {
         if (!requireAdminRole("Enrolling trusted public key")) return
         _userFeedbackMessage.value =
