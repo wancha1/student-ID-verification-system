@@ -84,7 +84,6 @@ class QrSecurityTrustModelTest {
                 cardId = cardId1,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                signer = testSigner
             )
 
             // Seed active student 1 in Room
@@ -416,7 +415,6 @@ class QrSecurityTrustModelTest {
             cardId = unknownCardId,
             validFrom = validFrom,
             validUntil = validUntil,
-            signer = testSigner
         )
 
         // Signature is cryptographically authentic, but card does NOT exist in Room
@@ -554,7 +552,7 @@ class QrSecurityTrustModelTest {
 
         // Scanning an unknown cardId must NOT fall back to any active card for the student
         val unknownCardId = CardCryptoManager.generateSecureRandomCardId()
-        val unknownSigned = CardCryptoManager.signCardPayload(unknownCardId, validFrom, validUntil, testSigner)
+        val unknownSigned = CardCryptoManager.signCardPayload(unknownCardId, validFrom, validUntil)
         val scanResultUnknown = roomRepository.verifyStudentByQr(unknownSigned)
         assertTrue("Unknown card must yield StudentNotFound and not fall back to active student card",
             scanResultUnknown is StudentScanResult.StudentNotFound)
@@ -570,7 +568,6 @@ class QrSecurityTrustModelTest {
             cardId = expiredCardId,
             validFrom = "2020-01-01",
             validUntil = "2020-12-31",
-            signer = testSigner
         )
 
         // Seed in database
@@ -609,7 +606,6 @@ class QrSecurityTrustModelTest {
             cardId = futureCardId,
             validFrom = "2099-01-01",
             validUntil = "2099-12-31",
-            signer = testSigner
         )
 
         val now = System.currentTimeMillis()
@@ -645,13 +641,13 @@ class QrSecurityTrustModelTest {
         // Generate an untrusted / rogue issuer key pair that is NOT in TrustedIssuerRegistry
         val rogueKeyPair = TestCardCryptoHelper.generateKeyPair()
         val rogueSigner = SoftwareCardSigner(rogueKeyPair)
+        CardCryptoManager.setActiveSigner(rogueSigner)
 
         val rogueCardId = CardCryptoManager.generateSecureRandomCardId()
         val roguePayload = CardCryptoManager.signCardPayload(
             cardId = rogueCardId,
             validFrom = validFrom,
             validUntil = validUntil,
-            signer = rogueSigner
         )
 
         assertFalse(
