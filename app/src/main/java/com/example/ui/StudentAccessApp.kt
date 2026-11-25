@@ -325,6 +325,22 @@ fun StudentAccessApp(
                                                 modifier = Modifier.testTag("menu_view_exeat_passes")
                                             )
                                         }
+                                        if (user.role == UserRole.GATE_STAFF) {
+                                            DropdownMenuItem(
+                                                text = { Text("Exeat Gate") },
+                                                leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                                                onClick = {
+                                                    showExeatScreen = true
+                                                    showGuardianAlertsScreen = false
+                                                    showAttendanceScreen = false
+                                                    showRequirementsScreen = false
+                                                    showLogsScreen = false
+                                                    showMealsScreen = false
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_gate_exeat")
+                                            )
+                                        }
                                         if (user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                                             DropdownMenuItem(
                                                 text = { Text("Attendance Review") },
@@ -397,7 +413,9 @@ fun StudentAccessApp(
                     }
                 },
                 bottomBar = {
-                    if (!isAnyScannerOpen && selectedStudentDetail == null) {
+                    if (!isAnyScannerOpen && selectedStudentDetail == null &&
+                        !showGuardianAlertsScreen && !showExeatScreen &&
+                        !showAttendanceScreen && !showRequirementsScreen) {
                         NavigationBar(
                             containerColor = MaterialTheme.colorScheme.surface,
                             tonalElevation = 2.dp,
@@ -568,7 +586,9 @@ fun StudentAccessApp(
                             onBack = { showExeatScreen = false },
                             onIssueExeatPass = { pass -> viewModel.issueExeatPass(pass) },
                             onMarkExeatUsed = { passId -> viewModel.markExeatUsed(passId) },
-                            readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
+                            readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT,
+                            canIssue = user.role == UserRole.ADMINISTRATOR,
+                            canMarkUsed = user.role == UserRole.GATE_STAFF
                         )
                     } else if (showAttendanceScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                         AttendanceMasterScreen(

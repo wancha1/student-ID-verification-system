@@ -89,6 +89,8 @@ fun ExeatPassScreen(
     onIssueExeatPass: (ExeatPass) -> Unit,
     onMarkExeatUsed: (String) -> Unit,
     readOnly: Boolean = false,
+    canIssue: Boolean = !readOnly,
+    canMarkUsed: Boolean = !readOnly,
     modifier: Modifier = Modifier
 ) {
     var selectedFilter by remember { mutableStateOf("ACTIVE") }
@@ -129,7 +131,7 @@ fun ExeatPassScreen(
             )
         },
         floatingActionButton = {
-            if (!readOnly) FloatingActionButton(
+            if (canIssue) FloatingActionButton(
                 onClick = { showIssueDialog = true },
                 containerColor = SchoolPrimary,
                 contentColor = Color.White,
@@ -297,7 +299,7 @@ fun ExeatPassScreen(
                 }
             },
             confirmButton = {
-                if (pass.status == ExeatStatus.ACTIVE && !pass.isExpired && !readOnly) {
+                if (pass.status == ExeatStatus.ACTIVE && !pass.isExpired && canMarkUsed) {
                     Button(
                         onClick = {
                             onMarkExeatUsed(pass.id)
@@ -313,7 +315,7 @@ fun ExeatPassScreen(
                 }
             },
             dismissButton = {
-                if (pass.status == ExeatStatus.ACTIVE && !pass.isExpired && !readOnly) {
+                if (pass.status == ExeatStatus.ACTIVE && !pass.isExpired && canMarkUsed) {
                     TextButton(onClick = { selectedPassForDetail = null }) {
                         Text("Dismiss")
                     }
