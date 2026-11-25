@@ -519,7 +519,7 @@ class QrSecurityTrustModelTest {
             cardIdentifier = cardId2,
             studentId = studentId1,
             studentNumber = studentNum1,
-            qrPayload = CardCryptoManager.signCardPayload(cardId2, validFrom, validUntil, testSigner),
+            qrPayload = CardCryptoManager.signCardPayload(cardId2, validFrom, validUntil),
             status = CardStatus.ACTIVE.name,
             issueDate = now + 1000,
             activationDate = now + 1000,
