@@ -374,17 +374,19 @@ class RoleFeaturesAndBackendSyncTest {
     fun issuerAdminActionsRemainFailClosedUntilServerAuthorizationExists() {
         viewModel.loginAs(UserRole.ADMINISTRATOR, "Registry Admin")
         assertTrue(CardCryptoManager.hasIssuerPrivateKey())
+        val trustedBefore = TrustedIssuerRegistry.getAllIssuers()
+        assertTrue("Test fixture should have one trusted test issuer", trustedBefore.isNotEmpty())
 
         viewModel.setupAuthoritativeIssuerKey()
         assertFalse("Admin UI must not activate local signing authority", CardCryptoManager.hasIssuerPrivateKey())
-        assertTrue("Local setup must not enroll a trusted issuer", TrustedIssuerRegistry.getAllIssuers().isEmpty())
+        assertEquals("Local setup must not change trusted issuers", trustedBefore, TrustedIssuerRegistry.getAllIssuers())
 
         val publicKeyBase64 = Base64.getEncoder().encodeToString(testKeyPair.public.encoded)
         viewModel.enrollTrustedIssuerPublicKey(publicKeyBase64)
-        assertTrue("Client-side public-key enrollment must remain disabled", TrustedIssuerRegistry.getAllIssuers().isEmpty())
+        assertEquals("Client-side public-key enrollment must remain disabled", trustedBefore, TrustedIssuerRegistry.getAllIssuers())
 
         viewModel.revokeTrustedIssuer("unknown-test-kid")
-        assertTrue("Local revocation must not mutate the trust registry", TrustedIssuerRegistry.getAllIssuers().isEmpty())
+        assertEquals("Local revocation must not mutate the trust registry", trustedBefore, TrustedIssuerRegistry.getAllIssuers())
     }
 
     @Test
