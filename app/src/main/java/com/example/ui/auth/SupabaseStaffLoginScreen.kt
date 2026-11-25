@@ -9,13 +9,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,49 +111,40 @@ fun SupabaseStaffLoginScreen(
                     colors = listOf(midnight, deepBlue, Color(0xFF091522))
                 )
             )
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Spacer(Modifier.height(14.dp))
             Image(
                 painter = painterResource(id = R.drawable.ltc_school_crest),
                 contentDescription = "Lira Town College crest",
-                modifier = Modifier.size(92.dp)
+                modifier = Modifier.size(84.dp)
             )
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(16.dp))
             Text(
                 text = "LIRA TOWN COLLEGE",
-                color = Color.White,
-                fontSize = 13.sp,
+                color = champagne,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp,
+                letterSpacing = 2.5.sp,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
-                text = "Every student.\nAccounted for.",
+                text = "Student Access System",
                 color = Color.White,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                lineHeight = 34.sp
+                textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "A secure identity and access workspace for the people who keep LTC moving.",
-                color = Color.White.copy(alpha = 0.76f),
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                lineHeight = 22.sp,
-                modifier = Modifier.fillMaxWidth(0.88f)
-            )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(24.dp))
 
             Card(
                 modifier = Modifier

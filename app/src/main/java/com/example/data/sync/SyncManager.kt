@@ -10,6 +10,7 @@ import com.example.model.SyncInfo
 import com.example.model.SyncStatus
 import com.example.model.SyncSummary
 import com.example.model.FeeStatus
+import com.example.model.UserRole
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,15 @@ class SyncManager(
     val syncInfo: StateFlow<SyncInfo> = _syncInfo.asStateFlow()
 
     private var lastSuccessfulSyncTime: Long = 0L
+    @Volatile
+    private var activeRole: UserRole? = null
+    @Volatile
+    private var activeHasFinanceAccess: Boolean = false
+
+    fun setActiveRole(role: UserRole?, hasFinanceAccess: Boolean = false) {
+        activeRole = role
+        activeHasFinanceAccess = (role == UserRole.ADMINISTRATOR && hasFinanceAccess)
+    }
 
     suspend fun initialize() = withContext(ioDispatcher) {
         val savedTimeStr = database.syncMetadataDao().getValue("last_sync_timestamp")
@@ -155,6 +165,22 @@ class SyncManager(
                     }
                 }
 
+                if (activeRole == UserRole.ADMINISTRATOR && activeHasFinanceAccess) {
+                    val pendingFeeChanges = database.pendingChangeDao().getPendingFeeChanges()
+                    for (feeChange in pendingFeeChanges) {
+                        val dispatchResult = dispatchPendingChange(feeChange)
+                        if (dispatchResult.isSuccess) {
+                            database.pendingChangeDao().markSynced(feeChange.changeId, queueAttemptTime)
+                        } else {
+                            database.pendingChangeDao().recordFailure(
+                                feeChange.changeId,
+                                dispatchResult.exceptionOrNull()?.localizedMessage ?: "Remote fee update failed",
+                                queueAttemptTime
+                            )
+                        }
+                    }
+                }
+
                 // 5. Fetch modified student records from cloud (since last sync time)
                 val fetchStudentsResult = remoteCloudDataSource.fetchStudentsUpdatedSince((lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L))
                 if (fetchStudentsResult.isFailure) {
@@ -237,59 +263,105 @@ class SyncManager(
                     }
                 }
 
-                // 7. Pull shared meal, attendance and exam-exception records.
-                val remoteMealsResult = remoteCloudDataSource.fetchAllRemoteMealRecords()
-                if (remoteMealsResult.isFailure) {
-                    throw remoteMealsResult.exceptionOrNull()
-                        ?: IllegalStateException("Failed to fetch remote meal records")
-                }
-                for (remoteMeal in remoteMealsResult.getOrThrow()) {
-                    val local = database.mealRecordDao().findServing(
-                        remoteMeal.studentId, remoteMeal.mealType, remoteMeal.mealDate
+                // 7. Pull remote gate logs, meals, and role-permitted department records.
+                val role = activeRole
+                val shouldPullGateLogs = role == null || role in setOf(
+                    UserRole.ADMINISTRATOR,
+                    UserRole.HEAD_TEACHER_MANAGEMENT,
+                    UserRole.GATE_STAFF
+                )
+                if (shouldPullGateLogs) {
+                    val remoteGateLogsResult = remoteCloudDataSource.fetchGateLogsUpdatedSince(
+                        (lastSuccessfulSyncTime - 5000).coerceAtLeast(-1L)
                     )
-                    if (local == null || remoteMeal.timestamp >= local.timestamp) {
-                        database.mealRecordDao().insertOrUpdate(
-                            remoteMeal.copy(
-                                studentNumber = remoteMeal.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
-                                studentName = remoteMeal.studentName.ifBlank { local?.studentName.orEmpty() },
-                                gradeClass = remoteMeal.gradeClass.ifBlank { local?.gradeClass.orEmpty() },
-                                isSyncedToCloud = true
+                    if (remoteGateLogsResult.isFailure) {
+                        throw remoteGateLogsResult.exceptionOrNull()
+                            ?: IllegalStateException("Failed to fetch remote gate logs")
+                    }
+                    val newRemoteLogs = remoteGateLogsResult.getOrThrow().mapNotNull { remoteLog ->
+                        val local = database.scanLogDao().getScanLogById(remoteLog.id)
+                        if (local != null) {
+                            null
+                        } else {
+                            val resolvedGrade = remoteLog.gradeClass.ifBlank {
+                                remoteLog.studentId?.let { database.studentDao().getStudentById(it)?.gradeClass }.orEmpty()
+                            }
+                            remoteLog.copy(gradeClass = resolvedGrade, isSyncedToCloud = true)
+                        }
+                    }
+                    if (newRemoteLogs.isNotEmpty()) {
+                        database.scanLogDao().insertLogs(newRemoteLogs)
+                    }
+                }
+
+                val shouldPullMeals = role == null || role in setOf(
+                    UserRole.ADMINISTRATOR,
+                    UserRole.HEAD_TEACHER_MANAGEMENT,
+                    UserRole.MEAL_SERVING_STAFF
+                )
+                if (shouldPullMeals) {
+                    val remoteMealsResult = remoteCloudDataSource.fetchAllRemoteMealRecords()
+                    if (remoteMealsResult.isFailure) {
+                        throw remoteMealsResult.exceptionOrNull()
+                            ?: IllegalStateException("Failed to fetch remote meal records")
+                    }
+                    for (remoteMeal in remoteMealsResult.getOrThrow()) {
+                        val local = database.mealRecordDao().findServing(
+                            remoteMeal.studentId, remoteMeal.mealType, remoteMeal.mealDate
+                        )
+                        if (local == null || remoteMeal.timestamp >= local.timestamp) {
+                            database.mealRecordDao().insertOrUpdate(
+                                remoteMeal.copy(
+                                    studentNumber = remoteMeal.studentNumber.ifBlank { local?.studentNumber.orEmpty() },
+                                    studentName = remoteMeal.studentName.ifBlank { local?.studentName.orEmpty() },
+                                    gradeClass = remoteMeal.gradeClass.ifBlank { local?.gradeClass.orEmpty() },
+                                    isSyncedToCloud = true
+                                )
                             )
-                        )
+                        }
                     }
                 }
 
-                val remoteAttendanceResult = remoteCloudDataSource.fetchAllRemoteAttendanceRecords()
-                if (remoteAttendanceResult.isFailure) {
-                    throw remoteAttendanceResult.exceptionOrNull()
-                        ?: IllegalStateException("Failed to fetch remote attendance records")
-                }
-                for (remoteRecord in remoteAttendanceResult.getOrThrow()) {
-                    val local = database.attendanceRecordDao().findAttendance(
-                        remoteRecord.studentId, remoteRecord.lessonDate, remoteRecord.sessionName
-                    )
-                    if (local == null || remoteRecord.timestamp >= local.timestamp) {
-                        database.attendanceRecordDao().insertOrUpdate(
-                            remoteRecord.copy(isSyncedToCloud = true)
+                val shouldPullAttendance = role == null || role == UserRole.TEACHERS
+                if (shouldPullAttendance) {
+                    val remoteAttendanceResult = remoteCloudDataSource.fetchAllRemoteAttendanceRecords()
+                    if (remoteAttendanceResult.isFailure) {
+                        throw remoteAttendanceResult.exceptionOrNull()
+                            ?: IllegalStateException("Failed to fetch remote attendance records")
+                    }
+                    for (remoteRecord in remoteAttendanceResult.getOrThrow()) {
+                        val local = database.attendanceRecordDao().findAttendance(
+                            remoteRecord.studentId, remoteRecord.lessonDate, remoteRecord.sessionName
                         )
+                        if (local == null || remoteRecord.timestamp >= local.timestamp) {
+                            database.attendanceRecordDao().insertOrUpdate(
+                                remoteRecord.copy(isSyncedToCloud = true)
+                            )
+                        }
                     }
                 }
 
-                val remoteExceptionsResult = remoteCloudDataSource.fetchAllRemoteExamExceptions()
-                if (remoteExceptionsResult.isFailure) {
-                    throw remoteExceptionsResult.exceptionOrNull()
-                        ?: IllegalStateException("Failed to fetch remote exam exceptions")
-                }
-                for (remoteRecord in remoteExceptionsResult.getOrThrow()) {
-                    val local = database.examExceptionDao().findException(
-                        remoteRecord.studentId, remoteRecord.examCode
-                    )
-                    val remoteUpdatedAt = remoteRecord.approvedAt ?: remoteRecord.requestedAt
-                    val localUpdatedAt = local?.let { it.approvedAt ?: it.requestedAt } ?: Long.MIN_VALUE
-                    if (local == null || remoteUpdatedAt >= localUpdatedAt) {
-                        database.examExceptionDao().insertOrUpdate(
-                            remoteRecord.copy(isSyncedToCloud = true)
+                val shouldPullExceptions = role == null || role in setOf(
+                    UserRole.EXAMINATION_STAFF,
+                    UserRole.BURSAR_FINANCE
+                )
+                if (shouldPullExceptions) {
+                    val remoteExceptionsResult = remoteCloudDataSource.fetchAllRemoteExamExceptions()
+                    if (remoteExceptionsResult.isFailure) {
+                        throw remoteExceptionsResult.exceptionOrNull()
+                            ?: IllegalStateException("Failed to fetch remote exam exceptions")
+                    }
+                    for (remoteRecord in remoteExceptionsResult.getOrThrow()) {
+                        val local = database.examExceptionDao().findException(
+                            remoteRecord.studentId, remoteRecord.examCode
                         )
+                        val remoteUpdatedAt = remoteRecord.approvedAt ?: remoteRecord.requestedAt
+                        val localUpdatedAt = local?.let { it.approvedAt ?: it.requestedAt } ?: Long.MIN_VALUE
+                        if (local == null || remoteUpdatedAt >= localUpdatedAt) {
+                            database.examExceptionDao().insertOrUpdate(
+                                remoteRecord.copy(isSyncedToCloud = true)
+                            )
+                        }
                     }
                 }
 

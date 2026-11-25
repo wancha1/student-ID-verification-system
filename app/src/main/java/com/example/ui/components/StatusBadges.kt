@@ -11,17 +11,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.SyncAlt
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,9 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +45,8 @@ import com.example.model.Student
 import com.example.ui.theme.ApprovedGreen
 import com.example.ui.theme.ApprovedGreenDark
 import com.example.ui.theme.ApprovedGreenLight
+import com.example.ui.theme.PendingAmber
+import com.example.ui.theme.PendingAmberLight
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedDark
 import com.example.ui.theme.RejectedRedLight
@@ -56,7 +58,13 @@ fun FeeStatusBadge(
     modifier: Modifier = Modifier,
     isLarge: Boolean = false
 ) {
-    val activeStatus = if (feeStatus != FeeStatus.CLEARED && status == FeeStatus.CLEARED) feeStatus else (if (status != FeeStatus.CLEARED) status else feeStatus)
+    val activeStatus = if (feeStatus != FeeStatus.CLEARED && status == FeeStatus.CLEARED) {
+        feeStatus
+    } else if (status != FeeStatus.CLEARED) {
+        status
+    } else {
+        feeStatus
+    }
     val isCleared = activeStatus == FeeStatus.CLEARED
     val bgColor = if (isCleared) ApprovedGreenLight else RejectedRedLight
     val borderColor = if (isCleared) ApprovedGreen else RejectedRed
@@ -70,25 +78,25 @@ fun FeeStatusBadge(
             .testTag(if (isCleared) "badge_fees_cleared" else "badge_fees_outstanding")
             .clip(RoundedCornerShape(if (isLarge) 12.dp else 8.dp))
             .background(bgColor)
-            .border(if (isLarge) 2.dp else 1.dp, borderColor, RoundedCornerShape(if (isLarge) 12.dp else 8.dp))
+            .border(if (isLarge) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(if (isLarge) 12.dp else 8.dp))
             .padding(
-                horizontal = if (isLarge) 16.dp else 10.dp,
-                vertical = if (isLarge) 8.dp else 5.dp
+                horizontal = if (isLarge) 14.dp else 10.dp,
+                vertical = if (isLarge) 7.dp else 4.dp
             )
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = contentColor,
-            modifier = Modifier.size(if (isLarge) 22.dp else 16.dp)
+            modifier = Modifier.size(if (isLarge) 20.dp else 14.dp)
         )
-        Spacer(modifier = Modifier.width(if (isLarge) 8.dp else 6.dp))
+        Spacer(Modifier.width(if (isLarge) 8.dp else 5.dp))
         Text(
             text = label,
             color = contentColor,
             fontWeight = FontWeight.Bold,
-            fontSize = if (isLarge) 15.sp else 12.sp,
-            letterSpacing = 0.5.sp
+            fontSize = if (isLarge) 14.sp else 11.sp,
+            letterSpacing = 0.4.sp
         )
     }
 }
@@ -108,15 +116,15 @@ fun CardStatusBadge(
             "CARD ACTIVE"
         )
         CardStatus.LOST -> Tuple5(
-            Color(0xFFFFE4E6),
-            Color(0xFFE11D48),
-            Color(0xFF9F1239),
+            RejectedRedLight,
+            RejectedRed,
+            RejectedRedDark,
             Icons.Default.Cancel,
             "REPORTED LOST"
         )
         CardStatus.REPLACED -> Tuple5(
-            Color(0xFFFEF3C7),
-            Color(0xFFD97706),
+            PendingAmberLight,
+            PendingAmber,
             Color(0xFF92400E),
             Icons.Default.SyncAlt,
             "REPLACED"
@@ -136,9 +144,9 @@ fun CardStatusBadge(
             .testTag("badge_card_${status.name.lowercase()}")
             .clip(RoundedCornerShape(if (isLarge) 12.dp else 8.dp))
             .background(bgColor)
-            .border(if (isLarge) 2.dp else 1.dp, borderColor, RoundedCornerShape(if (isLarge) 12.dp else 8.dp))
+            .border(if (isLarge) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(if (isLarge) 12.dp else 8.dp))
             .padding(
-                horizontal = if (isLarge) 14.dp else 8.dp,
+                horizontal = if (isLarge) 12.dp else 8.dp,
                 vertical = if (isLarge) 6.dp else 4.dp
             )
     ) {
@@ -146,21 +154,25 @@ fun CardStatusBadge(
             imageVector = icon,
             contentDescription = text,
             tint = contentColor,
-            modifier = Modifier.size(if (isLarge) 18.dp else 14.dp)
+            modifier = Modifier.size(if (isLarge) 18.dp else 13.dp)
         )
-        Spacer(modifier = Modifier.width(if (isLarge) 6.dp else 4.dp))
+        Spacer(Modifier.width(if (isLarge) 6.dp else 4.dp))
         Text(
             text = text,
             color = contentColor,
             fontWeight = FontWeight.Bold,
             fontSize = if (isLarge) 13.sp else 11.sp,
-            letterSpacing = 0.4.sp
+            letterSpacing = 0.3.sp
         )
     }
 }
 
 private data class Tuple5<A, B, C, D, E>(
-    val a: A, val b: B, val c: C, val d: D, val e: E
+    val a: A,
+    val b: B,
+    val c: C,
+    val d: D,
+    val e: E
 )
 
 @Composable
@@ -185,17 +197,17 @@ fun GateDecisionBadge(
             "NOT APPROVED"
         )
         GateVerificationDecision.CARD_INACTIVE -> Tuple5(
-            Color(0xFFFEF3C7),
-            Color(0xFFD97706),
-            Color(0xFFB45309),
+            PendingAmberLight,
+            PendingAmber,
+            Color(0xFF92400E),
             Icons.Default.Block,
             "CARD INACTIVE"
         )
         GateVerificationDecision.STUDENT_NOT_FOUND -> Tuple5(
-            Color(0xFFFFFBEB),
-            Color(0xFFF59E0B),
+            PendingAmberLight,
+            PendingAmber,
             Color(0xFF92400E),
-            Icons.Default.Help,
+            Icons.AutoMirrored.Filled.Help,
             "NOT FOUND"
         )
         GateVerificationDecision.INVALID_QR -> Tuple5(
@@ -225,7 +237,7 @@ fun GateDecisionBadge(
             tint = contentColor,
             modifier = Modifier.size(if (isLarge) 16.dp else 12.dp)
         )
-        Spacer(modifier = Modifier.width(4.dp))
+        Spacer(Modifier.width(4.dp))
         Text(
             text = text,
             color = contentColor,
@@ -246,20 +258,22 @@ fun DayScholarBadge(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Icon(
             imageVector = Icons.Default.DirectionsBus,
             contentDescription = "Day Scholar",
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier.size(15.dp)
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
             text = if (route.isNotBlank()) "Day Scholar • $route" else status.label,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 12.sp
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -279,7 +293,7 @@ fun StudentAvatar(
             .size(size)
             .clip(CircleShape)
             .background(bgColor)
-            .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+            .border(1.5.dp, Color.White.copy(alpha = 0.85f), CircleShape)
     ) {
         if (!student.photoUrl.isNullOrBlank()) {
             AsyncImage(
@@ -295,7 +309,7 @@ fun StudentAvatar(
                 text = initials.ifBlank { "ST" },
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                fontSize = (size.value * 0.38).sp
+                fontSize = (size.value * 0.36).sp
             )
         }
     }

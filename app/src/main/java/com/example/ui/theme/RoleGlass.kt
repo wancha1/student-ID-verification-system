@@ -1,20 +1,15 @@
 package com.example.ui.theme
 
 import androidx.compose.foundation.background
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * Soft ambient backdrop for the role dashboards. Paired with translucent Material
- * surfaces to create a frosted-glass visual language without sacrificing legibility.
+ * Clean, calm neutral canvas background that respects dark and light theme
+ * so cards, badges, and bottom action buttons stand out cleanly.
  */
-fun Modifier.roleGlassBackground(accent: Color): Modifier = background(
-    Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF8FAFF),
-            accent.copy(alpha = 0.055f),
-            Color(0xFFEAF0F8)
-        )
-    )
-)
+@Composable
+fun Modifier.roleGlassBackground(accent: Color): Modifier =
+    background(MaterialTheme.colorScheme.background)

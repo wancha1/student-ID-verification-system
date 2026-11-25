@@ -1,23 +1,19 @@
 package com.example.ui.meals
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import com.example.ui.theme.LocalRoleTheme
-import com.example.ui.theme.roleGlassBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,13 +37,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +66,15 @@ import com.example.model.MealVerificationResult
 import com.example.model.Student
 import com.example.ui.components.MultiFormatExportDialog
 import com.example.ui.components.StudentAvatar
+import com.example.ui.theme.ApprovedGreen
+import com.example.ui.theme.ApprovedGreenLight
+import com.example.ui.theme.ApprovedGreenText
+import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.MonoFontFamily
+import com.example.ui.theme.RejectedRed
+import com.example.ui.theme.RejectedRedLight
+import com.example.ui.theme.RejectedRedText
+import com.example.ui.theme.roleGlassBackground
 import com.example.util.ExportFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -83,28 +89,32 @@ fun MealsMasterScreen(
     allStudents: List<Student>,
     onSelectMealType: (MealType) -> Unit,
     onOpenScanner: () -> Unit,
-    onManualServe: (studentNumber: String) -> Unit,
     onDismissScanOutcome: () -> Unit,
     onExport: (format: ExportFormat) -> Unit,
     modifier: Modifier = Modifier,
-    readOnly: Boolean = false
+    readOnly: Boolean = false,
+    selectedMealsTab: String = "SERVE"
 ) {
     var showExportDialog by remember { mutableStateOf(false) }
-    var manualInput by remember { mutableStateOf("") }
     var historySearchQuery by remember { mutableStateOf("") }
-    var selectedMealsTab by remember { mutableStateOf("SERVE") }
 
     val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
-    val todayRecords = mealRecords.filter { it.mealDate == todayStr }
-    val currentSessionRecords = todayRecords.filter { it.mealType == activeMealType }
+    val todayRecords = remember(mealRecords, todayStr) {
+        mealRecords.filter { it.mealDate == todayStr }
+    }
+    val currentSessionRecords = remember(todayRecords, activeMealType) {
+        todayRecords.filter { it.mealType == activeMealType }
+    }
 
-    val filteredRecords = if (historySearchQuery.isBlank()) {
-        mealRecords
-    } else {
-        mealRecords.filter {
-            it.studentName.contains(historySearchQuery, ignoreCase = true) ||
-            it.studentNumber.contains(historySearchQuery, ignoreCase = true) ||
-            it.gradeClass.contains(historySearchQuery, ignoreCase = true)
+    val filteredRecords = remember(mealRecords, historySearchQuery) {
+        if (historySearchQuery.isBlank()) {
+            mealRecords
+        } else {
+            mealRecords.filter {
+                it.studentName.contains(historySearchQuery, ignoreCase = true) ||
+                    it.studentNumber.contains(historySearchQuery, ignoreCase = true) ||
+                    it.gradeClass.contains(historySearchQuery, ignoreCase = true)
+            }
         }
     }
 
@@ -113,309 +123,222 @@ fun MealsMasterScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .animateContentSize()
+            .imePadding()
             .roleGlassBackground(roleTheme.primaryColor)
     ) {
-        // Meals Master Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 3.dp,
-            border = BorderStroke(1.dp, roleTheme.accentBorderColor.copy(alpha = 0.25f))
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // 1. Dining Station Card + Session Toggle + KPIs
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            modifier = Modifier.size(46.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            color = roleTheme.primaryColor.copy(alpha = 0.12f),
-                            border = BorderStroke(1.5.dp, roleTheme.accentGlowColor.copy(alpha = 0.5f))
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = roleTheme.icon,
-                                    contentDescription = "Meals Master",
-                                    tint = roleTheme.primaryColor,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Dining Services",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Surface(shape = RoundedCornerShape(4.dp), color = roleTheme.containerColor) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(44.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = roleTheme.primaryColor.copy(alpha = 0.12f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Restaurant,
+                                            contentDescription = "Dining Services",
+                                            tint = roleTheme.primaryColor,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column {
                                     Text(
-                                        text = roleTheme.stationBadge,
-                                        color = roleTheme.badgeTextColor,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Black,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        text = if (readOnly) "Meals Oversight" else "Dining Hall Service",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${user.station} • ${user.name}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
+
+                            if (readOnly) {
+                                OutlinedButton(
+                                    onClick = { showExportDialog = true },
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("button_meals_export"),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Export", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+
+                        // Active Meal Session Segmented Selector
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                text = "${user.station} • ${user.name}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "ACTIVE MEAL SESSION",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                letterSpacing = 0.8.sp
                             )
-                        }
-                    }
-
-                    // Leadership can review and export; meal staff use the dedicated bottom navigation.
-                    if (readOnly) {
-                        OutlinedButton(
-                            onClick = { showExportDialog = true },
-                            modifier = Modifier.testTag("button_meals_export"),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-
-                    if (!readOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = onOpenScanner,
-                            modifier = Modifier.testTag("button_meals_scan_qr"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = roleTheme.primaryColor
-                            ),
-                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Student Card", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Meal Session Selector Pills
-                Text(
-                    text = "ACTIVE MEAL SESSION:",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    MealType.values().filter { it.isEnabledForServing }.forEach { type ->
-                        val isSelected = activeMealType == type
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) Color(0xFFE11D48) else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .weight(1f)
-                                .then(if (readOnly) Modifier else Modifier.clickable { onSelectMealType(type) })
-                                .testTag("button_meal_session_${type.name.lowercase()}")
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = type.label,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = type.timeWindow,
-                                    fontSize = 11.sp,
-                                    color = if (isSelected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
+                                MealType.values().filter { it.isEnabledForServing }.forEach { type ->
+                                    val isSelected = activeMealType == type
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isSelected) roleTheme.primaryColor else MaterialTheme.colorScheme.surfaceVariant,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) roleTheme.primaryColor else MaterialTheme.colorScheme.outlineVariant
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 52.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .then(
+                                                if (readOnly) Modifier else Modifier.clickable { onSelectMealType(type) }
+                                            )
+                                            .testTag("button_meal_session_${type.name.lowercase()}")
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = type.label,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = type.timeWindow,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isSelected) {
+                                                    Color.White.copy(alpha = 0.85f)
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Serving Stats Cards
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MealStatCard(
-                        title = "Served Today",
-                        count = todayRecords.size.toString(),
-                        color = Color(0xFFE11D48),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MealStatCard(
-                        title = "${activeMealType.label} Session",
-                        count = currentSessionRecords.size.toString(),
-                        color = Color(0xFF16A34A),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MealStatCard(
-                        title = "Total Registry",
-                        count = allStudents.size.toString(),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (!readOnly) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("SERVE" to "Serve Meal", "HISTORY" to "Serving History").forEach { (tab, label) ->
-                            val selected = selectedMealsTab == tab
-                            Surface(
+                        // 3 Compact Metrics
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MealStatCard(
+                                title = "Today",
+                                count = todayRecords.size.toString(),
+                                color = roleTheme.primaryColor,
                                 modifier = Modifier.weight(1f)
-                                    .clickable { selectedMealsTab = tab }
-                                    .testTag("meals_tab_${tab.lowercase()}"),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (selected) roleTheme.primaryColor else MaterialTheme.colorScheme.surfaceVariant,
-                                border = BorderStroke(1.dp, if (selected) roleTheme.primaryColor else MaterialTheme.colorScheme.outlineVariant)
-                            ) {
-                                Text(
-                                    text = label,
-                                    modifier = Modifier.padding(vertical = 11.dp),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 13.sp
-                                )
-                            }
+                            )
+                            MealStatCard(
+                                title = activeMealType.label,
+                                count = currentSessionRecords.size.toString(),
+                                color = ApprovedGreen,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MealStatCard(
+                                title = "Registry",
+                                count = allStudents.size.toString(),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
+            }
 
-                if (!readOnly && selectedMealsTab == "SERVE") {
-                // Manual Student Entry Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = manualInput,
-                        onValueChange = { manualInput = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("input_meals_manual_student"),
-                        placeholder = { Text("Enter student no. e.g. OAK-2026-0001") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+            // 2A. Serve Meal Tab Content
+            if (!readOnly && selectedMealsTab == "SERVE") {
+                item {
+                    Text(
+                        text = "Recent ${activeMealType.label} Serves (${currentSessionRecords.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (manualInput.isNotBlank()) {
-                                onManualServe(manualInput)
-                                manualInput = ""
-                            }
-                        },
-                        enabled = manualInput.isNotBlank(),
-                        modifier = Modifier.testTag("button_meals_manual_serve"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE11D48)
+                }
+
+                if (currentSessionRecords.isEmpty()) {
+                    item {
+                        EmptyMealStateCard(
+                            message = "No ${activeMealType.label.lowercase()} serves recorded yet today.",
+                            hint = "Tap Scan Student Card below to verify a V2 badge and serve ${activeMealType.label.lowercase()}."
                         )
-                    ) {
-                        Text("Serve")
                     }
-                }
-            }
-        }
-
-                }
-
-        AnimatedVisibility(
-            visible = selectedMealsTab == "HISTORY" || readOnly,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 12 })
-        ) {
-        // Serving History Section
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "DINING HALL SERVING LOG (${filteredRecords.size})",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            OutlinedTextField(
-                value = historySearchQuery,
-                onValueChange = { historySearchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("input_meals_history_search"),
-                placeholder = { Text("Filter serving history by name or student no...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                singleLine = true,
-                shape = RoundedCornerShape(10.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (filteredRecords.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Fastfood,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "No meal serving records yet today",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                } else {
+                    items(currentSessionRecords.take(8), key = { it.id }) { record ->
+                        val student = allStudents.find { it.id == record.studentId }
+                        MealRecordRow(record = record, student = student)
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                // 3B. Serving History / Read-only Oversight
+                item {
+                    OutlinedTextField(
+                        value = historySearchQuery,
+                        onValueChange = { historySearchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_meals_history_search"),
+                        placeholder = { Text("Filter by student name, number, or class") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
+                if (filteredRecords.isEmpty()) {
+                    item {
+                        EmptyMealStateCard(
+                            message = if (mealRecords.isEmpty()) "No meal serving records yet" else "No matching records",
+                            hint = if (mealRecords.isEmpty()) "Served meals will appear here automatically." else "Try clearing or adjusting your filter."
+                        )
+                    }
+                } else {
                     items(filteredRecords, key = { it.id }) { record ->
                         val student = allStudents.find { it.id == record.studentId }
                         MealRecordRow(record = record, student = student)
@@ -423,10 +346,48 @@ fun MealsMasterScreen(
                 }
             }
         }
+
+        // 4. Thumb-Zone Sticky Bottom Action Dock (Active Dining Staff only)
+        if (!readOnly) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Button(
+                            onClick = onOpenScanner,
+                            modifier = Modifier
+                                .testTag("button_meals_scan_qr")
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = roleTheme.primaryColor)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "SCAN STUDENT CARD",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // Export remains available in read-only management review.
     if (showExportDialog) {
         MultiFormatExportDialog(
             datasetTitle = "Dining Hall Meal Serving Records",
@@ -439,14 +400,53 @@ fun MealsMasterScreen(
         )
     }
 
-    // Outcome Dialog (Scan Result / Double Serving Alert)
     mealScanOutcome?.let { outcome ->
         MealOutcomeDialog(
             outcome = outcome,
             onDismiss = onDismissScanOutcome
         )
     }
+}
 
+@Composable
+private fun EmptyMealStateCard(
+    message: String,
+    hint: String
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.Fastfood,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(36.dp)
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
 }
 
 @Composable
@@ -460,23 +460,25 @@ private fun MealStatCard(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         color = color.copy(alpha = 0.08f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.25f))
+        border = BorderStroke(1.dp, color.copy(alpha = 0.22f))
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = count,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.headlineSmall,
+                fontFamily = MonoFontFamily,
+                fontWeight = FontWeight.Bold,
                 color = color
             )
             Text(
                 text = title,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -491,77 +493,76 @@ private fun MealRecordRow(
     val timeStr = remember(record.timestamp) {
         SimpleDateFormat("hh:mm a", Locale.US).format(Date(record.timestamp))
     }
+    val roleTheme = LocalRoleTheme.current
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (student != null) {
-                StudentAvatar(student = student, size = 44.dp)
+                StudentAvatar(student = student, size = 42.dp)
             } else {
                 Surface(
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(42.dp),
                     shape = CircleShape,
-                    color = Color(0xFFE11D48).copy(alpha = 0.12f)
+                    color = roleTheme.primaryColor.copy(alpha = 0.12f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFFE11D48))
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = roleTheme.primaryColor
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = record.studentName,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "${record.studentNumber} • ${record.gradeClass}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Served by ${record.serverName}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    fontSize = 11.sp
+                    fontFamily = MonoFontFamily,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(Modifier.width(8.dp))
 
             Column(horizontalAlignment = Alignment.End) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = Color(0xFFE11D48).copy(alpha = 0.12f)
+                    color = roleTheme.containerColor
                 ) {
                     Text(
                         text = record.mealType.label.uppercase(),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE11D48)
+                        color = roleTheme.badgeTextColor
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = timeStr,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -577,23 +578,24 @@ private fun MealOutcomeDialog(
     when (outcome) {
         is MealVerificationResult.Success -> {
             val record = outcome.record
-            val timeStr = SimpleDateFormat("hh:mm:ss a", Locale.US).format(Date(record.timestamp))
+            val timeStr = remember(record.timestamp) {
+                SimpleDateFormat("hh:mm:ss a", Locale.US).format(Date(record.timestamp))
+            }
             AlertDialog(
                 onDismissRequest = onDismiss,
                 icon = {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Success",
-                        tint = Color(0xFF16A34A),
-                        modifier = Modifier.size(54.dp)
+                        tint = ApprovedGreen,
+                        modifier = Modifier.size(48.dp)
                     )
                 },
                 title = {
                     Text(
-                        text = "MEAL APPROVED & SERVED",
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF16A34A),
-                        fontSize = 18.sp
+                        text = "Meal Approved & Served",
+                        fontWeight = FontWeight.Bold,
+                        color = ApprovedGreen
                     )
                 },
                 text = {
@@ -603,26 +605,28 @@ private fun MealOutcomeDialog(
                     ) {
                         Text(
                             text = record.studentName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
                         Text(
                             text = "${record.studentNumber} • ${record.gradeClass}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = MonoFontFamily,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(Modifier.height(10.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFDCFCE7),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF16A34A))
+                            color = ApprovedGreenLight,
+                            border = BorderStroke(1.dp, ApprovedGreen)
                         ) {
                             Text(
-                                text = "${record.mealType.label.uppercase()} SESSION • $timeStr",
+                                text = "${record.mealType.label.uppercase()} • $timeStr",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = Color(0xFF15803D)
+                                color = ApprovedGreenText
                             )
                         }
                     }
@@ -630,10 +634,11 @@ private fun MealOutcomeDialog(
                 confirmButton = {
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF16A34A)
-                        ),
-                        modifier = Modifier.testTag("button_dismiss_meal_success")
+                        colors = ButtonDefaults.buttonColors(containerColor = ApprovedGreen),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("button_dismiss_meal_success")
                     ) {
                         Text("Next Student")
                     }
@@ -644,23 +649,24 @@ private fun MealOutcomeDialog(
         is MealVerificationResult.BlockedDoubleServing -> {
             val student = outcome.student
             val previous = outcome.previousRecord
-            val prevTime = SimpleDateFormat("hh:mm a", Locale.US).format(Date(previous.timestamp))
+            val prevTime = remember(previous.timestamp) {
+                SimpleDateFormat("hh:mm a", Locale.US).format(Date(previous.timestamp))
+            }
             AlertDialog(
                 onDismissRequest = onDismiss,
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Block,
                         contentDescription = "Double Serving Blocked",
-                        tint = Color(0xFFDC2626),
-                        modifier = Modifier.size(54.dp)
+                        tint = RejectedRed,
+                        modifier = Modifier.size(48.dp)
                     )
                 },
                 title = {
                     Text(
-                        text = "DOUBLE-SERVING BLOCKED!",
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFFDC2626),
-                        fontSize = 18.sp
+                        text = "Double Serving Blocked",
+                        fontWeight = FontWeight.Bold,
+                        color = RejectedRed
                     )
                 },
                 text = {
@@ -670,40 +676,42 @@ private fun MealOutcomeDialog(
                     ) {
                         Text(
                             text = student.fullName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
                         Text(
                             text = "${student.studentNumber} • ${student.gradeClass}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = MonoFontFamily,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFFEE2E2),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDC2626))
+                            color = RejectedRedLight,
+                            border = BorderStroke(1.dp, RejectedRed)
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "⚠️ Student already received ${outcome.mealType.label} today at $prevTime from ${previous.serverName}.",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF991B1B)
-                                )
-                            }
+                            Text(
+                                text = "Already received ${outcome.mealType.label} today at $prevTime (${previous.serverName}).",
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = RejectedRedText
+                            )
                         }
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFDC2626)
-                        ),
-                        modifier = Modifier.testTag("button_dismiss_double_serving")
+                        colors = ButtonDefaults.buttonColors(containerColor = RejectedRed),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("button_dismiss_double_serving")
                     ) {
-                        Text("Dismiss Alert")
+                        Text("Dismiss")
                     }
                 }
             )
@@ -717,26 +725,32 @@ private fun MealOutcomeDialog(
                         imageVector = Icons.Default.Error,
                         contentDescription = "Error",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(54.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                 },
                 title = {
                     Text(
-                        text = "STUDENT NOT FOUND",
+                        text = "Student Not Found",
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.error
                     )
                 },
                 text = {
-                    Text("Could not locate any active student matching scanned code: ${outcome.scannedCode}")
+                    Text("No active student matches code: ${outcome.scannedCode}")
                 },
                 confirmButton = {
-                    Button(onClick = onDismiss) {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                    ) {
                         Text("Dismiss")
                     }
                 }
             )
         }
+
         is MealVerificationResult.BlockedNoClearance -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
@@ -745,12 +759,12 @@ private fun MealOutcomeDialog(
                         imageVector = Icons.Default.Warning,
                         contentDescription = "No Clearance",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(54.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                 },
                 title = {
                     Text(
-                        text = "MEAL CLEARANCE BLOCKED",
+                        text = "Meal Clearance Blocked",
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -759,7 +773,12 @@ private fun MealOutcomeDialog(
                     Text("${outcome.student.fullName} (${outcome.student.studentNumber}): ${outcome.reason}")
                 },
                 confirmButton = {
-                    Button(onClick = onDismiss) {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                    ) {
                         Text("Dismiss")
                     }
                 }
