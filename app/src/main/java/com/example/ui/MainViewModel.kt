@@ -1277,40 +1277,29 @@ class MainViewModel(
         }
     }
 
-    // Cryptographic Issuer & Verifier Authority Management
+    // Cryptographic issuer management is deliberately fail-closed.
+    // The current app does not yet complete the server-side enrollment/approval
+    // and device authorization workflow, so local Admin UI checks must not grant
+    // signing or trust authority.
+    @Suppress("UNUSED_PARAMETER")
     fun setupAuthoritativeIssuerKey(preferStrongBox: Boolean = true) {
         if (!requireAdminRole("Enrolling Issuer Signing Key")) return
-        try {
-            val keyInfo = KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
-            val signer = KeystoreIssuerManager.getSigner()
-            CardCryptoManager.setActiveSigner(signer)
-            if (signer != null) {
-                TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Local Device (${keyInfo.securityLevel.name})")
-            }
-            _userFeedbackMessage.value = "Issuer Key enrolled in Keystore! Level: ${keyInfo.securityLevel.name}, kid: ${keyInfo.keyId}"
-        } catch (e: Exception) {
-            _userFeedbackMessage.value = "Failed to enroll Keystore key: ${e.message}"
-        }
+        CardCryptoManager.clearIssuerPrivateKey()
+        _userFeedbackMessage.value =
+            "Issuer signing is disabled. Complete school-server enrollment and approval before this device can issue cards."
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun enrollTrustedIssuerPublicKey(base64: String, label: String = "Remote Issuer") {
         if (!requireAdminRole("Enrolling trusted public key")) return
-        try {
-            val entry = TrustedIssuerRegistry.registerTrustedKeyBase64(base64, label)
-            _userFeedbackMessage.value = "Trusted Issuer enrolled! kid: ${entry.kid} (${entry.label})"
-        } catch (e: Exception) {
-            _userFeedbackMessage.value = "Failed to enroll public key: ${e.message}"
-        }
+        _userFeedbackMessage.value =
+            "Local issuer enrollment is disabled. Trusted public keys must be provisioned through the school server."
     }
 
     fun revokeTrustedIssuer(kid: String) {
-        if (!requireAdminRole("Revoking trusted issuer key")) return
-        val success = TrustedIssuerRegistry.revokeIssuer(kid)
-        if (success) {
-            _userFeedbackMessage.value = "Issuer key '$kid' revoked! Associated badges will now be rejected."
-        } else {
-            _userFeedbackMessage.value = "Key '$kid' not found in trusted registry."
-        }
+        if (!requireAdminRole("Revoking issuer key")) return
+        _userFeedbackMessage.value =
+            "Local-only revocation is disabled. Revoke issuer '$kid' through the school server so every device receives the same status."
     }
 
 
