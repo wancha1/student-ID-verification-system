@@ -6,6 +6,7 @@ CREATE ROLE service_role NOLOGIN;
 
 CREATE SCHEMA auth;
 CREATE SCHEMA private;
+GRANT USAGE ON SCHEMA private TO authenticated;
 
 CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid
