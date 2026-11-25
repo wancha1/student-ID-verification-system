@@ -75,6 +75,10 @@ import com.example.ui.admin.BatchPrintIdCardsDialog
 import com.example.ui.admin.HeadTeacherDashboardScreen
 import com.example.ui.admin.StudentDetailScreen
 import com.example.ui.auth.SupabaseStaffLoginScreen
+import com.example.ui.attendance.AttendanceMasterScreen
+import com.example.ui.exeat.ExeatPassScreen
+import com.example.ui.notifications.GuardianAlertsScreen
+import com.example.ui.requirements.RequirementsMasterScreen
 import com.example.ui.components.MultiFormatExportDialog
 import com.example.ui.guard.GuardDashboardScreen
 import com.example.ui.guard.GuardScannerScreen
@@ -98,6 +102,13 @@ fun StudentAccessApp(
     val filteredStudents by viewModel.filteredStudents.collectAsStateWithLifecycle()
     val scanLogs by viewModel.scanLogs.collectAsStateWithLifecycle()
     val syncInfo by viewModel.syncInfo.collectAsStateWithLifecycle()
+    val guardianNotifications by viewModel.guardianNotifications.collectAsStateWithLifecycle()
+    val exeatPasses by viewModel.exeatPasses.collectAsStateWithLifecycle()
+    val attendanceRecords by viewModel.attendanceRecords.collectAsStateWithLifecycle()
+    val selectedAttendanceSubject by viewModel.selectedAttendanceSubject.collectAsStateWithLifecycle()
+    val selectedAttendanceSession by viewModel.selectedAttendanceSession.collectAsStateWithLifecycle()
+    val requirementsList by viewModel.requirementsList.collectAsStateWithLifecycle()
+    val requirementsSearchQuery by viewModel.requirementsSearchQuery.collectAsStateWithLifecycle()
 
     val activeScanResult by viewModel.activeScanResult.collectAsStateWithLifecycle()
     val activeScannedStudent by viewModel.currentScannedStudent.collectAsStateWithLifecycle()
@@ -115,6 +126,10 @@ fun StudentAccessApp(
     val isMealScannerOpen by viewModel.isMealScannerOpen.collectAsStateWithLifecycle()
 
     var showLogsScreen by remember { mutableStateOf(false) }
+    var showGuardianAlertsScreen by remember { mutableStateOf(false) }
+    var showExeatScreen by remember { mutableStateOf(false) }
+    var showAttendanceScreen by remember { mutableStateOf(false) }
+    var showRequirementsScreen by remember { mutableStateOf(false) }
     var showMealsScreen by remember { mutableStateOf(false) }
     var showHeadStudentsScreen by remember { mutableStateOf(false) }
     var mealsTab by remember { mutableStateOf("SERVE") }
@@ -166,12 +181,18 @@ fun StudentAccessApp(
         } else {
             val roleTheme = LocalRoleTheme.current
             val roleColor = roleTheme.primaryColor
-            val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showMealsScreen || (selectedStudentDetail != null)
+            val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showGuardianAlertsScreen ||
+                showExeatScreen || showAttendanceScreen || showRequirementsScreen ||
+                showMealsScreen || (selectedStudentDetail != null)
 
             BackHandler(enabled = showSignOutConfirm) { showSignOutConfirm = false }
             BackHandler(enabled = showBatchPrintDialog) { showBatchPrintDialog = false }
             BackHandler(enabled = showAllExportsDialog) { showAllExportsDialog = false }
             BackHandler(enabled = showLogsScreen) { showLogsScreen = false }
+            BackHandler(enabled = showGuardianAlertsScreen) { showGuardianAlertsScreen = false }
+            BackHandler(enabled = showExeatScreen) { showExeatScreen = false }
+            BackHandler(enabled = showAttendanceScreen) { showAttendanceScreen = false }
+            BackHandler(enabled = showRequirementsScreen) { showRequirementsScreen = false }
             BackHandler(enabled = showMealsScreen) { showMealsScreen = false }
             BackHandler(enabled = showHeadStudentsScreen && selectedStudentDetail == null) { showHeadStudentsScreen = false }
             BackHandler(enabled = selectedStudentDetail != null) { viewModel.selectStudentForDetail(null) }
@@ -271,6 +292,67 @@ fun StudentAccessApp(
                                                     showOptionsMenu = false
                                                 },
                                                 modifier = Modifier.testTag("menu_multi_export")
+                                            )
+                                        }
+
+                                        if (user.role == UserRole.ADMINISTRATOR || user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                                            DropdownMenuItem(
+                                                text = { Text("Guardian WhatsApp Alerts") },
+                                                leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+                                                onClick = {
+                                                    showGuardianAlertsScreen = true
+                                                    showExeatScreen = false
+                                                    showAttendanceScreen = false
+                                                    showRequirementsScreen = false
+                                                    showLogsScreen = false
+                                                    showMealsScreen = false
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_view_guardian_alerts")
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Exeat & Leave Passes") },
+                                                leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                                                onClick = {
+                                                    showExeatScreen = true
+                                                    showGuardianAlertsScreen = false
+                                                    showAttendanceScreen = false
+                                                    showRequirementsScreen = false
+                                                    showLogsScreen = false
+                                                    showMealsScreen = false
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_view_exeat_passes")
+                                            )
+                                        }
+                                        if (user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                                            DropdownMenuItem(
+                                                text = { Text("Attendance Review") },
+                                                leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
+                                                onClick = {
+                                                    showAttendanceScreen = true
+                                                    showRequirementsScreen = false
+                                                    showGuardianAlertsScreen = false
+                                                    showExeatScreen = false
+                                                    showLogsScreen = false
+                                                    showMealsScreen = false
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_view_attendance")
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Requirements Review") },
+                                                leadingIcon = { Icon(Icons.Default.TableChart, contentDescription = null) },
+                                                onClick = {
+                                                    showRequirementsScreen = true
+                                                    showAttendanceScreen = false
+                                                    showGuardianAlertsScreen = false
+                                                    showExeatScreen = false
+                                                    showLogsScreen = false
+                                                    showMealsScreen = false
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_view_requirements")
                                             )
                                         }
 
@@ -469,6 +551,51 @@ fun StudentAccessApp(
                             scanLogs = scanLogs,
                             onBack = { showLogsScreen = false },
                             onClearLogs = null
+                        )
+                    } else if (showGuardianAlertsScreen) {
+                        GuardianAlertsScreen(
+                            notifications = guardianNotifications,
+                            onBack = { showGuardianAlertsScreen = false },
+                            onSendCustomAlert = { studentName, phone, message ->
+                                viewModel.sendCustomGuardianAlert(studentName, phone, message)
+                            },
+                            readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
+                        )
+                    } else if (showExeatScreen) {
+                        ExeatPassScreen(
+                            exeatPasses = exeatPasses,
+                            students = allStudents,
+                            onBack = { showExeatScreen = false },
+                            onIssueExeatPass = { pass -> viewModel.issueExeatPass(pass) },
+                            onMarkExeatUsed = { passId -> viewModel.markExeatUsed(passId) },
+                            readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT
+                        )
+                    } else if (showAttendanceScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                        AttendanceMasterScreen(
+                            user = user,
+                            attendanceRecords = attendanceRecords,
+                            selectedSubject = selectedAttendanceSubject,
+                            selectedSession = selectedAttendanceSession,
+                            onSubjectChange = { viewModel.setAttendanceSubject(it) },
+                            onSessionChange = { viewModel.setAttendanceSession(it) },
+                            onOpenScanner = { },
+                            onManualLookup = { },
+                            onCorrectAttendance = { _, _ -> },
+                            readOnly = true
+                        )
+                    } else if (showRequirementsScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                        RequirementsMasterScreen(
+                            user = user,
+                            requirementsList = requirementsList,
+                            allStudents = allStudents,
+                            searchQuery = requirementsSearchQuery,
+                            onSearchQueryChange = { viewModel.setRequirementsSearchQuery(it) },
+                            onToggleRequirement = { _, _ -> },
+                            onMarkAllCleared = { },
+                            onUpdateNotes = { _, _ -> },
+                            onOpenScanner = { },
+                            onExport = { format -> viewModel.exportDataset("REQUIREMENTS", format, context) },
+                            readOnly = true
                         )
                     } else if (showMealsScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                         MealsMasterScreen(
