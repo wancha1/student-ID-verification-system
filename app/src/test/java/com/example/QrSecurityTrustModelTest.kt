@@ -687,7 +687,7 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 20. A revoked issuer key cannot be re-enrolled or physically deleted.
+    // 21. A revoked issuer key cannot be re-enrolled or physically deleted.
     // =========================================================================
     @Test
     fun test20_RevokedIssuerKeyCannotBeReEnrolledOrDeleted() {
@@ -716,11 +716,11 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 21. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+    // 22. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
  multiple concurrent issuer keys without invalidating existing cards.
     // =========================================================================
     @Test
-    fun test20_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
+    fun test21_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
         // Issuer 1 issued Card 1 (seeded in setup)
         val scan1 = roomRepository.verifyStudentByQr(validPayload1)
         assertTrue("Card 1 must verify with Issuer 1 key", scan1 is StudentScanResult.Success)
@@ -770,7 +770,7 @@ class QrSecurityTrustModelTest {
     // 21. Gate devices operate without any private keys.
     // =========================================================================
     @Test
-    fun test21_GateDeviceHasZeroPrivateKeysAndVerifiesFullyOffline() = runBlocking {
+    fun test22_GateDeviceHasZeroPrivateKeysAndVerifiesFullyOffline() = runBlocking {
         // Gate terminal hardening: remove all active private signing keys
         CardCryptoManager.clearIssuerPrivateKey()
         assertFalse("Gate terminal must report zero private keys", CardCryptoManager.hasIssuerPrivateKey())
@@ -790,10 +790,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 22. Protected Issuer Keys: Attempting to overwrite existing alias fails.
+    // 23. Protected Issuer Keys: Attempting to overwrite existing alias fails.
     // =========================================================================
     @Test
-    fun test22_ExistingIssuerKeyCannotBeOverwritten() {
+    fun test23_ExistingIssuerKeyCannotBeOverwritten() {
         // Test Keystore duplicate alias protection policy
         val alias = "test_issuer_protect_alias"
         val ks = try {
@@ -830,10 +830,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 23. Reading model properties (uniqueQrCode, qrPayload) NEVER invokes signing.
+    // 24. Reading model properties (uniqueQrCode, qrPayload) NEVER invokes signing.
     // =========================================================================
     @Test
-    fun test23_ReadingModelQrPropertiesDoesNotInvokeSigning() {
+    fun test24_ReadingModelQrPropertiesDoesNotInvokeSigning() {
         // Clear active signer
         CardCryptoManager.clearIssuerPrivateKey()
         assertFalse("Must have no active signer", CardCryptoManager.hasIssuerPrivateKey())
@@ -868,10 +868,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 24. Deterministic Date Semantics & Exact Boundary Testing (Africa/Kampala).
+    // 25. Deterministic Date Semantics & Exact Boundary Testing (Africa/Kampala).
     // =========================================================================
     @Test
-    fun test24_DateSemanticsBoundaryTestingAfricaKampala() {
+    fun test25_DateSemanticsBoundaryTestingAfricaKampala() {
         val validFrom = "2026-06-01"
         val validUntil = "2026-06-30"
 
