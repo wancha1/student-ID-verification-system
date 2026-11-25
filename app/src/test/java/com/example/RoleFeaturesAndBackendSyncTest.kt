@@ -48,6 +48,7 @@ import java.security.KeyPair
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.Base64
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -367,6 +368,23 @@ class RoleFeaturesAndBackendSyncTest {
         assertFalse(database.studentDao().getStudentById(boardingStudentId)!!.isDeleted)
         assertEquals(1, database.scanLogDao().getAllLogsFlow().first().size)
         assertEquals(1, database.mealRecordDao().observeAll().first().size)
+    }
+
+    @Test
+    fun issuerAdminActionsRemainFailClosedUntilServerAuthorizationExists() {
+        viewModel.loginAs(UserRole.ADMINISTRATOR, "Registry Admin")
+        assertTrue(CardCryptoManager.hasIssuerPrivateKey())
+
+        viewModel.setupAuthoritativeIssuerKey()
+        assertFalse("Admin UI must not activate local signing authority", CardCryptoManager.hasIssuerPrivateKey())
+        assertTrue("Local setup must not enroll a trusted issuer", TrustedIssuerRegistry.getAllIssuers().isEmpty())
+
+        val publicKeyBase64 = Base64.getEncoder().encodeToString(testKeyPair.public.encoded)
+        viewModel.enrollTrustedIssuerPublicKey(publicKeyBase64)
+        assertTrue("Client-side public-key enrollment must remain disabled", TrustedIssuerRegistry.getAllIssuers().isEmpty())
+
+        viewModel.revokeTrustedIssuer("unknown-test-kid")
+        assertTrue("Local revocation must not mutate the trust registry", TrustedIssuerRegistry.getAllIssuers().isEmpty())
     }
 
     @Test
