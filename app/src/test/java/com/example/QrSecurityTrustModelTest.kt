@@ -729,13 +729,16 @@ class QrSecurityTrustModelTest {
         val issuer2Signer = SoftwareCardSigner(issuer2KeyPair)
         TrustedIssuerRegistry.registerTrustedKey(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
 
+        // Activate Issuer 2 explicitly in the test harness. Production code cannot
+        // pass an arbitrary signer into signCardPayload.
+        CardCryptoManager.setActiveSigner(issuer2Signer)
+
         // Issuer 2 issues Card 2
         val cardId2 = CardCryptoManager.generateSecureRandomCardId()
         val payload2 = CardCryptoManager.signCardPayload(
             cardId = cardId2,
             validFrom = validFrom,
-            validUntil = validUntil,
-            signer = issuer2Signer
+            validUntil = validUntil
         )
 
         val now = System.currentTimeMillis()
