@@ -10,4 +10,3 @@ alter table public.students
 alter table public.students
   add constraint students_fee_status_check
   check (fee_status in ('CLEARED','OUTSTANDING'));
-

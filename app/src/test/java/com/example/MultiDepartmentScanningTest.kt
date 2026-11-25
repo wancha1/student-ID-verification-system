@@ -138,14 +138,12 @@ class MultiDepartmentScanningTest {
                 cardId = dayScholarCardId,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                signer = testSigner
             )
 
             boarderQrPayload = CardCryptoManager.signCardPayload(
                 cardId = boarderCardId,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                signer = testSigner
             )
 
             val c1 = CardEntity(
