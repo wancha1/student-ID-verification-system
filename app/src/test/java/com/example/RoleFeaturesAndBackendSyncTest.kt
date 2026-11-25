@@ -93,14 +93,12 @@ class RoleFeaturesAndBackendSyncTest {
         boardingQrPayload = CardCryptoManager.signCardPayload(
             cardId = boardingCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31",
-            signer = testSigner
+            validUntil = "2026-12-31"
         )
         dayScholarQrPayload = CardCryptoManager.signCardPayload(
             cardId = dayScholarCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31",
-            signer = testSigner
+            validUntil = "2026-12-31"
         )
 
         val boarder = StudentEntity(
