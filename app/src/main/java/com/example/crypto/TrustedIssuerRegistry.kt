@@ -154,11 +154,13 @@ object TrustedIssuerRegistry {
      * Removes an issuer key from the registry completely.
      */
     fun removeIssuer(kid: String): Boolean {
-        // Revocation history must remain available as a tombstone. Physical
-        // deletion would permit the same public key to be enrolled again.
         val cleanKid = kid.trim().lowercase()
-        val existing = getIssuerEntry(cleanKid) ?: return false
-        return existing.isRevoked && false
+        if (getIssuerEntry(cleanKid) == null) return false
+        // Keep revoked-key tombstones permanently. Deleting an entry would
+        // permit the same public key to be enrolled again on this device.
+        throw SecurityException(
+            "Issuer entries cannot be physically removed. Revoke the key and retain its tombstone."
+        )
     }
 
     /**
