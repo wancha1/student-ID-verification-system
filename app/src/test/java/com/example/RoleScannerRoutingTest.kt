@@ -22,6 +22,7 @@ import com.example.model.ScanDepartment
 import com.example.model.StudentScanResult
 import com.example.model.UserRole
 import com.example.testutil.TestCardCryptoHelper
+import com.example.testutil.MainDispatcherRule
 import com.example.ui.MainViewModel
 import com.example.util.CardCryptoManager
 import com.example.util.QrUnifiedVerifier
@@ -36,6 +37,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -45,6 +47,9 @@ import java.security.KeyPair
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class RoleScannerRoutingTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var context: Context
     private lateinit var database: AppDatabase
