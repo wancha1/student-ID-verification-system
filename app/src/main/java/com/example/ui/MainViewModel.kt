@@ -292,13 +292,7 @@ class MainViewModel(
                 studentNumber = student.studentNumber,
                 studentName = student.fullName,
                 gradeClass = student.gradeClass,
-                uniformComplete = student.feesStatus == FeeStatus.CLEARED,
-                sportsKitComplete = true,
-                textbooksSubmitted = student.feesStatus == FeeStatus.CLEARED,
-                medicalFormSigned = true,
-                schoolIdIssued = true,
-                rulesAgreementSigned = true,
-                busPassCleared = student.isDayScholar,
+                // Each requirement must be explicitly verified; fee and boarding status are not evidence.
                 notes = student.notes
             )
         }.filter {
@@ -424,7 +418,17 @@ class MainViewModel(
         }
         viewModelScope.launch {
             _isScannerOpen.value = false
-            val scanResult = repository.verifyStudentByQr(rawCode)
+            val verifiedResult = repository.verifyStudentByQr(rawCode)
+            val scanResult = if (verifiedResult is StudentScanResult.Success) {
+                val direction = _gateDirection.value.name
+                verifiedResult.copy(
+                    isApproved = false,
+                    reason = "Identity and active card verified. $direction movement is not authorized until the school approves the gate policy. No movement authorization was issued.",
+                    isPolicyPending = true
+                )
+            } else {
+                verifiedResult
+            }
             _activeScanResult.value = scanResult
 
             val guard = _currentUser.value?.name ?: "Security Guard"
@@ -447,7 +451,7 @@ class MainViewModel(
                             cardId = card?.id,
                             cardIdentifier = card?.cardIdentifier ?: "CRD-UNKNOWN",
                             qrPayload = card?.qrPayload ?: rawCode,
-                            decision = if (scanResult.isApproved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
+                            decision = if (scanResult.isPolicyPending) GateVerificationDecision.POLICY_PENDING else if (scanResult.isApproved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
                             feeStatus = student.feesStatus,
                             cardStatus = card?.status ?: CardStatus.ACTIVE,
                             isDayScholar = student.isDayScholar,
@@ -456,13 +460,14 @@ class MainViewModel(
                             isOfflineDecision = scanResult.isOfflineData,
                             dataSyncTimestampAtScan = scanResult.lastSyncTimestamp,
                             guardName = guard,
-                            deviceIdentifier = "GateTerminal-01",
-                            gateLocation = "Gate 1 (Main Entrance)"
+                            deviceIdentifier = _currentUser.value?.station ?: "GateTerminal",
+                            gateLocation = _currentUser.value?.station ?: "Gate"
                         )
                     )
 
                     context?.let { ctx ->
-                        FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
+                        if (scanResult.isPolicyPending) FeedbackHelper.playWarningSoundAndHaptic(ctx)
+                        else FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
                     }
                 }
 
@@ -1018,12 +1023,6 @@ class MainViewModel(
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         _isMealScannerOpen.value = false
-        val selectedMeal = _activeMealType.value
-        if (!selectedMeal.isEnabledForServing) {
-            _userFeedbackMessage.value = "${selectedMeal.label} is disabled. Only lunch and supper can be served."
-            FeedbackHelper.playDeniedSoundAndHaptic(context)
-            return
-        }
         val user = _currentUser.value
         if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
             _userFeedbackMessage.value = "Access Denied: Unauthenticated session. Meal Staff authorization is required."
@@ -1032,47 +1031,25 @@ class MainViewModel(
             return
         }
 
-        // Production path uses the shared verifier, which validates the exact signed card,
-        // checks its lifecycle status, enforces meal permissions, and persists the event to Room.
+        // The shared verifier keeps production scans fail-closed. The school has not
+        // approved meal periods, eligibility, exceptions or a serving fallback yet.
         if (repository.database != null && repository.syncManagerInstance != null) {
             _selectedDepartment.value = ScanDepartment.MEALS
             scanUnifiedQr(rawCode, context)
             return
         }
 
-        // Test/demo repositories have no Room database. Still use the repository's full
-        // credential and card-lifecycle verifier rather than trusting the QR signature alone.
+        // Demo/test repositories must not bypass the same policy boundary.
         viewModelScope.launch {
             when (val verification = repository.verifyStudentByQr(rawCode)) {
                 is StudentScanResult.Success -> {
-                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                    val meal = _activeMealType.value
-                    val previous = _mealRecords.value.find {
-                        it.studentId == verification.student.id &&
-                            it.mealType == meal && it.mealDate == today &&
-                            it.status == MealServingStatus.SERVED
-                    }
-                    if (previous != null) {
-                        _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
-                            verification.student, meal, previous
-                        )
-                        FeedbackHelper.playWarningSoundAndHaptic(context)
-                    } else {
-                        val record = MealRecord(
-                            studentId = verification.student.id,
-                            studentNumber = verification.student.studentNumber,
-                            studentName = verification.student.fullName,
-                            gradeClass = verification.student.gradeClass,
-                            mealType = meal,
-                            mealDate = today,
-                            timestamp = System.currentTimeMillis(),
-                            serverName = user.name,
-                            status = MealServingStatus.SERVED
-                        )
-                        _mealRecords.value = listOf(record) + _mealRecords.value
-                        _mealScanOutcome.value = MealVerificationResult.Success(record)
-                        FeedbackHelper.playApprovedSoundAndHaptic(context)
-                    }
+                    _mealScanOutcome.value = MealVerificationResult.PolicyPending(
+                        verification.student,
+                        "Meal policy is not approved/configured. No meal was recorded. Follow the school's approved manual procedure."
+                    )
+                    _userFeedbackMessage.value =
+                        "Student identity found. Meal eligibility remains pending school policy; no serving was recorded."
+                    FeedbackHelper.playWarningSoundAndHaptic(context)
                 }
                 else -> {
                     _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
@@ -1133,23 +1110,6 @@ class MainViewModel(
             else -> current
         }
         _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
-    }
-
-    fun markAllRequirementsCleared(studentId: String) {
-        if (!requirePermission(StaffPermission.EXAM_CLEARANCE, "Clearing student requirements")) return
-        val current = requirementsList.value.find { it.studentId == studentId } ?: return
-        val updated = current.copy(
-            uniformComplete = true,
-            sportsKitComplete = true,
-            textbooksSubmitted = true,
-            medicalFormSigned = true,
-            schoolIdIssued = true,
-            rulesAgreementSigned = true,
-            busPassCleared = true,
-            updatedAt = System.currentTimeMillis()
-        )
-        _requirementsOverrides.value = _requirementsOverrides.value + (studentId to updated)
-        _userFeedbackMessage.value = "All items marked CLEARED for ${current.studentName}!"
     }
 
     fun updateRequirementNotes(studentId: String, notes: String) {
@@ -1277,40 +1237,29 @@ class MainViewModel(
         }
     }
 
-    // Cryptographic Issuer & Verifier Authority Management
+    // Cryptographic issuer management is deliberately fail-closed.
+    // The current app does not yet complete the server-side enrollment/approval
+    // and device authorization workflow, so local Admin UI checks must not grant
+    // signing or trust authority.
+    @Suppress("UNUSED_PARAMETER")
     fun setupAuthoritativeIssuerKey(preferStrongBox: Boolean = true) {
         if (!requireAdminRole("Enrolling Issuer Signing Key")) return
-        try {
-            val keyInfo = KeystoreIssuerManager.generateIssuerKey(preferStrongBox = preferStrongBox)
-            val signer = KeystoreIssuerManager.getSigner()
-            CardCryptoManager.setActiveSigner(signer)
-            if (signer != null) {
-                TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Local Device (${keyInfo.securityLevel.name})")
-            }
-            _userFeedbackMessage.value = "Issuer Key enrolled in Keystore! Level: ${keyInfo.securityLevel.name}, kid: ${keyInfo.keyId}"
-        } catch (e: Exception) {
-            _userFeedbackMessage.value = "Failed to enroll Keystore key: ${e.message}"
-        }
+        CardCryptoManager.clearIssuerPrivateKey()
+        _userFeedbackMessage.value =
+            "Issuer signing is disabled. Complete school-server enrollment and approval before this device can issue cards."
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun enrollTrustedIssuerPublicKey(base64: String, label: String = "Remote Issuer") {
         if (!requireAdminRole("Enrolling trusted public key")) return
-        try {
-            val entry = TrustedIssuerRegistry.registerTrustedKeyBase64(base64, label)
-            _userFeedbackMessage.value = "Trusted Issuer enrolled! kid: ${entry.kid} (${entry.label})"
-        } catch (e: Exception) {
-            _userFeedbackMessage.value = "Failed to enroll public key: ${e.message}"
-        }
+        _userFeedbackMessage.value =
+            "Local issuer enrollment is disabled. Trusted public keys must be provisioned through the school server."
     }
 
     fun revokeTrustedIssuer(kid: String) {
-        if (!requireAdminRole("Revoking trusted issuer key")) return
-        val success = TrustedIssuerRegistry.revokeIssuer(kid)
-        if (success) {
-            _userFeedbackMessage.value = "Issuer key '$kid' revoked! Associated badges will now be rejected."
-        } else {
-            _userFeedbackMessage.value = "Key '$kid' not found in trusted registry."
-        }
+        if (!requireAdminRole("Revoking issuer key")) return
+        _userFeedbackMessage.value =
+            "Local-only revocation is disabled. Revoke issuer '$kid' through the school server so every device receives the same status."
     }
 
 
@@ -1384,10 +1333,17 @@ class MainViewModel(
                                 )
                                 _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
                             } else {
-                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
-                                    student = result.student,
-                                    reason = result.statusDetail
-                                )
+                                _mealScanOutcome.value = if (result.isPolicyPending) {
+                                    MealVerificationResult.PolicyPending(
+                                        student = result.student,
+                                        reason = result.statusDetail
+                                    )
+                                } else {
+                                    MealVerificationResult.BlockedNoClearance(
+                                        student = result.student,
+                                        reason = result.statusDetail
+                                    )
+                                }
                             }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
@@ -1401,7 +1357,10 @@ class MainViewModel(
                                 teacherName = user.name
                             )
                         }
-                        context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
+                        context?.let {
+                            if (result.isPolicyPending) FeedbackHelper.playWarningSoundAndHaptic(it)
+                            else FeedbackHelper.playFeedback(it, result.isAllowed)
+                        }
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message

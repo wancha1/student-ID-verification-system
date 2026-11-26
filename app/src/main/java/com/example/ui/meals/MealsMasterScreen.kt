@@ -70,6 +70,7 @@ import com.example.ui.theme.ApprovedGreen
 import com.example.ui.theme.ApprovedGreenLight
 import com.example.ui.theme.ApprovedGreenText
 import com.example.ui.theme.LocalRoleTheme
+import com.example.ui.theme.PendingAmber
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedLight
@@ -744,6 +745,41 @@ private fun MealOutcomeDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
+                    ) {
+                        Text("Dismiss")
+                    }
+                }
+            )
+        }
+
+        is MealVerificationResult.PolicyPending -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Meal policy pending",
+                        tint = PendingAmber,
+                        modifier = Modifier.size(48.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Meal Policy Pending",
+                        fontWeight = FontWeight.Bold,
+                        color = PendingAmber
+                    )
+                },
+                text = {
+                    Text("${outcome.student.fullName} (${outcome.student.studentNumber}): ${outcome.reason}")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PendingAmber)
                     ) {
                         Text("Dismiss")
                     }

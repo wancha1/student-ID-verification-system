@@ -40,7 +40,7 @@ object CardCryptoManager {
      * Explicitly sets the active signer for authoritative operations.
      * In production, this is configured during issuer enrollment.
      */
-    fun setActiveSigner(signer: CardSigner?) {
+    internal fun setActiveSigner(signer: CardSigner?) {
         activeSigner = signer
     }
 
@@ -48,7 +48,7 @@ object CardCryptoManager {
      * Gate-only device hardening: removes any active signing capability completely.
      * After this call, the device can strictly only VERIFY cards.
      */
-    fun clearIssuerPrivateKey() {
+    internal fun clearIssuerPrivateKey() {
         activeSigner = null
     }
 
@@ -99,10 +99,9 @@ object CardCryptoManager {
     fun signCardPayload(
         cardId: String,
         validFrom: String? = null,
-        validUntil: String? = null,
-        signer: CardSigner? = null
+        validUntil: String? = null
     ): String {
-        val effectiveSigner = signer ?: activeSigner
+        val effectiveSigner = activeSigner
             ?: throw IllegalStateException(
                 "Cannot sign card payload: Device is operating in Gate / Verifier mode with no Issuer Signing Key configured. " +
                 "Card issuance requires an authoritative Issuer device."
@@ -245,7 +244,7 @@ object CardCryptoManager {
     /**
      * Resets state for unit/Robolectric test isolation.
      */
-    fun resetForTesting() {
+    internal fun resetForTesting() {
         activeSigner = null
         TrustedIssuerRegistry.clearAll()
     }

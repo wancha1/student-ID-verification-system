@@ -63,7 +63,8 @@ enum class ExamClearanceStatus {
     CLEARED_SPECIAL_EXCEPTION,  // Approved exception by authorized Head Teacher
     PENDING_BURSAR_RECOMMENDED, // Bursar recommended exception, awaiting Head Teacher approval
     BLOCKED_FEES,               // Outstanding balance without approved exception
-    BLOCKED_REQUIREMENTS        // Mandatory items missing
+    BLOCKED_REQUIREMENTS,       // Mandatory items missing
+    POLICY_PENDING              // School exam clearance policy not approved/configured
 }
 
 /**
@@ -85,7 +86,9 @@ sealed class DepartmentVerificationResult {
         val mealStatus: MealServingStatus? = null,
         val examStatus: ExamClearanceStatus? = null,
         val attendanceSubject: String? = null,
-        val attendanceSession: String? = null
+        val attendanceSession: String? = null,
+        /** True when identity is verified but school policy has not authorized the requested action. */
+        val isPolicyPending: Boolean = false
     ) : DepartmentVerificationResult()
 
     data class PermissionDenied(
