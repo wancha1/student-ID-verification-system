@@ -68,7 +68,7 @@ class MultiDeviceOfflineDuplicateAuditTest {
         testKeyPair = TestCardCryptoHelper.generateKeyPair()
         testSigner = SoftwareCardSigner(testKeyPair)
         CardCryptoManager.setActiveSigner(testSigner)
-        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Primary Test Issuer Authority")
+        TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "Primary Test Issuer Authority")
 
         val now = System.currentTimeMillis()
         val s1 = StudentEntity(
