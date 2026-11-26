@@ -44,6 +44,9 @@ object TrustedIssuerRegistry {
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
+        // Rebuild in-memory state from the persisted server-provisioned trust snapshot.
+        keyCache.clear()
+        entryCache.clear()
         loadAllFromStorage()
     }
 
@@ -159,16 +162,6 @@ object TrustedIssuerRegistry {
     fun getAllIssuers(): List<TrustedIssuerEntry> {
         val kids = getEnrolledKids()
         return kids.mapNotNull { getIssuerEntry(it) }
-    }
-
-    /**
-     * Clears all trusted issuers (for test isolation and clean resetting).
-     */
-    internal fun clearAll() {
-        keyCache.clear()
-        entryCache.clear()
-        val prefs = getPrefs()
-        prefs?.edit()?.clear()?.apply()
     }
 
     private fun persistEntry(entry: TrustedIssuerEntry) {
