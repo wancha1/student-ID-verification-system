@@ -37,6 +37,20 @@ object TestCardCryptoHelper {
     }
 
     /**
+     * Simulates a server-authorized revocation tombstone delivered to the device.
+     * This helper is test-source only; production code has no local revocation path.
+     */
+    fun seedServerRevokedIssuer(kid: String) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val normalizedKid = kid.trim().lowercase()
+        val prefs = context.getSharedPreferences("ltc_trusted_issuer_registry", Context.MODE_PRIVATE)
+        check(prefs.edit().putBoolean("issuer_revoked_$normalizedKid", true).commit()) {
+            "Could not seed server issuer revocation fixture"
+        }
+        TrustedIssuerRegistry.initialize(context)
+    }
+
+    /**
      * Seeds a server-provisioned trust record for tests. This helper is test-source
      * only; production code has no local enrollment path.
      */
