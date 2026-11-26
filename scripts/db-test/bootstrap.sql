@@ -1,4 +1,4 @@
--- Minimal Supabase-compatible fixture for the two Blocker 1 migrations.
+-- Minimal Supabase-compatible fixture for issuer, transfer-guard and role-boundary migrations.
 -- All records are synthetic. This is not a production schema dump.
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
