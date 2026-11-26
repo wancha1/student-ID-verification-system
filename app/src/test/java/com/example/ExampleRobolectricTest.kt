@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.MockStudentRepository
 import com.example.testutil.TestCardCryptoHelper
+import com.example.testutil.MainDispatcherRule
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
@@ -23,6 +24,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -32,6 +34,9 @@ import java.util.UUID
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExampleRobolectricTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var repository: MockStudentRepository
     private lateinit var viewModel: MainViewModel
@@ -248,7 +253,7 @@ class ExampleRobolectricTest {
         // Scan invalid barcode format
         viewModel.handleBarcodeScan("NON_SCHOOL_BARCODE_XYZ")
         val invalidResult = withTimeout(5_000) {
-            viewModel.activeScanResult.first { it is StudentScanResult.StudentNotFound }
+            viewModel.activeScanResult.first { it is StudentScanResult.InvalidQr }
         }
         assertNotNull(invalidResult)
         assertTrue(invalidResult is StudentScanResult.InvalidQr)
