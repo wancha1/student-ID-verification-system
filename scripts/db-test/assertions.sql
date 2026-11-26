@@ -27,6 +27,7 @@ END $$;
 -- An authorized Admin can revoke exactly once; actor attribution is captured.
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000123', false);
 SELECT set_config('test.staff_authorized', 'true', false);
+SELECT set_config('test.staff_role', 'ADMIN', false);
 SET ROLE authenticated;
 UPDATE public.trusted_issuers
 SET is_revoked = true
@@ -120,3 +121,76 @@ BEGIN
 END $$;
 
 SELECT 'PASS: Blocker 1 migration integration assertions' AS result;
+
+
+-- Head Teacher remains able to read private profiles and photos, but cannot write them.
+SELECT set_config('test.staff_role', 'HEAD_TEACHER', false);
+SET ROLE authenticated;
+DO $$
+DECLARE affected integer;
+BEGIN
+  IF (SELECT count(*) FROM public.student_private
+      WHERE school_id = 'school-test' AND student_id = 'student-test-1') <> 1 THEN
+    RAISE EXCEPTION 'Head Teacher must retain private-profile SELECT access';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.student_private (school_id, student_id, guardian_name)
+    VALUES ('school-test', 'student-test-2', 'Must be denied');
+    RAISE EXCEPTION 'Expected Head Teacher private-profile INSERT to be denied';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  UPDATE public.student_private
+  SET guardian_name = 'Head Teacher write must be denied'
+  WHERE school_id = 'school-test' AND student_id = 'student-test-1';
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 0 THEN
+    RAISE EXCEPTION 'Head Teacher unexpectedly updated a private profile';
+  END IF;
+
+  IF (SELECT count(*) FROM storage.objects
+      WHERE bucket_id = 'student-photos'
+        AND name = 'school-test/student-test-1/photo.jpg') <> 1 THEN
+    RAISE EXCEPTION 'Head Teacher must retain student-photo SELECT access';
+  END IF;
+
+  BEGIN
+    INSERT INTO storage.objects (bucket_id, name)
+    VALUES ('student-photos', 'school-test/student-test-2/photo.jpg');
+    RAISE EXCEPTION 'Expected Head Teacher photo INSERT to be denied';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  UPDATE storage.objects
+  SET name = 'school-test/student-test-1/changed.jpg'
+  WHERE bucket_id = 'student-photos'
+    AND name = 'school-test/student-test-1/photo.jpg';
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 0 THEN
+    RAISE EXCEPTION 'Head Teacher unexpectedly updated a student photo';
+  END IF;
+
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'student-photos'
+    AND name = 'school-test/student-test-1/photo.jpg';
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 0 THEN
+    RAISE EXCEPTION 'Head Teacher unexpectedly deleted a student photo';
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Admin retains the registry and photo write capabilities.
+SELECT set_config('test.staff_role', 'ADMIN', false);
+SET ROLE authenticated;
+UPDATE public.student_private
+SET guardian_name = 'Admin update allowed'
+WHERE school_id = 'school-test' AND student_id = 'student-test-1';
+INSERT INTO storage.objects (bucket_id, name)
+VALUES ('student-photos', 'school-test/student-test-2/photo.jpg');
+RESET ROLE;
+
+SELECT 'PASS: Head Teacher read-only student profile and photo boundary' AS result;
