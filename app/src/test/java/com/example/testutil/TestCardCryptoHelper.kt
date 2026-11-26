@@ -1,10 +1,14 @@
 package com.example.testutil
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.example.crypto.CardCryptoUtils
 import com.example.crypto.CardSigner
 import com.example.crypto.SoftwareCardSigner
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.util.CardCryptoManager
 import java.security.KeyPair
+import java.security.PublicKey
 
 /**
  * Isolated test-only helper to configure in-memory software signing for unit and Robolectric tests.
@@ -18,7 +22,30 @@ object TestCardCryptoHelper {
     fun configureTestKeyPair(keyPair: KeyPair): CardSigner {
         val signer = SoftwareCardSigner(keyPair)
         CardCryptoManager.setActiveSigner(signer)
-        TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Test Issuer Authority")
+        seedTrustedIssuer(signer.publicKey, "Test Issuer Authority")
         return signer
+    }
+
+    /**
+     * Seeds a server-provisioned trust record for tests. This helper is test-source
+     * only; production code has no local enrollment path.
+     */
+    fun seedTrustedIssuer(publicKey: PublicKey, label: String) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val kid = CardCryptoUtils.computeKeyId(publicKey)
+        val publicKeyBase64 = CardCryptoUtils.encodePublicKeyToBase64(publicKey)
+        val prefs = context.getSharedPreferences("ltc_trusted_issuer_registry", Context.MODE_PRIVATE)
+        val kids = prefs.getStringSet("enrolled_issuer_kids", emptySet())?.toMutableSet() ?: mutableSetOf()
+        kids.add(kid)
+        check(
+            prefs.edit()
+                .putStringSet("enrolled_issuer_kids", kids)
+                .putString("issuer_pubkey_$kid", publicKeyBase64)
+                .putString("issuer_label_$kid", label)
+                .putLong("issuer_enrolled_at_$kid", System.currentTimeMillis())
+                .putBoolean("issuer_revoked_$kid", false)
+                .commit()
+        ) { "Could not seed test issuer trust record" }
+        TrustedIssuerRegistry.initialize(context)
     }
 }
