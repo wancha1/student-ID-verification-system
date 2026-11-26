@@ -28,6 +28,7 @@ import com.example.util.QrUnifiedVerifier
 import com.example.util.SecurityManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -168,9 +169,8 @@ class RoleScannerRoutingTest {
         assertTrue("Gate staff should authenticate", authed)
 
         viewModel.handleBarcodeScan(qrPayload, context)
+        val result = withTimeout(3_000) { viewModel.activeScanResult.first { it != null } } as? StudentScanResult.Success
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-
-        val result = viewModel.activeScanResult.value as? StudentScanResult.Success
         assertNotNull("A valid card should still verify identity", result)
         assertFalse("A valid identity alone must not authorize gate movement", result!!.isApproved)
         assertTrue("Gate movement must remain policy-pending", result.isPolicyPending)
