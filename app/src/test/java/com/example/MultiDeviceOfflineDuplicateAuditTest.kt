@@ -54,7 +54,7 @@ class MultiDeviceOfflineDuplicateAuditTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         CardCryptoManager.resetForTesting()
 
         sharedCloudBackend = InMemoryCloudBackend()
@@ -135,7 +135,7 @@ class MultiDeviceOfflineDuplicateAuditTest {
         databaseDeviceA.close()
         databaseDeviceB.close()
         CardCryptoManager.resetForTesting()
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
     }
 
     @Test
