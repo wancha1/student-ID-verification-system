@@ -19,19 +19,19 @@ import kotlinx.serialization.Serializable
 import java.io.File
 
 /**
- * Supabase is the only production cloud backend for LTC V1.
- *
- * Room remains the offline source of truth on-device. This adapter owns remote
- * roster, private profile, card, gate-log, meal, attendance, exam-exception
- * and private-photo operations.
- */
-/**
  * Client-side mirror of the server-side student registry write boundary.
  * Supabase RLS remains authoritative; this guard prevents unauthorized writes
  * from being queued or attempted by read-only operational roles.
  */
 internal fun canWriteStudentRecords(role: String): Boolean = role == "ADMIN"
 
+/**
+ * Supabase is the only production cloud backend for LTC V1.
+ *
+ * Room remains the offline source of truth on-device. This adapter owns remote
+ * roster, private profile, card, gate-log, meal, attendance, exam-exception
+ * and private-photo operations.
+ */
 class SupabaseCloudBackend(
     private val context: Context,
     private val client: SupabaseClient = SupabaseClientFactory.getInstance(context.applicationContext),
