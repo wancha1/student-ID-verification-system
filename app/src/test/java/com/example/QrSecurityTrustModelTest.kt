@@ -683,19 +683,54 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 20. A revoked issuer key cannot be re-enrolled or physically deleted.
+    // 20. Local revocation fails closed; server-revoked keys are immutable tombstones.
     // =========================================================================
     @Test
-    fun test20_RevokedIssuerKeyCannotBeReEnrolledOrDeleted() {
+    fun test20_RevokedIssuerKeyCannotBeReEnrolledDeletedOrReactivated() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
         val kid = testSigner.keyId
+        val publicKeyBase64 = CardCryptoUtils.encodePublicKeyToBase64(testSigner.publicKey)
+
         assertTrue("Issuer must initially be trusted", TrustedIssuerRegistry.isTrusted(kid))
 
-        assertTrue("Revocation must succeed", TrustedIssuerRegistry.revokeIssuer(kid))
-        assertFalse("Revoked issuer must no longer be trusted", TrustedIssuerRegistry.isTrusted(kid))
+        // A device-local action must never claim to have authoritatively revoked a key.
+        try {
+            TrustedIssuerRegistry.revokeIssuer(kid)
+            fail("Local-only issuer revocation must be disabled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("school server", ignoreCase = true))
+        }
+        assertTrue("Rejected local revocation must not mutate trust state", TrustedIssuerRegistry.isTrusted(kid))
+
+        // Seed the exact persisted representation received from an authoritative server.
+        // This avoids using the disabled local revocation API as a test setup shortcut.
+        TrustedIssuerRegistry.clearAll()
+        val prefs = context.getSharedPreferences("ltc_trusted_issuer_registry", Context.MODE_PRIVATE)
+        assertTrue(
+            "Revoked issuer tombstone must be persisted",
+            prefs.edit()
+                .putStringSet("enrolled_issuer_kids", setOf(kid))
+                .putString("issuer_pubkey_$kid", publicKeyBase64)
+                .putString("issuer_label_$kid", "Server-revoked test issuer")
+                .putLong("issuer_enrolled_at_$kid", 123L)
+                .putBoolean("issuer_revoked_$kid", true)
+                .commit()
+        )
+        TrustedIssuerRegistry.initialize(context)
+
+        assertFalse("Server-revoked issuer must not be trusted", TrustedIssuerRegistry.isTrusted(kid))
+        assertTrue("Revoked public key must not be returned", TrustedIssuerRegistry.getPublicKey(kid) == null)
 
         try {
             TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Attempted re-enrollment")
             fail("A revoked key must not be re-enrolled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
+        }
+
+        try {
+            TrustedIssuerRegistry.registerTrustedKeyBase64(publicKeyBase64, "Attempted Base64 re-enrollment")
+            fail("A revoked key must not be re-enrolled through the Base64 entrypoint")
         } catch (expected: SecurityException) {
             assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
         }
@@ -707,8 +742,10 @@ class QrSecurityTrustModelTest {
             assertTrue(expected.message!!.contains("cannot be physically removed", ignoreCase = true))
         }
 
-        assertFalse("The revoked key must remain untrusted after rejected re-enrollment",
-            TrustedIssuerRegistry.isTrusted(kid))
+        assertFalse("Rejected operations must not reactivate the revoked key", TrustedIssuerRegistry.isTrusted(kid))
+        assertTrue("The persisted tombstone must remain set", prefs.getBoolean("issuer_revoked_$kid", false))
+        assertTrue("The key identifier must remain in the persistent registry",
+            prefs.getStringSet("enrolled_issuer_kids", emptySet())?.contains(kid) == true)
     }
 
     // =========================================================================
