@@ -13,9 +13,14 @@ import com.example.model.FeeStatus
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.encodeToJsonElement
 import java.io.File
 
 /**
@@ -289,9 +294,13 @@ class SupabaseCloudBackend(
             throw SecurityException("Only gate staff can upload gate verification records.")
         }
         logs.forEach { log ->
-            client.from("gate_logs").upsert(GateLogRow.from(log, schoolId)) {
-                onConflict = "school_id,id"
-            }
+            val row = GateLogRow.from(log, schoolId)
+            client.postgrest.rpc(
+                "scholink_insert_gate_log_once",
+                buildJsonObject {
+                    put("p_row", Json.encodeToJsonElement(GateLogRow.serializer(), row))
+                }
+            )
         }
     }
 
@@ -301,11 +310,13 @@ class SupabaseCloudBackend(
             throw SecurityException("Only meal staff can upload meal records.")
         }
         meals.forEach { meal ->
-            client.from("meals").upsert(MealRow.from(meal, schoolId)) {
-                // Database-level natural key prevents the same student receiving
-                // duplicate servings from two devices on the same meal date.
-                onConflict = "school_id,student_id,meal_type,meal_date"
-            }
+            val row = MealRow.from(meal, schoolId)
+            client.postgrest.rpc(
+                "scholink_insert_meal_once",
+                buildJsonObject {
+                    put("p_row", Json.encodeToJsonElement(MealRow.serializer(), row))
+                }
+            )
         }
     }
 

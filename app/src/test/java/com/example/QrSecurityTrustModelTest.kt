@@ -671,8 +671,9 @@ class QrSecurityTrustModelTest {
         assertTrue("Card must verify before key revocation", initialScan is StudentScanResult.Success)
 
         // Revoke the issuer key in TrustedIssuerRegistry
-        TrustedIssuerRegistry.revokeIssuer(testSigner.keyId)
-        assertFalse("Key must now report as not trusted", TrustedIssuerRegistry.isTrusted(testSigner.keyId))
+        // Simulate a revocation tombstone delivered by the school server.
+        TestCardCryptoHelper.seedServerRevokedIssuer(testSigner.keyId)
+        assertFalse("Server-revoked key must no longer be trusted", TrustedIssuerRegistry.isTrusted(testSigner.keyId))
 
         // Scanning the same card now fails immediately
         val revokedScan = roomRepository.verifyStudentByQr(validPayload1)

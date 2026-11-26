@@ -262,8 +262,8 @@ class ExampleRobolectricTest {
         // Verify logs contain all scans (newest first)
         val logs = repository.scanLogsFlow.first()
         assertEquals(3, logs.size)
-        assertEquals(GateVerificationDecision.INVALID_QR.name, logs[0].decision)
-        assertEquals(GateVerificationDecision.POLICY_PENDING.name, logs[1].decision)
-        assertEquals(GateVerificationDecision.POLICY_PENDING.name, logs[2].decision)
+        assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs[1].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs[2].decision)
     }
 }
