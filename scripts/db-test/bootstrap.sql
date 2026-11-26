@@ -143,3 +143,49 @@ INSERT INTO public.student_private (school_id, student_id, guardian_name)
 VALUES ('school-test', 'student-test-1', 'Synthetic guardian');
 INSERT INTO storage.objects (bucket_id, name)
 VALUES ('student-photos', 'school-test/student-test-1/photo.jpg');
+
+
+-- Minimal append-only event fixtures for the Gate/Meal sync RPC migration.
+CREATE TABLE public.gate_logs (
+  school_id text NOT NULL,
+  id text NOT NULL,
+  student_number text NOT NULL,
+  student_name text NOT NULL,
+  decision text NOT NULL,
+  gate_location text NOT NULL,
+  timestamp_ms bigint NOT NULL,
+  PRIMARY KEY (school_id, id)
+);
+ALTER TABLE public.gate_logs ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT ON public.gate_logs TO authenticated;
+CREATE POLICY "gate team can read gate logs"
+  ON public.gate_logs FOR SELECT TO authenticated
+  USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','GATE_OFFICER']::text[]));
+CREATE POLICY "gate operators can create gate logs"
+  ON public.gate_logs FOR INSERT TO authenticated
+  WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','GATE_OFFICER']::text[]));
+
+CREATE TABLE public.meals (
+  school_id text NOT NULL,
+  id text NOT NULL,
+  student_id text NOT NULL,
+  student_number text NOT NULL,
+  student_name text NOT NULL,
+  grade_class text NOT NULL,
+  meal_type text NOT NULL,
+  meal_date text NOT NULL,
+  status text NOT NULL,
+  notes text NOT NULL DEFAULT '',
+  serving_station text NOT NULL,
+  timestamp_ms bigint NOT NULL,
+  PRIMARY KEY (school_id, id),
+  UNIQUE (school_id, student_id, meal_type, meal_date)
+);
+ALTER TABLE public.meals ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT ON public.meals TO authenticated;
+CREATE POLICY "meal team can read meal records"
+  ON public.meals FOR SELECT TO authenticated
+  USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','MEAL_STAFF']::text[]));
+CREATE POLICY "meal operators can create meal records"
+  ON public.meals FOR INSERT TO authenticated
+  WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','MEAL_STAFF']::text[]));
