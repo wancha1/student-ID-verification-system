@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Wifi
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.model.AuthUser
+import com.example.model.GateVerificationDecision
 import com.example.model.ScanLog
 import com.example.model.Student
 import com.example.model.StudentScanResult
@@ -171,7 +173,7 @@ fun GuardDashboardScreen(
                             }
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = ApprovedGreenLight
+                                color = PendingAmberLight
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -181,14 +183,14 @@ fun GuardDashboardScreen(
                                         modifier = Modifier
                                             .size(7.dp)
                                             .clip(CircleShape)
-                                            .background(ApprovedGreen)
+                                            .background(PendingAmber)
                                     )
                                     Spacer(Modifier.width(5.dp))
                                     Text(
-                                        text = "READY",
+                                        text = "POLICY PENDING",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = ApprovedGreenText
+                                        color = PendingAmber
                                     )
                                 }
                             }
@@ -277,6 +279,7 @@ fun GuardDashboardScreen(
                 }
             } else {
                 items(scanLogs.take(10), key = { it.id }) { log ->
+                    val isPolicyPending = log.decision == GateVerificationDecision.POLICY_PENDING
                     val timeStr = remember(log.timestamp) {
                         SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(log.timestamp))
                     }
@@ -296,13 +299,13 @@ fun GuardDashboardScreen(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(if (log.isApproved) ApprovedGreenLight else RejectedRedLight),
+                                    .background(when { isPolicyPending -> PendingAmberLight; log.isApproved -> ApprovedGreenLight; else -> RejectedRedLight }),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (log.isApproved) Icons.Default.CheckCircle else Icons.Default.Close,
+                                    imageVector = when { isPolicyPending -> Icons.Default.Warning; log.isApproved -> Icons.Default.CheckCircle; else -> Icons.Default.Close },
                                     contentDescription = null,
-                                    tint = if (log.isApproved) ApprovedGreen else RejectedRed,
+                                    tint = when { isPolicyPending -> PendingAmber; log.isApproved -> ApprovedGreen; else -> RejectedRed },
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -326,11 +329,11 @@ fun GuardDashboardScreen(
 
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = if (log.isApproved) ApprovedGreenLight else RejectedRedLight
+                                color = when { isPolicyPending -> PendingAmberLight; log.isApproved -> ApprovedGreenLight; else -> RejectedRedLight }
                             ) {
                                 Text(
-                                    text = if (log.isApproved) "APPROVED" else "DENIED",
-                                    color = if (log.isApproved) ApprovedGreenText else RejectedRedText,
+                                    text = when { isPolicyPending -> "PENDING"; log.isApproved -> "APPROVED"; else -> "DENIED" },
+                                    color = when { isPolicyPending -> PendingAmber; log.isApproved -> ApprovedGreenText; else -> RejectedRedText },
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

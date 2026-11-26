@@ -81,6 +81,7 @@ fun VerificationResultDisplay(
                 student = scanResult.student,
                 card = scanResult.card,
                 isApproved = scanResult.isApproved,
+                isPolicyPending = scanResult.isPolicyPending,
                 reason = scanResult.reason,
                 isOffline = scanResult.isOfflineData,
                 lastSyncTimestamp = scanResult.lastSyncTimestamp,
@@ -135,6 +136,7 @@ fun VerificationResultDisplay(
         student = student,
         card = null,
         isApproved = student.isEntryApproved,
+        isPolicyPending = false,
         reason = "",
         isOffline = false,
         lastSyncTimestamp = System.currentTimeMillis(),
@@ -293,6 +295,7 @@ private fun StudentSuccessVerificationView(
     student: Student,
     card: StudentCard?,
     isApproved: Boolean,
+    isPolicyPending: Boolean,
     reason: String,
     isOffline: Boolean,
     lastSyncTimestamp: Long,
@@ -309,12 +312,12 @@ private fun StudentSuccessVerificationView(
         modifier = modifier
     ) {
         DecisionHeroBanner(
-            testTag = if (isApproved) "banner_entry_approved" else "banner_entry_not_approved",
-            containerColor = if (isApproved) ApprovedGreen else RejectedRed,
-            icon = if (isApproved) Icons.Default.CheckCircle else Icons.Default.Block,
-            title = if (isApproved) "ENTRY APPROVED" else "ENTRY NOT APPROVED",
+            testTag = when { isPolicyPending -> "banner_gate_policy_pending"; isApproved -> "banner_entry_approved"; else -> "banner_entry_not_approved" },
+            containerColor = when { isPolicyPending -> PendingAmber; isApproved -> ApprovedGreen; else -> RejectedRed },
+            icon = when { isPolicyPending -> Icons.Default.Warning; isApproved -> Icons.Default.CheckCircle; else -> Icons.Default.Block },
+            title = when { isPolicyPending -> "GATE POLICY PENDING"; isApproved -> "ENTRY APPROVED"; else -> "ENTRY NOT APPROVED" },
             subtitle = reason.ifBlank {
-                if (isApproved) "School fees cleared • Access granted" else "School fees outstanding • Entry restricted"
+                when { isPolicyPending -> "Identity verified. No gate movement was authorized."; isApproved -> "School fees cleared • Access granted"; else -> "School fees outstanding • Entry restricted" }
             },
             freshnessLabel = if (isOffline) "Offline cache (Synced $lastSyncStr)" else "Live verified ($currentTimeStr)",
             isOffline = isOffline

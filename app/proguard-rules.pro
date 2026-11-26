@@ -1,21 +1,47 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Preserve stack trace line numbers for production diagnostics
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Kotlinx Serialization (used by Supabase DTOs, Ktor, and navigation/state)
+-keepattributes *Annotation*,InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class com.example.**$$serializer { *; }
+-keepclassmembers class com.example.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.example.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Supabase & Ktor Android engine
+-dontwarn io.ktor.**
+-dontwarn io.github.jan.supabase.**
+-dontwarn kotlinx.atomicfu.**
+-dontwarn java.lang.instrument.**
+-keep class io.ktor.** { *; }
+-keep class io.github.jan.supabase.** { *; }
+
+# Room Database
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class *
+-dontwarn androidx.room.paging.**
+
+# CameraX & ML Kit Barcode Scanning
+-keep class androidx.camera.** { *; }
+-dontwarn com.google.mlkit.**
+-keep class com.google.mlkit.vision.barcode.** { *; }
+
+# ZXing QR Code Generator
+-keep class com.google.zxing.** { *; }
+
+# App domain & data DTOs
+-keep class com.example.data.sync.** { *; }
+-keep class com.example.data.auth.** { *; }
+-keep class com.example.model.** { *; }

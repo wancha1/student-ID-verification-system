@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.crypto.TrustedIssuerRegistry
 import com.example.data.MockStudentRepository
 import com.example.testutil.TestCardCryptoHelper
+import com.example.testutil.MainDispatcherRule
 import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
@@ -16,12 +17,14 @@ import com.example.model.UserRole
 import com.example.ui.MainViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,6 +34,9 @@ import java.util.UUID
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExampleRobolectricTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var repository: MockStudentRepository
     private lateinit var viewModel: MainViewModel
@@ -219,7 +225,8 @@ class ExampleRobolectricTest {
 
     @Test
     fun testGuardScanWorkflowAndAuditLogging() = runBlocking {
-        viewModel.loginAs(UserRole.SECURITY_GUARD)
+        viewModel.loginAs(UserRole.GATE_STAFF)
+        assertEquals("Gate staff session must be authorized before scanning", UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
 
         val s1 = repository.getStudentByStudentNumber("OAK-2026-0001")!!
         val card1 = repository.getActiveCardForStudent(s1.id)!!
@@ -229,28 +236,34 @@ class ExampleRobolectricTest {
 
         // Scan cleared student
         viewModel.handleBarcodeScan(card1.qrPayload)
-        val clearedResult = viewModel.activeScanResult.value
+        val clearedResult = withTimeout(5_000) {
+            viewModel.activeScanResult.first { it is StudentScanResult.Success && it.student.id == s1.id }
+        }
         assertNotNull(clearedResult)
-        assertTrue(clearedResult is StudentScanResult.Success && clearedResult.isApproved)
+        assertTrue(clearedResult is StudentScanResult.Success && !clearedResult.isApproved && clearedResult.isPolicyPending)
         assertNull(viewModel.scanError.value)
 
         // Scan outstanding student
         viewModel.handleBarcodeScan(card2.qrPayload)
-        val outstandingResult = viewModel.activeScanResult.value
+        val outstandingResult = withTimeout(5_000) {
+            viewModel.activeScanResult.first { it is StudentScanResult.Success && it.student.id == s2.id }
+        }
         assertNotNull(outstandingResult)
-        assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved)
+        assertTrue(outstandingResult is StudentScanResult.Success && !outstandingResult.isApproved && outstandingResult.isPolicyPending)
 
         // Scan invalid barcode format
         viewModel.handleBarcodeScan("NON_SCHOOL_BARCODE_XYZ")
-        val invalidResult = viewModel.activeScanResult.value
+        val invalidResult = withTimeout(5_000) {
+            viewModel.activeScanResult.first { it is StudentScanResult.InvalidQr }
+        }
         assertNotNull(invalidResult)
         assertTrue(invalidResult is StudentScanResult.InvalidQr)
 
         // Verify logs contain all scans (newest first)
         val logs = repository.scanLogsFlow.first()
         assertEquals(3, logs.size)
-        assertEquals(GateVerificationDecision.INVALID_QR, logs[0].decision)
-        assertEquals(GateVerificationDecision.NOT_APPROVED, logs[1].decision)
-        assertEquals(GateVerificationDecision.APPROVED, logs[2].decision)
+        assertEquals(GateVerificationDecision.INVALID_QR.name, logs[0].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING.name, logs[1].decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING.name, logs[2].decision)
     }
 }

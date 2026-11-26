@@ -61,7 +61,7 @@ class QrSecurityTrustModelTest {
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         CardCryptoManager.resetForTesting()
 
         database = AppDatabase.createInMemory(context)
@@ -72,7 +72,7 @@ class QrSecurityTrustModelTest {
         testKeyPair = TestCardCryptoHelper.generateKeyPair()
         testSigner = SoftwareCardSigner(testKeyPair)
         CardCryptoManager.setActiveSigner(testSigner)
-        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Primary Test Issuer Authority")
+        TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "Primary Test Issuer Authority")
 
         runBlocking {
             mockRepository.resetToSampleData()
@@ -84,7 +84,6 @@ class QrSecurityTrustModelTest {
                 cardId = cardId1,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                signer = testSigner
             )
 
             // Seed active student 1 in Room
@@ -141,7 +140,7 @@ class QrSecurityTrustModelTest {
     fun tearDown() {
         database.close()
         CardCryptoManager.resetForTesting()
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
     }
 
     // =========================================================================
@@ -416,7 +415,6 @@ class QrSecurityTrustModelTest {
             cardId = unknownCardId,
             validFrom = validFrom,
             validUntil = validUntil,
-            signer = testSigner
         )
 
         // Signature is cryptographically authentic, but card does NOT exist in Room
@@ -521,7 +519,7 @@ class QrSecurityTrustModelTest {
             cardIdentifier = cardId2,
             studentId = studentId1,
             studentNumber = studentNum1,
-            qrPayload = CardCryptoManager.signCardPayload(cardId2, validFrom, validUntil, testSigner),
+            qrPayload = CardCryptoManager.signCardPayload(cardId2, validFrom, validUntil),
             status = CardStatus.ACTIVE.name,
             issueDate = now + 1000,
             activationDate = now + 1000,
@@ -554,7 +552,7 @@ class QrSecurityTrustModelTest {
 
         // Scanning an unknown cardId must NOT fall back to any active card for the student
         val unknownCardId = CardCryptoManager.generateSecureRandomCardId()
-        val unknownSigned = CardCryptoManager.signCardPayload(unknownCardId, validFrom, validUntil, testSigner)
+        val unknownSigned = CardCryptoManager.signCardPayload(unknownCardId, validFrom, validUntil)
         val scanResultUnknown = roomRepository.verifyStudentByQr(unknownSigned)
         assertTrue("Unknown card must yield StudentNotFound and not fall back to active student card",
             scanResultUnknown is StudentScanResult.StudentNotFound)
@@ -570,7 +568,6 @@ class QrSecurityTrustModelTest {
             cardId = expiredCardId,
             validFrom = "2020-01-01",
             validUntil = "2020-12-31",
-            signer = testSigner
         )
 
         // Seed in database
@@ -609,7 +606,6 @@ class QrSecurityTrustModelTest {
             cardId = futureCardId,
             validFrom = "2099-01-01",
             validUntil = "2099-12-31",
-            signer = testSigner
         )
 
         val now = System.currentTimeMillis()
@@ -645,13 +641,13 @@ class QrSecurityTrustModelTest {
         // Generate an untrusted / rogue issuer key pair that is NOT in TrustedIssuerRegistry
         val rogueKeyPair = TestCardCryptoHelper.generateKeyPair()
         val rogueSigner = SoftwareCardSigner(rogueKeyPair)
+        CardCryptoManager.setActiveSigner(rogueSigner)
 
         val rogueCardId = CardCryptoManager.generateSecureRandomCardId()
         val roguePayload = CardCryptoManager.signCardPayload(
             cardId = rogueCardId,
             validFrom = validFrom,
             validUntil = validUntil,
-            signer = rogueSigner
         )
 
         assertFalse(
@@ -687,10 +683,96 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 20. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+    // 20. Local revocation fails closed; server-revoked keys are immutable tombstones.
     // =========================================================================
     @Test
-    fun test20_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
+    fun test20_RevokedIssuerKeyCannotBeReEnrolledDeletedOrReactivated() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val kid = testSigner.keyId
+        val publicKeyBase64 = CardCryptoUtils.encodePublicKeyToBase64(testSigner.publicKey)
+
+        assertTrue("Issuer must initially be trusted", TrustedIssuerRegistry.isTrusted(kid))
+
+        // A device-local action must never claim to have authoritatively revoked a key.
+        try {
+            TrustedIssuerRegistry.revokeIssuer(kid)
+            fail("Local-only issuer revocation must be disabled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("school server", ignoreCase = true))
+        }
+        assertTrue("Rejected local revocation must not mutate trust state", TrustedIssuerRegistry.isTrusted(kid))
+
+        // New local issuer keys are also rejected, not just attempts to restore a revoked key.
+        val unauthorizedSigner = SoftwareCardSigner(TestCardCryptoHelper.generateKeyPair())
+        try {
+            TrustedIssuerRegistry.registerTrustedKey(unauthorizedSigner.publicKey, "Unapproved local issuer")
+            fail("Local issuer enrollment must be disabled for new keys")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("Local issuer enrollment is disabled", ignoreCase = true))
+        }
+        try {
+            TrustedIssuerRegistry.registerTrustedKeyBase64(
+                CardCryptoUtils.encodePublicKeyToBase64(unauthorizedSigner.publicKey),
+                "Unapproved Base64 issuer"
+            )
+            fail("Local Base64 issuer enrollment must be disabled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("Local issuer enrollment is disabled", ignoreCase = true))
+        }
+        assertFalse("Unapproved local issuer must never enter the trust registry",
+            TrustedIssuerRegistry.isTrusted(unauthorizedSigner.keyId))
+
+        // Seed the exact persisted representation received from an authoritative server.
+        // This avoids using the disabled local revocation API as a test setup shortcut.
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
+        val prefs = context.getSharedPreferences("ltc_trusted_issuer_registry", Context.MODE_PRIVATE)
+        assertTrue(
+            "Revoked issuer tombstone must be persisted",
+            prefs.edit()
+                .putStringSet("enrolled_issuer_kids", setOf(kid))
+                .putString("issuer_pubkey_$kid", publicKeyBase64)
+                .putString("issuer_label_$kid", "Server-revoked test issuer")
+                .putLong("issuer_enrolled_at_$kid", 123L)
+                .putBoolean("issuer_revoked_$kid", true)
+                .commit()
+        )
+        TrustedIssuerRegistry.initialize(context)
+
+        assertFalse("Server-revoked issuer must not be trusted", TrustedIssuerRegistry.isTrusted(kid))
+        assertTrue("Revoked public key must not be returned", TrustedIssuerRegistry.getPublicKey(kid) == null)
+
+        try {
+            TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Attempted re-enrollment")
+            fail("A revoked key must not be re-enrolled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
+        }
+
+        try {
+            TrustedIssuerRegistry.registerTrustedKeyBase64(publicKeyBase64, "Attempted Base64 re-enrollment")
+            fail("A revoked key must not be re-enrolled through the Base64 entrypoint")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
+        }
+
+        try {
+            TrustedIssuerRegistry.removeIssuer(kid)
+            fail("Issuer tombstones must not be physically deleted")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("cannot be physically removed", ignoreCase = true))
+        }
+
+        assertFalse("Rejected operations must not reactivate the revoked key", TrustedIssuerRegistry.isTrusted(kid))
+        assertTrue("The persisted tombstone must remain set", prefs.getBoolean("issuer_revoked_$kid", false))
+        assertTrue("The key identifier must remain in the persistent registry",
+            prefs.getStringSet("enrolled_issuer_kids", emptySet())?.contains(kid) == true)
+    }
+
+    // =========================================================================
+    // 21. Key rotation: multiple concurrent issuer keys without invalidating existing cards.
+    // =========================================================================
+    @Test
+    fun test21_KeyRotationSupportsMultipleConcurrentIssuersWithoutInvalidatingExistingCards() = runBlocking {
         // Issuer 1 issued Card 1 (seeded in setup)
         val scan1 = roomRepository.verifyStudentByQr(validPayload1)
         assertTrue("Card 1 must verify with Issuer 1 key", scan1 is StudentScanResult.Success)
@@ -698,15 +780,18 @@ class QrSecurityTrustModelTest {
         // Introduce Issuer 2 (Key Rotation)
         val issuer2KeyPair = TestCardCryptoHelper.generateKeyPair()
         val issuer2Signer = SoftwareCardSigner(issuer2KeyPair)
-        TrustedIssuerRegistry.registerTrustedKey(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
+        TestCardCryptoHelper.seedTrustedIssuer(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
+
+        // Activate Issuer 2 explicitly in the test harness. Production code cannot
+        // pass an arbitrary signer into signCardPayload.
+        CardCryptoManager.setActiveSigner(issuer2Signer)
 
         // Issuer 2 issues Card 2
         val cardId2 = CardCryptoManager.generateSecureRandomCardId()
         val payload2 = CardCryptoManager.signCardPayload(
             cardId = cardId2,
             validFrom = validFrom,
-            validUntil = validUntil,
-            signer = issuer2Signer
+            validUntil = validUntil
         )
 
         val now = System.currentTimeMillis()
@@ -737,10 +822,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 21. Gate devices operate without any private keys.
+    // 22. Gate devices operate without any private keys.
     // =========================================================================
     @Test
-    fun test21_GateDeviceHasZeroPrivateKeysAndVerifiesFullyOffline() = runBlocking {
+    fun test22_GateDeviceHasZeroPrivateKeysAndVerifiesFullyOffline() = runBlocking {
         // Gate terminal hardening: remove all active private signing keys
         CardCryptoManager.clearIssuerPrivateKey()
         assertFalse("Gate terminal must report zero private keys", CardCryptoManager.hasIssuerPrivateKey())
@@ -760,10 +845,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 22. Protected Issuer Keys: Attempting to overwrite existing alias fails.
+    // 23. Protected Issuer Keys: Attempting to overwrite existing alias fails.
     // =========================================================================
     @Test
-    fun test22_ExistingIssuerKeyCannotBeOverwritten() {
+    fun test23_ExistingIssuerKeyCannotBeOverwritten() {
         // Test Keystore duplicate alias protection policy
         val alias = "test_issuer_protect_alias"
         val ks = try {
@@ -800,10 +885,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 23. Reading model properties (uniqueQrCode, qrPayload) NEVER invokes signing.
+    // 24. Reading model properties (uniqueQrCode, qrPayload) NEVER invokes signing.
     // =========================================================================
     @Test
-    fun test23_ReadingModelQrPropertiesDoesNotInvokeSigning() {
+    fun test24_ReadingModelQrPropertiesDoesNotInvokeSigning() {
         // Clear active signer
         CardCryptoManager.clearIssuerPrivateKey()
         assertFalse("Must have no active signer", CardCryptoManager.hasIssuerPrivateKey())
@@ -838,10 +923,10 @@ class QrSecurityTrustModelTest {
     }
 
     // =========================================================================
-    // 24. Deterministic Date Semantics & Exact Boundary Testing (Africa/Kampala).
+    // 25. Deterministic Date Semantics & Exact Boundary Testing (Africa/Kampala).
     // =========================================================================
     @Test
-    fun test24_DateSemanticsBoundaryTestingAfricaKampala() {
+    fun test25_DateSemanticsBoundaryTestingAfricaKampala() {
         val validFrom = "2026-06-01"
         val validUntil = "2026-06-30"
 
@@ -869,4 +954,24 @@ class QrSecurityTrustModelTest {
         val justAfterEnd = CardDateUtils.checkValidity(validFrom, validUntil, endOfDayMillis + 1)
         assertTrue("1ms after validUntil day must be Expired", justAfterEnd is com.example.crypto.ValidityCheckResult.Expired)
     }
+    // =========================================================================
+    // 26. Card issuance fails closed when no authorized active signer is present.
+    // =========================================================================
+    @Test
+    fun test26_CardSigningFailsClosedWithoutActiveIssuerAuthorization() {
+        CardCryptoManager.clearIssuerPrivateKey()
+        assertFalse("No issuer authorization means no active signing capability",
+            CardCryptoManager.hasIssuerPrivateKey())
+
+        try {
+            CardCryptoManager.signCardPayload("CRD-FAIL-CLOSED-0001")
+            fail("Card signing must fail when no authorized signer is active")
+        } catch (expected: IllegalStateException) {
+            assertTrue(
+                "Failure must explain that authoritative signing is unavailable",
+                expected.message!!.contains("authoritative Issuer", ignoreCase = true)
+            )
+        }
+    }
+
 }
