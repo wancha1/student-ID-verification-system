@@ -1,3 +1,17 @@
+## Execution record (2026-11-26)
+
+The following targeted checks were run against disposable staging using synthetic identities and transactions that were rolled back:
+
+- **FIN-01:** ordinary Admin cannot grant finance access to self or another Admin — PASS.
+- **FIN-02:** ordinary Admin cannot transfer a finance-enabled membership — PASS.
+- **FIN-03:** ordinary Admin cannot deactivate a finance-enabled membership — PASS.
+- **FIN-04:** ordinary Admin cannot demote or move a finance-enabled membership — PASS.
+- **FIN-05:** finance-authorized Admin can transfer an active finance membership and deactivate another finance membership — PASS.
+- **FIN-06:** student_finances.fee_status is NOT NULL with no default — confirmed. Direct non-finance edits to students.fee_status are rejected — PASS.
+- **Fee-status synchronization:** the existing nested trigger path was blocked by the student fee-status guard. A proposed internal transaction-context bypass passed a staging dry-run: finance-table OUTSTANDING and CLEARED updates synchronized to the student row; the internal flag reset; direct non-finance updates remained rejected. The migration was rolled back and is proposed in the dependent follow-up PR.
+
+**Unresolved policy decision:** the current guard permits the sole finance-authorized Admin to deactivate their own membership. The school must decide whether this is allowed and define a recovery or second-approver path before production acceptance.
+
 # Finance Membership Guard — Security Test Matrix
 
 **Status:** Required before applying the migration to the live LTC Supabase project.
