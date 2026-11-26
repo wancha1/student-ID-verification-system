@@ -149,11 +149,24 @@ VALUES ('student-photos', 'school-test/student-test-1/photo.jpg');
 CREATE TABLE public.gate_logs (
   school_id text NOT NULL,
   id text NOT NULL,
+  student_id text,
   student_number text NOT NULL,
   student_name text NOT NULL,
+  card_id text,
+  card_identifier text,
+  qr_payload text,
   decision text NOT NULL,
   gate_location text NOT NULL,
   timestamp_ms bigint NOT NULL,
+  fee_status text,
+  card_status text,
+  is_day_scholar boolean,
+  is_approved boolean,
+  reason text,
+  is_offline_decision boolean NOT NULL DEFAULT false,
+  data_sync_timestamp_at_scan bigint,
+  guard_name text,
+  device_identifier text,
   PRIMARY KEY (school_id, id)
 );
 ALTER TABLE public.gate_logs ENABLE ROW LEVEL SECURITY;
