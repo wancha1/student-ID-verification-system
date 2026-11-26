@@ -64,16 +64,20 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
+import com.example.model.AccessStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.Student
 import com.example.ui.components.PhotoEditorDialog
-import com.example.ui.components.VisualQrMatrix
 import com.example.ui.theme.SchoolPrimary
 import com.example.util.ImageStorageHelper
-import com.example.util.QrCodeUtils
+import java.util.Calendar
 import java.util.UUID
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StudentFormDialog(
     initialStudent: Student? = null,
@@ -82,15 +86,26 @@ fun StudentFormDialog(
 ) {
     val context = LocalContext.current
     val isEditing = initialStudent != null
+    val currentYear = remember { Calendar.getInstance().get(Calendar.YEAR) }
 
     var firstName by remember { mutableStateOf(initialStudent?.firstName ?: "") }
     var lastName by remember { mutableStateOf(initialStudent?.lastName ?: "") }
-    var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "LTC-2026-00${(11..99).random()}") }
-    var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "Senior 3-A") }
-    var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "Bus #1 - Lira Main Line") }
+    var studentNumber by remember { mutableStateOf(initialStudent?.studentNumber ?: "") }
+    var gradeClass by remember { mutableStateOf(initialStudent?.gradeClass ?: "") }
+    var dayScholarType by remember {
+        mutableStateOf(
+            initialStudent?.dayScholarType ?: if (initialStudent?.isDayScholar == false) {
+                DayScholarStatus.BOARDER
+            } else {
+                DayScholarStatus.DAY_SCHOLAR_BUS
+            }
+        )
+    }
+    var transportRoute by remember { mutableStateOf(initialStudent?.transportRoute ?: "") }
     var guardianName by remember { mutableStateOf(initialStudent?.guardianName ?: "") }
-    var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "+256 772 ") }
-    var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "Mr. Obua Denis") }
+    var guardianPhone by remember { mutableStateOf(initialStudent?.guardianPhone ?: "") }
+    var homeroomTeacher by remember { mutableStateOf(initialStudent?.homeroomTeacher ?: "") }
+    var academicYear by remember { mutableStateOf(initialStudent?.academicYear?.ifBlank { currentYear.toString() } ?: currentYear.toString()) }
     var notes by remember { mutableStateOf(initialStudent?.notes ?: "") }
 
     // Passport Photo state from device
@@ -122,7 +137,7 @@ fun StudentFormDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (isEditing) "Edit Student Details" else "Register New Day Scholar",
+                text = if (isEditing) "Edit Student Details" else "Register New Student",
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge
             )
@@ -314,11 +329,8 @@ fun StudentFormDialog(
                 }
 
                 // ==========================================
-                // 2. UNIQUE QR CODE GENERATION & PREVIEW
+                // 2. SIGNED V2 CREDENTIAL NOTICE
                 // ==========================================
-val effectiveStudentNumber = studentNumber.trim().uppercase()
-                val uniqueQrCodePayload = "LTC:STU:$effectiveStudentNumber:PREVIEW"
-
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
@@ -330,56 +342,32 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(10.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-                            modifier = Modifier.size(80.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                VisualQrMatrix(
-                                    payload = uniqueQrCodePayload,
-                                    modifier = Modifier.size(72.dp)
-                                )
-                            }
-                        }
-
+                        Icon(
+                            imageVector = Icons.Default.QrCode2,
+                            contentDescription = null,
+                            tint = SchoolPrimary,
+                            modifier = Modifier.size(28.dp)
+                        )
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.QrCode2,
-                                    contentDescription = null,
-                                    tint = SchoolPrimary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "ASSIGNED UNIQUE QR CODE",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SchoolPrimary,
-                                    letterSpacing = 0.5.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = uniqueQrCodePayload,
-                                fontFamily = FontFamily.Monospace,
+                                text = if (isEditing) "ACTIVE STUDENT CREDENTIAL" else "CRYPTOGRAPHIC V2 BADGE",
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontWeight = FontWeight.Bold,
+                                color = SchoolPrimary,
+                                letterSpacing = 0.5.sp
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Unique tamper-resistant identifier for Gate, Requirements & Meals.",
-                                fontSize = 9.5.sp,
+                                text = if (isEditing) {
+                                    "Print or replace the signed QR ID badge from the student's profile screen."
+                                } else {
+                                    "A hardware-signed ECDSA P-256 QR credential will be generated automatically if an Issuer Signing Key is enrolled."
+                                },
+                                fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -396,6 +384,7 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         onValueChange = { if (!isEditing) studentNumber = it.uppercase() },
                         enabled = !isEditing,
                         label = { Text("Student Number") },
+                        placeholder = { Text("LTC-$currentYear-0001") },
                         singleLine = true,
                         leadingIcon = {
                             Icon(Icons.Default.Badge, contentDescription = null)
@@ -409,6 +398,7 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         value = gradeClass,
                         onValueChange = { gradeClass = it },
                         label = { Text("Grade / Class") },
+                        placeholder = { Text("Senior 3-A") },
                         singleLine = true,
                         modifier = Modifier
                             .testTag("input_form_grade_class")
@@ -445,11 +435,42 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                     )
                 }
 
-                // Transport Route
+                // Residency / Enrollment Category
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "ENROLLMENT CATEGORY",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SchoolPrimary,
+                        letterSpacing = 0.5.sp
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        DayScholarStatus.entries.forEach { statusOption ->
+                            FilterChip(
+                                selected = dayScholarType == statusOption,
+                                onClick = { dayScholarType = statusOption },
+                                label = { Text(statusOption.label, fontSize = 11.sp) },
+                                modifier = Modifier.testTag("chip_residency_${statusOption.name.lowercase()}")
+                            )
+                        }
+                    }
+                }
+
+                // Transport Route or Dormitory
                 OutlinedTextField(
                     value = transportRoute,
                     onValueChange = { transportRoute = it },
-                    label = { Text("Day Scholar Route / Transport") },
+                    label = {
+                        Text(
+                            if (dayScholarType.isDayScholar) "Day Scholar Route / Transport" else "Dormitory / Boarding House"
+                        )
+                    },
+                    placeholder = {
+                        Text(if (dayScholarType.isDayScholar) "e.g. Lira Main Town" else "e.g. Nile Dormitory")
+                    },
                     leadingIcon = {
                         Icon(Icons.Default.DirectionsBus, contentDescription = null)
                     },
@@ -459,19 +480,34 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         .fillMaxWidth()
                 )
 
-                // Homeroom Teacher
-                OutlinedTextField(
-                    value = homeroomTeacher,
-                    onValueChange = { homeroomTeacher = it },
-                    label = { Text("Homeroom Teacher") },
-                    leadingIcon = {
-                        Icon(Icons.Default.School, contentDescription = null)
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .testTag("input_form_teacher")
-                        .fillMaxWidth()
-                )
+                // Homeroom Teacher & Academic Year
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = homeroomTeacher,
+                        onValueChange = { homeroomTeacher = it },
+                        label = { Text("Class Teacher") },
+                        leadingIcon = {
+                            Icon(Icons.Default.School, contentDescription = null)
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .testTag("input_form_teacher")
+                            .weight(1.4f)
+                    )
+
+                    OutlinedTextField(
+                        value = academicYear,
+                        onValueChange = { academicYear = it },
+                        label = { Text("Academic Year") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .testTag("input_form_academic_year")
+                            .weight(1f)
+                    )
+                }
 
                 // Guardian Name & Phone
                 OutlinedTextField(
@@ -526,24 +562,30 @@ val effectiveStudentNumber = studentNumber.trim().uppercase()
                         0xFF1D4ED8, 0xFF059669, 0xFF7C3AED, 0xFF0891B2, 0xFF4F46E5, 0xFFDB2777
                     ).random()
 
+                    val feeStatus = initialStudent?.feesStatus ?: FeeStatus.CLEARED
+                    val resolvedIsDayScholar = dayScholarType.isDayScholar
                     val newStudent = Student(
                         id = initialStudent?.id ?: UUID.randomUUID().toString(),
                         studentNumber = studentNumber.trim().uppercase(),
                         firstName = firstName.trim(),
                         lastName = lastName.trim(),
-                        gradeClass = gradeClass.trim(),
-                        isDayScholar = true,
-                        dayScholarType = DayScholarStatus.DAY_SCHOLAR_BUS,
-                        transportRoute = transportRoute.trim(),
-                        feesStatus = initialStudent?.feesStatus ?: FeeStatus.CLEARED,
+                        gradeClass = gradeClass.trim().ifBlank { "Unassigned" },
+                        isDayScholar = resolvedIsDayScholar,
+                        dayScholarType = dayScholarType,
+                        transportRoute = transportRoute.trim().ifBlank {
+                            if (resolvedIsDayScholar) "Local / General" else "Boarding House"
+                        },
+                        feesStatus = feeStatus,
                         outstandingAmount = initialStudent?.outstandingAmount ?: 0.0,
+                        accessStatus = AccessStatus.evaluate(resolvedIsDayScholar, feeStatus),
                         gender = initialStudent?.gender ?: "Not specified",
                         avatarColorSeed = colorSeed,
                         photoUrl = photoUrl,
-                        guardianName = guardianName.trim().ifBlank { "Parent / Guardian" },
-                        guardianPhone = guardianPhone.trim().ifBlank { "+256 700 000000" },
-                        emergencyContact = initialStudent?.emergencyContact ?: "+256 770 000000",
-                        homeroomTeacher = homeroomTeacher.trim().ifBlank { "Unassigned" },
+                        guardianName = guardianName.trim(),
+                        guardianPhone = guardianPhone.trim(),
+                        emergencyContact = initialStudent?.emergencyContact ?: "",
+                        homeroomTeacher = homeroomTeacher.trim(),
+                        academicYear = academicYear.trim().ifBlank { currentYear.toString() },
                         notes = notes.trim(),
                         qrToken = qrToken,
                         updatedAt = System.currentTimeMillis()

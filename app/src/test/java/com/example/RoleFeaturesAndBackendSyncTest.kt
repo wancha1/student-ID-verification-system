@@ -379,15 +379,24 @@ class RoleFeaturesAndBackendSyncTest {
         assertFalse(guard.hasPermission(StaffPermission.MANAGE_STUDENTS))
         assertFalse(guard.hasPermission(StaffPermission.SERVE_MEALS))
 
-        viewModel.handleBarcodeScan(boardingQrPayload, context)
+        // Cleared day scholar -> Entry approved and logged
+        viewModel.handleBarcodeScan(dayScholarQrPayload, context)
         waitUntil { viewModel.activeScanResult.value != null && database.scanLogDao().getAllLogsFlow().first().isNotEmpty() }
-        val result = viewModel.activeScanResult.value
-        assertTrue(result is StudentScanResult.Success)
-        assertTrue((result as StudentScanResult.Success).isApproved)
+        val dayResult = viewModel.activeScanResult.value
+        assertTrue(dayResult is StudentScanResult.Success)
+        assertTrue((dayResult as StudentScanResult.Success).isApproved)
 
         val logs = database.scanLogDao().getAllLogsFlow().first()
-        assertEquals(boardingStudentId, logs.first().studentId)
+        assertEquals(dayScholarStudentId, logs.first().studentId)
         assertEquals("Guard Ocen", logs.first().guardName)
+
+        // Boarding student at day-scholar gate -> Denied
+        viewModel.dismissScanResult()
+        viewModel.handleBarcodeScan(boardingQrPayload, context)
+        waitUntil { viewModel.activeScanResult.value != null && database.scanLogDao().getAllLogsFlow().first().size == 2 }
+        val boardingResult = viewModel.activeScanResult.value
+        assertTrue(boardingResult is StudentScanResult.Success)
+        assertFalse((boardingResult as StudentScanResult.Success).isApproved)
 
         // Denied meal serving
         viewModel.verifyAndServeMeal(boardingQrPayload, context)
@@ -434,4 +443,52 @@ class RoleFeaturesAndBackendSyncTest {
         val invalidOutcome = viewModel.mealScanOutcome.value
         assertTrue("Expected StudentNotFound for bare student ID but got $invalidOutcome", invalidOutcome is MealVerificationResult.StudentNotFound)
     }
+
+    @Test
+    fun adminEnrollsAndRevokesTrustedIssuerPublicKeyReactively() = runBlocking {
+        val viewModel = MainViewModel(repository, context)
+        viewModel.loginAs(UserRole.ADMINISTRATOR, "System Admin", hasFinancePermission = true)
+
+        val remoteSigner = SoftwareCardSigner(TestCardCryptoHelper.generateKeyPair())
+        val base64PubKey = com.example.crypto.CardCryptoUtils.encodePublicKeyToBase64(remoteSigner.publicKey)
+
+        viewModel.enrollTrustedIssuerPublicKey(base64PubKey, "Bursar Tablet 2")
+        val enrolled = viewModel.trustedIssuers.value.firstOrNull { it.kid == remoteSigner.keyId }
+        assertNotNull("Remote issuer must appear in reactive trustedIssuers flow", enrolled)
+        assertEquals("Bursar Tablet 2", enrolled!!.label)
+        assertFalse(enrolled.isRevoked)
+        assertTrue(TrustedIssuerRegistry.isTrusted(remoteSigner.keyId))
+
+        viewModel.revokeTrustedIssuer(remoteSigner.keyId)
+        val revoked = viewModel.trustedIssuers.value.firstOrNull { it.kid == remoteSigner.keyId }
+        assertNotNull(revoked)
+        assertTrue("Revoked issuer must update in reactive flow", revoked!!.isRevoked)
+        assertFalse(TrustedIssuerRegistry.isTrusted(remoteSigner.keyId))
+    }
+
+    @Test
+    fun lockSessionBlocksAutoRestoreAndManualOfflineResistsSystemOnlineEvent() = runBlocking {
+        val viewModel = MainViewModel(repository, context)
+        viewModel.loginAs(UserRole.GATE_STAFF, "Gate Officer 1")
+        assertNotNull(viewModel.currentUser.value)
+
+        viewModel.lockSession()
+        assertEquals(null, viewModel.currentUser.value)
+        // Calling restoreSupabaseSession while locked must not auto-unlock or crash
+        viewModel.restoreSupabaseSession(context)
+        delay(50)
+        assertEquals(null, viewModel.currentUser.value)
+
+        // System network callbacks respect manual offline mode
+        viewModel.toggleNetworkOnline(false)
+        assertFalse(repository.syncInfoFlow.first().isOnline)
+        viewModel.onSystemNetworkChanged(true)
+        assertFalse("Manual offline override must not be bypassed by OS network callback", repository.syncInfoFlow.first().isOnline)
+
+        viewModel.toggleNetworkOnline(true)
+        assertTrue(repository.syncInfoFlow.first().isOnline)
+        viewModel.onSystemNetworkChanged(false)
+        assertFalse("OS disconnect must mark SyncManager offline when not overridden", repository.syncInfoFlow.first().isOnline)
+    }
 }
+

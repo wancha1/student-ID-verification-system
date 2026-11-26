@@ -79,11 +79,13 @@ class MainViewModel(
     // Supabase sessions are restored from the encrypted Android Keystore vault.
     // Every restore revalidates the user's active LTC membership against Postgres RLS.
     private var sessionRestoreStarted = false
+    private var isSessionExplicitlyLocked = false
+    private var manualOfflineMode = false
     private var supabaseAuthenticator: SupabaseStaffAuthenticator? = null
     private val _currentUser = MutableStateFlow<AuthUser?>(null)
 
     fun restoreSupabaseSession(context: Context) {
-        if (sessionRestoreStarted || _currentUser.value != null) return
+        if (sessionRestoreStarted || isSessionExplicitlyLocked || _currentUser.value != null) return
         sessionRestoreStarted = true
         viewModelScope.launch {
             try {
@@ -92,7 +94,7 @@ class MainViewModel(
                 )
                 supabaseAuthenticator = authenticator
                 val staff = authenticator.restoreSession()
-                if (staff != null && _currentUser.value == null) {
+                if (staff != null && !isSessionExplicitlyLocked && _currentUser.value == null) {
                     loginAs(staff.role, staff.displayName, staff.hasExplicitFinanceAccess)
                     syncInBackground()
                 }
@@ -246,7 +248,33 @@ class MainViewModel(
     private val _isMealScannerOpen = MutableStateFlow(false)
     val isMealScannerOpen: StateFlow<Boolean> = _isMealScannerOpen.asStateFlow()
 
+    private val _hasIssuerSigningKey = MutableStateFlow(false)
+    val hasIssuerSigningKey: StateFlow<Boolean> = _hasIssuerSigningKey.asStateFlow()
+
+    private val _activeIssuerPublicKeyBase64 = MutableStateFlow<String?>(null)
+    val activeIssuerPublicKeyBase64: StateFlow<String?> = _activeIssuerPublicKeyBase64.asStateFlow()
+
+    private val _activeIssuerKeyId = MutableStateFlow<String?>(null)
+    val activeIssuerKeyId: StateFlow<String?> = _activeIssuerKeyId.asStateFlow()
+
+    private val _trustedIssuers = MutableStateFlow<List<TrustedIssuerEntry>>(emptyList())
+    val trustedIssuers: StateFlow<List<TrustedIssuerEntry>> = _trustedIssuers.asStateFlow()
+
+    fun refreshCryptoTrustState() {
+        val hasKey = runCatching { KeystoreIssuerManager.hasIssuerKey() }.getOrDefault(false)
+        _hasIssuerSigningKey.value = hasKey
+        val pubKey = if (hasKey) runCatching { KeystoreIssuerManager.getIssuerPublicKey() }.getOrNull() else null
+        _activeIssuerPublicKeyBase64.value = pubKey?.let {
+            runCatching { com.example.crypto.CardCryptoUtils.encodePublicKeyToBase64(it) }.getOrNull()
+        }
+        _activeIssuerKeyId.value = pubKey?.let {
+            runCatching { com.example.crypto.CardCryptoUtils.computeKeyId(it) }.getOrNull()
+        }
+        _trustedIssuers.value = runCatching { TrustedIssuerRegistry.getAllIssuers() }.getOrDefault(emptyList())
+    }
+
     init {
+        refreshCryptoTrustState()
         // Operational history is sourced from Room, not in-memory demo lists.
         repository.database?.let { db ->
             viewModelScope.launch {
@@ -316,6 +344,7 @@ class MainViewModel(
             _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
             return
         }
+        isSessionExplicitlyLocked = false
         val effectiveFinance = (role == UserRole.ADMINISTRATOR && hasFinancePermission)
         repository.syncManagerInstance?.setActiveRole(role, effectiveFinance)
         _currentUser.value = AuthUser(
@@ -356,6 +385,7 @@ class MainViewModel(
             role == UserRole.ADMINISTRATOR -> SecurityManager.getAdminName(context)
             else -> role.defaultUsername
         }
+        isSessionExplicitlyLocked = false
         val effectiveFinance = (role == UserRole.ADMINISTRATOR && hasExplicitFinanceAccess)
         val user = AuthUser(
             role = role,
@@ -381,6 +411,7 @@ class MainViewModel(
      * Locks terminal session. Unlocks only after entering valid staff credentials.
      */
     fun lockSession() {
+        isSessionExplicitlyLocked = true
         _currentUser.value = null
         repository.syncManagerInstance?.setActiveRole(null, false)
         dismissScanResult()
@@ -591,7 +622,17 @@ class MainViewModel(
         }
     }
 
+    fun onSystemNetworkChanged(isConnected: Boolean) {
+        if (manualOfflineMode && isConnected) return
+        val wasOnline = syncInfo.value.isOnline
+        repository.setNetworkOnline(isConnected)
+        if (!wasOnline && isConnected && _currentUser.value != null) {
+            syncInBackground()
+        }
+    }
+
     fun toggleNetworkOnline(isOnline: Boolean) {
+        manualOfflineMode = !isOnline
         repository.setNetworkOnline(isOnline)
         if (isOnline) {
             _userFeedbackMessage.value = "Network connected. Synchronizing with the school database…"
@@ -1220,46 +1261,6 @@ class MainViewModel(
         }
     }
 
-    private fun createInitialSampleMeals(): List<MealRecord> {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val now = System.currentTimeMillis()
-        return listOf(
-            MealRecord(
-                studentId = "stu-001",
-                studentNumber = "OAK-2026-0001",
-                studentName = "Kato Alex",
-                gradeClass = "Senior 3-A",
-                mealType = MealType.LUNCH,
-                mealDate = today,
-                timestamp = now - (18 * 60 * 1000),
-                serverName = "Chef Jackson Omondi",
-                status = MealServingStatus.SERVED
-            ),
-            MealRecord(
-                studentId = "stu-002",
-                studentNumber = "OAK-2026-0002",
-                studentName = "Nalwadda Grace",
-                gradeClass = "Senior 4-B",
-                mealType = MealType.LUNCH,
-                mealDate = today,
-                timestamp = now - (32 * 60 * 1000),
-                serverName = "Chef Jackson Omondi",
-                status = MealServingStatus.SERVED
-            ),
-            MealRecord(
-                studentId = "stu-004",
-                studentNumber = "OAK-2026-0004",
-                studentName = "Mukasa David",
-                gradeClass = "Senior 1-A",
-                mealType = MealType.BREAKFAST,
-                mealDate = today,
-                timestamp = now - (4 * 3600 * 1000),
-                serverName = "Chef Jackson Omondi",
-                status = MealServingStatus.SERVED
-            )
-        )
-    }
-
     fun clearFeedbackMessage() {
         _userFeedbackMessage.value = null
     }
@@ -1267,14 +1268,6 @@ class MainViewModel(
     fun clearLogs() {
         if (!requirePermission(StaffPermission.SYSTEM_CONFIGURATION, "Clearing gate activity audit logs")) return
         _userFeedbackMessage.value = "Gate activity audit logs are immutable in Version 1 and cannot be deleted."
-    }
-
-    fun resetDemoData() {
-        if (!requirePermission(StaffPermission.SYSTEM_CONFIGURATION, "Resetting local records")) return
-        viewModelScope.launch {
-            repository.resetToSampleData()
-            _userFeedbackMessage.value = "All local records cleared."
-        }
     }
 
     // Cryptographic Issuer & Verifier Authority Management
@@ -1287,8 +1280,10 @@ class MainViewModel(
             if (signer != null) {
                 TrustedIssuerRegistry.registerTrustedKey(signer.publicKey, "Local Device (${keyInfo.securityLevel.name})")
             }
+            refreshCryptoTrustState()
             _userFeedbackMessage.value = "Issuer Key enrolled in Keystore! Level: ${keyInfo.securityLevel.name}, kid: ${keyInfo.keyId}"
         } catch (e: Exception) {
+            refreshCryptoTrustState()
             _userFeedbackMessage.value = "Failed to enroll Keystore key: ${e.message}"
         }
     }
@@ -1297,6 +1292,7 @@ class MainViewModel(
         if (!requireAdminRole("Enrolling trusted public key")) return
         try {
             val entry = TrustedIssuerRegistry.registerTrustedKeyBase64(base64, label)
+            refreshCryptoTrustState()
             _userFeedbackMessage.value = "Trusted Issuer enrolled! kid: ${entry.kid} (${entry.label})"
         } catch (e: Exception) {
             _userFeedbackMessage.value = "Failed to enroll public key: ${e.message}"
@@ -1306,6 +1302,7 @@ class MainViewModel(
     fun revokeTrustedIssuer(kid: String) {
         if (!requireAdminRole("Revoking trusted issuer key")) return
         val success = TrustedIssuerRegistry.revokeIssuer(kid)
+        refreshCryptoTrustState()
         if (success) {
             _userFeedbackMessage.value = "Issuer key '$kid' revoked! Associated badges will now be rejected."
         } else {

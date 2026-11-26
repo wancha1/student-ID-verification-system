@@ -162,8 +162,8 @@ object ExportManager {
             </style>
             </head>
             <body>
-            <h1>OAKRIDGE ACADEMY</h1>
-            <div class="subtitle">Bursar & Academic Registry — Official Student Directory<br>Date of Issue: $dateStr</div>
+            <h1>LIRA TOWN COLLEGE (LTC)</h1>
+            <div class="subtitle">Admissions & Academic Registry — Official Student Directory<br>Date of Issue: $dateStr</div>
             <p><b>Executive Summary:</b> Total Day Scholars: ${students.count { it.isDayScholar }} | Fees Cleared: ${students.count { it.feesStatus.name == "CLEARED" }}</p>
             <table>
                 <tr>
@@ -309,7 +309,7 @@ object ExportManager {
             </style>
             </head>
             <body>
-            <h1>OAKRIDGE HIGH SCHOOL • SECURITY GATE VERIFICATION AUDIT</h1>
+            <h1>LIRA TOWN COLLEGE (LTC) • SECURITY GATE VERIFICATION AUDIT</h1>
             <div class="sub">Generated on $dateStr | Official Guard Station Log</div>
             <table>
                 <tr>
@@ -439,7 +439,7 @@ object ExportManager {
                 td { padding: 5px; border: 1px solid #CBD5E1; }
             </style>
             </head><body>
-            <h1>OAKRIDGE DINING HALL ACCESS RECORD</h1>
+            <h1>LIRA TOWN COLLEGE (LTC) • DINING HALL ACCESS RECORD</h1>
             <p>Date: ${SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.US).format(Date())} | Total Servings Logged: ${records.size}</p>
             <table>
                 <tr>
@@ -475,7 +475,7 @@ object ExportManager {
     private fun generateMealsTextReport(records: List<MealRecord>): String {
         val sb = StringBuilder()
         sb.append("===============================================================================\n")
-        sb.append("OAKRIDGE HIGH SCHOOL • DINING HALL ATTENDANCE LOG\n")
+        sb.append("LIRA TOWN COLLEGE (LTC) • DINING HALL ATTENDANCE LOG\n")
         sb.append("Generated: ${dateTimeFormatter.format(Date())} | Total Servings: ${records.size}\n")
         sb.append("===============================================================================\n\n")
         sb.append(String.format(Locale.US, "%-8s %-12s %-16s %-22s %-12s %-14s\n", "TIME", "MEAL", "STUDENT ID", "NAME", "CLASS", "STATUS"))
@@ -697,6 +697,8 @@ object ExportManager {
 
             context.startActivity(chooser)
             Toast.makeText(context, "Export ready: $fullFileName", Toast.LENGTH_SHORT).show()
+        } catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(context, "No compatible app found to open exported report.", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to download and share export file", e)
             Toast.makeText(context, "Export error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()

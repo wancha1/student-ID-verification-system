@@ -1,5 +1,10 @@
 package com.example.ui
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +29,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -73,6 +79,7 @@ import com.example.model.UserRole
 import com.example.ui.admin.AdminDashboardScreen
 import com.example.ui.admin.BatchPrintIdCardsDialog
 import com.example.ui.admin.HeadTeacherDashboardScreen
+import com.example.ui.admin.IssuerTrustDialog
 import com.example.ui.admin.StudentDetailScreen
 import com.example.ui.auth.SupabaseStaffLoginScreen
 import com.example.ui.components.MultiFormatExportDialog
@@ -113,12 +120,17 @@ fun StudentAccessApp(
     val mealRecords by viewModel.mealRecords.collectAsStateWithLifecycle()
     val mealScanOutcome by viewModel.mealScanOutcome.collectAsStateWithLifecycle()
     val isMealScannerOpen by viewModel.isMealScannerOpen.collectAsStateWithLifecycle()
+    val hasIssuerSigningKey by viewModel.hasIssuerSigningKey.collectAsStateWithLifecycle()
+    val activeIssuerKeyId by viewModel.activeIssuerKeyId.collectAsStateWithLifecycle()
+    val activeIssuerPublicKeyBase64 by viewModel.activeIssuerPublicKeyBase64.collectAsStateWithLifecycle()
+    val trustedIssuers by viewModel.trustedIssuers.collectAsStateWithLifecycle()
 
     var showLogsScreen by remember { mutableStateOf(false) }
     var showMealsScreen by remember { mutableStateOf(false) }
     var showHeadStudentsScreen by remember { mutableStateOf(false) }
     var mealsTab by remember { mutableStateOf("SERVE") }
     var showBatchPrintDialog by remember { mutableStateOf(false) }
+    var showIssuerTrustDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
     var showAllExportsDialog by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
@@ -137,6 +149,48 @@ fun StudentAccessApp(
         lifecycleOwner.lifecycle.addObserver(observer)
         viewModel.restoreSupabaseSession(context)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DisposableEffect(context, viewModel) {
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (cm == null) {
+            onDispose { }
+        } else {
+            val isCurrentlyConnected = runCatching {
+                val activeNetwork = cm.activeNetwork
+                val caps = activeNetwork?.let { cm.getNetworkCapabilities(it) }
+                caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            }.getOrDefault(true)
+            viewModel.onSystemNetworkChanged(isCurrentlyConnected)
+
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    viewModel.onSystemNetworkChanged(true)
+                }
+
+                override fun onLost(network: Network) {
+                    val stillConnected = runCatching {
+                        val active = cm.activeNetwork
+                        val caps = active?.let { cm.getNetworkCapabilities(it) }
+                        caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+                    }.getOrDefault(false)
+                    viewModel.onSystemNetworkChanged(stillConnected)
+                }
+            }
+            val registered = runCatching {
+                val request = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build()
+                cm.registerNetworkCallback(request, callback)
+                true
+            }.getOrDefault(false)
+
+            onDispose {
+                if (registered) {
+                    runCatching { cm.unregisterNetworkCallback(callback) }
+                }
+            }
+        }
     }
 
     LaunchedEffect(userFeedbackMessage) {
@@ -169,6 +223,7 @@ fun StudentAccessApp(
             val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showMealsScreen || (selectedStudentDetail != null)
 
             BackHandler(enabled = showSignOutConfirm) { showSignOutConfirm = false }
+            BackHandler(enabled = showIssuerTrustDialog) { showIssuerTrustDialog = false }
             BackHandler(enabled = showBatchPrintDialog) { showBatchPrintDialog = false }
             BackHandler(enabled = showAllExportsDialog) { showAllExportsDialog = false }
             BackHandler(enabled = showLogsScreen) { showLogsScreen = false }
@@ -283,6 +338,16 @@ fun StudentAccessApp(
                                                     showOptionsMenu = false
                                                 },
                                                 modifier = Modifier.testTag("menu_batch_print")
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Issuer & Trust Keys") },
+                                                leadingIcon = { Icon(Icons.Default.VerifiedUser, contentDescription = null) },
+                                                onClick = {
+                                                    viewModel.refreshCryptoTrustState()
+                                                    showIssuerTrustDialog = true
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_issuer_keys")
                                             )
                                         }
 
@@ -643,6 +708,23 @@ fun StudentAccessApp(
                         }
                     }
 
+                    if (showIssuerTrustDialog && user.role == UserRole.ADMINISTRATOR) {
+                        IssuerTrustDialog(
+                            hasIssuerSigningKey = hasIssuerSigningKey,
+                            activeIssuerKeyId = activeIssuerKeyId,
+                            activeIssuerPublicKeyBase64 = activeIssuerPublicKeyBase64,
+                            trustedIssuers = trustedIssuers,
+                            onGenerateIssuerKey = { viewModel.setupAuthoritativeIssuerKey() },
+                            onEnrollTrustedKey = { base64, label ->
+                                viewModel.enrollTrustedIssuerPublicKey(base64, label)
+                            },
+                            onRevokeTrustedIssuer = { kid ->
+                                viewModel.revokeTrustedIssuer(kid)
+                            },
+                            onDismiss = { showIssuerTrustDialog = false }
+                        )
+                    }
+
                     if (showBatchPrintDialog) {
                         BatchPrintIdCardsDialog(
                             students = allStudents,
@@ -682,6 +764,9 @@ fun StudentAccessApp(
                                 Button(
                                     onClick = {
                                         showSignOutConfirm = false
+                                        showIssuerTrustDialog = false
+                                        showBatchPrintDialog = false
+                                        showAllExportsDialog = false
                                         showLogsScreen = false
                                         showMealsScreen = false
                                         showHeadStudentsScreen = false

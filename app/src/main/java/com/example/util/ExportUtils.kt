@@ -108,7 +108,15 @@ object ExportUtils {
         val chooser = Intent.createChooser(sendIntent, "Share Gate Access Report").apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        context.startActivity(chooser)
+        try {
+            context.startActivity(chooser)
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(
+                context,
+                "No app installed to share this report.",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private fun escapeCsv(value: String): String {
