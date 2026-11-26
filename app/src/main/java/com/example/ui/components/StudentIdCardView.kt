@@ -79,11 +79,14 @@ fun PrintableStudentIdCard(
         val ts = card?.issueDate ?: student.updatedAt
         SimpleDateFormat("MMM yyyy", Locale.US).format(Date(ts))
     }
-    val cardIdStr = card?.cardIdentifier ?: "CRD-${student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")}-01"
-    val cardStatus = card?.status ?: CardStatus.ACTIVE
-    val effectiveQrPayload = remember(card?.qrPayload, student.studentNumber, cardIdStr) {
-        if (card != null && card.qrPayload.isNotBlank()) card.qrPayload
-        else student.uniqueQrCode
+    val displayYear = remember(student.academicYear) {
+        val currentYr = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR).toString()
+        student.academicYear.substringAfterLast("/").trim().ifBlank { currentYr }
+    }
+    val cardIdStr = card?.cardIdentifier ?: "UNISSUED-${student.studentNumber.removePrefix("LTC-").removePrefix("OAK-")}"
+    val cardStatus = card?.status ?: CardStatus.DEACTIVATED
+    val effectiveQrPayload = remember(card?.qrPayload) {
+        card?.qrPayload?.takeIf { it.isNotBlank() }
     }
 
     Card(
@@ -152,7 +155,7 @@ fun PrintableStudentIdCard(
                         color = Color(0xFFF59E0B)
                     ) {
                         Text(
-                            text = "2026",
+                            text = displayYear,
                             color = Color(0xFF0F172A),
                             fontWeight = FontWeight.Black,
                             fontSize = 11.sp,
@@ -237,7 +240,17 @@ fun PrintableStudentIdCard(
                                 .padding(4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            VisualQrMatrix(payload = effectiveQrPayload)
+                            if (effectiveQrPayload != null) {
+                                VisualQrMatrix(payload = effectiveQrPayload)
+                            } else {
+                                Text(
+                                    text = "NO V2 QR\nISSUED",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFB91C1C),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
 
@@ -285,7 +298,7 @@ fun PrintableStudentIdCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "VALID THRU: 12/2026",
+                        text = "VALID THRU: 12/$displayYear",
                         color = Color(0xFF94A3B8),
                         fontWeight = FontWeight.Bold,
                         fontSize = 9.sp,
