@@ -72,7 +72,7 @@ class QrSecurityTrustModelTest {
         testKeyPair = TestCardCryptoHelper.generateKeyPair()
         testSigner = SoftwareCardSigner(testKeyPair)
         CardCryptoManager.setActiveSigner(testSigner)
-        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Primary Test Issuer Authority")
+        TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "Primary Test Issuer Authority")
 
         runBlocking {
             mockRepository.resetToSampleData()
@@ -722,7 +722,7 @@ class QrSecurityTrustModelTest {
         assertTrue("Revoked public key must not be returned", TrustedIssuerRegistry.getPublicKey(kid) == null)
 
         try {
-            TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Attempted re-enrollment")
+            TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "Attempted re-enrollment")
             fail("A revoked key must not be re-enrolled")
         } catch (expected: SecurityException) {
             assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
@@ -760,7 +760,7 @@ class QrSecurityTrustModelTest {
         // Introduce Issuer 2 (Key Rotation)
         val issuer2KeyPair = TestCardCryptoHelper.generateKeyPair()
         val issuer2Signer = SoftwareCardSigner(issuer2KeyPair)
-        TrustedIssuerRegistry.registerTrustedKey(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
+        TestCardCryptoHelper.seedTrustedIssuer(issuer2Signer.publicKey, "Rotated Issuer Authority #2")
 
         // Activate Issuer 2 explicitly in the test harness. Production code cannot
         // pass an arbitrary signer into signCardPayload.
