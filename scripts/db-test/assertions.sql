@@ -120,3 +120,99 @@ BEGIN
 END $$;
 
 SELECT 'PASS: Blocker 1 migration integration assertions' AS result;
+
+
+-- Fee-status sync must be allowed only through the trusted internal trigger context.
+SELECT set_config('test.finance_authorized', 'true', false);
+INSERT INTO public.student_finances
+  (school_id, student_id, outstanding_amount, fee_status, updated_at_ms)
+VALUES
+  ('school-test', 'student-test-1', 50000, 'OUTSTANDING', 1700000002000);
+
+DO $$
+BEGIN
+  IF (SELECT fee_status FROM public.students WHERE id='student-test-1') <> 'OUTSTANDING' THEN
+    RAISE EXCEPTION 'Finance INSERT did not synchronize OUTSTANDING status to students';
+  END IF;
+END $$;
+
+UPDATE public.student_finances
+SET fee_status='CLEARED', updated_at_ms=1700000003000
+WHERE school_id='school-test' AND student_id='student-test-1';
+
+DO $$
+BEGIN
+  IF (SELECT fee_status FROM public.students WHERE id='student-test-1') <> 'CLEARED' THEN
+    RAISE EXCEPTION 'Finance UPDATE did not synchronize CLEARED status to students';
+  END IF;
+  IF COALESCE(current_setting('app.finance_sync', true), '') = 'on' THEN
+    RAISE EXCEPTION 'Internal finance sync flag was not reset';
+  END IF;
+END $$;
+
+-- The internal bypass must not weaken direct client-side fee-status controls.
+SELECT set_config('test.finance_authorized', 'false', false);
+DO $$
+BEGIN
+  BEGIN
+    UPDATE public.students SET fee_status='OUTSTANDING' WHERE id='student-test-1';
+    RAISE EXCEPTION 'Expected direct non-finance fee-status update to fail';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Expected direct non-finance fee-status update to fail' THEN RAISE; END IF;
+    IF position('finance permission' in lower(SQLERRM)) = 0 THEN RAISE; END IF;
+  END;
+END $$;
+
+-- Fee status is explicit: no default is allowed on student_finances.
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.student_finances (school_id, student_id, updated_at_ms)
+    VALUES ('school-test', 'student-test-1', 1700000004000);
+    RAISE EXCEPTION 'Expected student_finances.fee_status NOT NULL to reject omission';
+  EXCEPTION WHEN not_null_violation THEN
+    NULL;
+  END;
+END $$;
+
+
+-- If the downstream student update fails, the finance row must roll back and
+-- the internal context flag must still be restored.
+CREATE FUNCTION pg_temp.fail_student_fee_update()
+RETURNS trigger LANGUAGE plpgsql AS $fail$
+BEGIN
+  RAISE EXCEPTION 'CI forced student fee-status update failure';
+END;
+$fail$;
+CREATE TRIGGER ci_fail_student_fee_update
+BEFORE UPDATE OF fee_status ON public.students
+FOR EACH ROW EXECUTE FUNCTION pg_temp.fail_student_fee_update();
+
+DO $sync_failure$
+BEGIN
+  BEGIN
+    UPDATE public.student_finances
+    SET fee_status='OUTSTANDING', updated_at_ms=1700000005000
+    WHERE school_id='school-test' AND student_id='student-test-1';
+    RAISE EXCEPTION 'Expected downstream student update failure';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Expected downstream student update failure' THEN RAISE; END IF;
+    IF position('CI forced student fee-status update failure' in SQLERRM) = 0 THEN RAISE; END IF;
+  END;
+END $sync_failure$;
+
+DO $sync_failure_assertions$
+BEGIN
+  IF (SELECT fee_status FROM public.student_finances
+      WHERE school_id='school-test' AND student_id='student-test-1') <> 'CLEARED' THEN
+    RAISE EXCEPTION 'Finance row was not rolled back after downstream sync failure';
+  END IF;
+  IF (SELECT fee_status FROM public.students WHERE id='student-test-1') <> 'CLEARED' THEN
+    RAISE EXCEPTION 'Student fee status changed despite failed downstream update';
+  END IF;
+  IF COALESCE(current_setting('app.finance_sync', true), '') = 'on' THEN
+    RAISE EXCEPTION 'Internal finance sync flag was not restored after exception';
+  END IF;
+END $sync_failure_assertions$;
+
+SELECT 'PASS: Blocker 1 and finance sync migration integration assertions' AS result;
