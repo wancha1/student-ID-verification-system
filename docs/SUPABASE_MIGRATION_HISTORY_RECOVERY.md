@@ -15,7 +15,7 @@ For each recorded row, the recovery used:
 - `name` as the migration suffix;
 - the stored `statements` array as the SQL file contents.
 
-The project contained 18 migration-history rows. Every row contained exactly one SQL statement. The resulting 18 files were compared byte-for-byte after trimming outer whitespace against the stored statement. **All 18 matched.**
+The project contained 18 migration-history rows. Every row contained exactly one SQL statement. The recovered source initially matched all 18 statements byte-for-byte after trimming outer whitespace. During release-safety review, the personal-email seed rows in `20261111133009_record_ltc_staff_invitation_plan.sql` were removed from the source-controlled copy. The table definition is preserved, while those invitation records must be provisioned through the authorized school-server workflow. Consequently, 17/18 files remain byte-for-byte matches; the one deliberate sanitization is documented here.
 
 No live schema, data, migration-history row, key, secret, or database setting was modified.
 
@@ -56,19 +56,20 @@ In particular, `20261112000300_mark_clean_ltc_start.sql` had no corresponding ro
 
 - Live migration-history rows: 18.
 - Canonical SQL files: 18.
-- Exact SQL comparisons: 18/18 matched.
+- Exact SQL comparisons after privacy sanitization: 17/18 matched.
+- `20261111133009_record_ltc_staff_invitation_plan.sql`: schema retained; historical personal-email seed data intentionally omitted.
 - Migration versions: strictly chronological.
 - Archived noncanonical files: 9.
 - Live database writes: none.
-- Clean-database replay: **not yet run**.
-- Staging replay: **not yet run**.
+- Clean-database replay: running in disposable GitHub Actions Supabase local stack; result pending.
+- Staging replay: not required for the source-only sanitization; existing staging history remains unchanged.
 
 ## Required next checks
 
 1. Review the recovered SQL, especially the initial RLS and Storage policies, as historical source rather than assuming they are still the desired final security posture.
 2. Run the full sequence against a disposable empty Supabase/Postgres environment using the project's pinned Supabase CLI version.
 3. Compare the resulting schema, functions, triggers, policies, grants, extensions, and Storage configuration against the live project using schema-only comparison.
-4. Reconcile the later open PR migrations (#68 and #72–#74) against this canonical history. Do not rewrite a migration after it has been applied.
+4. Reconcile the later open PR migrations (#68 and #72–#74) against this canonical history. Do not rewrite an applied schema change; this sanitization removes only historical invitation seed data from the source copy, not schema DDL.
 5. Only after clean replay and review, use a disposable staging project for the #72/#73 security tests.
 
 A successful SQL text recovery is not proof that the migrations replay cleanly or that the resulting schema is production-safe.
