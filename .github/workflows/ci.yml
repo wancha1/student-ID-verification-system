@@ -74,8 +74,18 @@ jobs:
           artifact="$HOME/.m2/repository/org/robolectric/android-all-instrumented/$version/android-all-instrumented-$version.jar"
           mkdir -p "$(dirname "$artifact")"
           if [ ! -s "$artifact" ]; then
-            url="https://repo.maven.apache.org/maven2/org/robolectric/android-all-instrumented/$version/android-all-instrumented-$version.jar"
-            curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 3 "$url" -o "$artifact"
+            relative="org/robolectric/android-all-instrumented/$version/android-all-instrumented-$version.jar"
+            downloaded=false
+            for mirror in \
+              "https://maven-central.storage-download.googleapis.com/maven2" \
+              "https://repo.maven.apache.org/maven2" \
+              "https://repo1.maven.org/maven2"; do
+              if curl --fail --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 "$mirror/$relative" -o "$artifact"; then
+                downloaded=true
+                break
+              fi
+            done
+            test "$downloaded" = true
           fi
           test -s "$artifact"
       - name: Run Android unit tests
