@@ -722,7 +722,7 @@ class QrSecurityTrustModelTest {
         assertTrue("Revoked public key must not be returned", TrustedIssuerRegistry.getPublicKey(kid) == null)
 
         try {
-            TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "Attempted re-enrollment")
+            TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Attempted re-enrollment")
             fail("A revoked key must not be re-enrolled")
         } catch (expected: SecurityException) {
             assertTrue(expected.message!!.contains("revoked", ignoreCase = true))
