@@ -87,7 +87,7 @@ class RoleFeaturesAndBackendSyncTest {
         testKeyPair = TestCardCryptoHelper.generateKeyPair()
         testSigner = SoftwareCardSigner(testKeyPair)
         CardCryptoManager.setActiveSigner(testSigner)
-        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "LTC Authority")
+        TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "LTC Authority")
 
         val now = System.currentTimeMillis()
         boardingQrPayload = CardCryptoManager.signCardPayload(
