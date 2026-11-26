@@ -71,7 +71,6 @@ import com.example.ui.theme.ApprovedGreenLight
 import com.example.ui.theme.ApprovedGreenText
 import com.example.ui.theme.LocalRoleTheme
 import com.example.ui.theme.PendingAmber
-import com.example.ui.theme.PendingAmberLight
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedLight
