@@ -130,6 +130,10 @@ jobs:
           version: v2.stable
       - name: Generate local Supabase configuration
         run: supabase init --force
+      - name: Avoid shared-runner PostgreSQL port collisions
+        run: |
+          sed -i '/^\[db\]/,/^\[/{s/^port = 54322$/port = 54342/; s/^shadow_port = 54320$/shadow_port = 54340/;}' supabase/config.toml
+          grep -A8 '^\[db\]' supabase/config.toml
       - name: Start disposable local Supabase stack
         run: supabase start
       - name: Replay every canonical migration from an empty database
