@@ -57,11 +57,10 @@ class LtcSystemVerificationTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        TrustedIssuerRegistry.initialize(context)
-        if (!CardCryptoManager.hasIssuerPrivateKey()) {
-            val keyPair = TestCardCryptoHelper.generateKeyPair()
-            TestCardCryptoHelper.configureTestKeyPair(keyPair)
-        }
+        CardCryptoManager.resetForTesting()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
+        val keyPair = TestCardCryptoHelper.generateKeyPair()
+        TestCardCryptoHelper.configureTestKeyPair(keyPair)
     }
 
     @After
