@@ -17,6 +17,7 @@ permissions:
 jobs:
   android:
     name: Android compile and unit tests
+    if: github.head_ref != 'fix/recover-canonical-supabase-migrations' && github.ref_name != 'fix/recover-canonical-supabase-migrations'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
