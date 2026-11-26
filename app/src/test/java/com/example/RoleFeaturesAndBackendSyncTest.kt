@@ -427,6 +427,24 @@ class RoleFeaturesAndBackendSyncTest {
         assertTrue("No unapproved meal serving may be persisted",
             database.mealRecordDao().observeAll().first().isEmpty())
     }
+    
+    @Test
+    fun administratorIssuerLifecycleRemainsFailClosedWithoutServerAuthorization() {
+        viewModel.loginAs(UserRole.ADMINISTRATOR, "System Admin", hasFinancePermission = true)
 
+        val unapprovedSigner = SoftwareCardSigner(TestCardCryptoHelper.generateKeyPair())
+        val unapprovedPublicKey = com.example.crypto.CardCryptoUtils.encodePublicKeyToBase64(unapprovedSigner.publicKey)
+
+        viewModel.enrollTrustedIssuerPublicKey(unapprovedPublicKey, "Unapproved local terminal")
+        assertFalse("Admin UI must not locally enroll a new issuer", TrustedIssuerRegistry.isTrusted(unapprovedSigner.keyId))
+
+        viewModel.revokeTrustedIssuer(testSigner.keyId)
+        assertTrue("Admin UI must not locally revoke a trusted issuer", TrustedIssuerRegistry.isTrusted(testSigner.keyId))
+
+        viewModel.setupAuthoritativeIssuerKey()
+        assertFalse("Issuer signing must remain unavailable without server authorization",
+            CardCryptoManager.hasIssuerPrivateKey())
+        assertTrue(viewModel.userFeedbackMessage.value.orEmpty().contains("disabled", ignoreCase = true))
+    }
 
 }
