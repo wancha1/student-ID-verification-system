@@ -409,8 +409,8 @@ class RoleFeaturesAndBackendSyncTest {
         waitUntil { viewModel.mealScanOutcome.value != null }
         val lunchOutcome = viewModel.mealScanOutcome.value
         assertTrue("Expected policy-pending meal result but got $lunchOutcome",
-            lunchOutcome is MealVerificationResult.BlockedNoClearance)
-        assertTrue((lunchOutcome as MealVerificationResult.BlockedNoClearance).reason.contains("No meal was recorded as served", ignoreCase = true))
+            lunchOutcome is MealVerificationResult.PolicyPending)
+        assertTrue((lunchOutcome as MealVerificationResult.PolicyPending).reason.contains("No meal was recorded as served", ignoreCase = true))
         viewModel.dismissMealOutcome()
 
         viewModel.setActiveMealType(MealType.DINNER)
@@ -418,7 +418,7 @@ class RoleFeaturesAndBackendSyncTest {
         waitUntil { viewModel.mealScanOutcome.value != null }
         val dinnerOutcome = viewModel.mealScanOutcome.value
         assertTrue("Day scholar meal must remain pending too: $dinnerOutcome",
-            dinnerOutcome is MealVerificationResult.BlockedNoClearance)
+            dinnerOutcome is MealVerificationResult.PolicyPending)
         viewModel.dismissMealOutcome()
 
         viewModel.verifyAndServeMeal("LTC-2026-8101", context)
