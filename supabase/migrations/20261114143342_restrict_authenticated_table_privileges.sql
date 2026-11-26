@@ -1,3 +1,4 @@
+
 -- LTC V1: remove broad table privileges that bypass row-level security.
 -- PostgreSQL TRUNCATE is not governed by RLS.
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon;
