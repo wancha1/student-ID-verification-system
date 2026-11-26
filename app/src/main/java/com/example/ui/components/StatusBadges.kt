@@ -217,6 +217,13 @@ fun GateDecisionBadge(
             Icons.Default.QrCodeScanner,
             "INVALID QR"
         )
+        GateVerificationDecision.POLICY_PENDING -> Tuple5(
+            PendingAmberLight,
+            PendingAmber,
+            Color(0xFF92400E),
+            Icons.Default.Warning,
+            "POLICY PENDING"
+        )
     }
 
     Row(
