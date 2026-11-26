@@ -194,3 +194,77 @@ VALUES ('student-photos', 'school-test/student-test-2/photo.jpg');
 RESET ROLE;
 
 SELECT 'PASS: Head Teacher read-only student profile and photo boundary' AS result;
+
+
+-- Gate and Meal sync is append-only and idempotent under offline retries.
+SELECT set_config('test.staff_authorized', 'true', false);
+SELECT set_config('test.staff_role', 'GATE_OFFICER', false);
+SET ROLE authenticated;
+DO $$
+DECLARE inserted boolean;
+BEGIN
+  inserted := public.scholink_insert_gate_log_once(
+    '{"school_id":"school-test","id":"gate-event-1","student_number":"SYN-001","student_name":"Original name","decision":"APPROVED","gate_location":"Main gate","timestamp_ms":1700000000000}'::jsonb
+  );
+  IF NOT inserted THEN RAISE EXCEPTION 'Gate first insert should be accepted'; END IF;
+
+  inserted := public.scholink_insert_gate_log_once(
+    '{"school_id":"school-test","id":"gate-event-1","student_number":"SYN-001","student_name":"Overwritten name","decision":"DENIED","gate_location":"Other gate","timestamp_ms":1700000000001}'::jsonb
+  );
+  IF inserted THEN RAISE EXCEPTION 'Gate retry must be a no-op'; END IF;
+
+  IF (SELECT student_name FROM public.gate_logs
+      WHERE school_id='school-test' AND id='gate-event-1') <> 'Original name' THEN
+    RAISE EXCEPTION 'Gate retry overwrote an existing event';
+  END IF;
+
+  BEGIN
+    PERFORM public.scholink_insert_meal_once(
+      '{"school_id":"school-test","id":"meal-forbidden","student_id":"student-test-1","student_number":"SYN-001","student_name":"Synthetic","grade_class":"S1","meal_type":"LUNCH","meal_date":"2026-11-27","status":"SERVED","serving_station":"Hall","timestamp_ms":1700000000000}'::jsonb
+    );
+    RAISE EXCEPTION 'Gate Officer must not insert meal records';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+
+SELECT set_config('test.staff_role', 'MEAL_STAFF', false);
+SET ROLE authenticated;
+DO $$
+DECLARE inserted boolean;
+BEGIN
+  inserted := public.scholink_insert_meal_once(
+    '{"school_id":"school-test","id":"meal-event-1","student_id":"student-test-1","student_number":"SYN-001","student_name":"Synthetic","grade_class":"S1","meal_type":"LUNCH","meal_date":"2026-11-27","status":"SERVED","notes":"First device","serving_station":"Hall","timestamp_ms":1700000000000}'::jsonb
+  );
+  IF NOT inserted THEN RAISE EXCEPTION 'Meal first insert should be accepted'; END IF;
+
+  inserted := public.scholink_insert_meal_once(
+    '{"school_id":"school-test","id":"meal-event-2","student_id":"student-test-1","student_number":"SYN-001","student_name":"Changed","grade_class":"S1","meal_type":"LUNCH","meal_date":"2026-11-27","status":"SERVED","notes":"Second device","serving_station":"Other hall","timestamp_ms":1700000000001}'::jsonb
+  );
+  IF inserted THEN RAISE EXCEPTION 'Duplicate student meal on same date must be ignored'; END IF;
+
+  IF (SELECT count(*) FROM public.meals
+      WHERE school_id='school-test' AND student_id='student-test-1'
+        AND meal_type='LUNCH' AND meal_date='2026-11-27') <> 1 THEN
+    RAISE EXCEPTION 'Meal natural-key duplicate was not prevented';
+  END IF;
+
+  BEGIN
+    PERFORM public.scholink_insert_gate_log_once(
+      '{"school_id":"school-test","id":"gate-forbidden","student_number":"SYN-001","student_name":"Synthetic","decision":"APPROVED","gate_location":"Main gate","timestamp_ms":1700000000000}'::jsonb
+    );
+    RAISE EXCEPTION 'Meal Staff must not insert gate records';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+
+DO $$
+BEGIN
+  IF has_table_privilege('authenticated', 'public.gate_logs', 'UPDATE')
+     OR has_table_privilege('authenticated', 'public.meals', 'UPDATE') THEN
+    RAISE EXCEPTION 'Gate and Meal clients must not have UPDATE table privileges';
+  END IF;
+END $$;
+
+SELECT 'PASS: append-only idempotent Gate and Meal sync' AS result;
