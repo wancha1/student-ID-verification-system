@@ -387,7 +387,8 @@ class RoleFeaturesAndBackendSyncTest {
         val logs = database.scanLogDao().getAllLogsFlow().first()
         assertEquals(boardingStudentId, logs.first().studentId)
         assertEquals("Guard Ocen", logs.first().guardName)
-        assertEquals(GateVerificationDecision.POLICY_PENDING, logs.first().decision)
+        assertEquals(GateVerificationDecision.POLICY_PENDING.name, logs.first().decision)
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
 
         // Denied meal serving
         viewModel.verifyAndServeMeal(boardingQrPayload, context)
@@ -409,7 +410,7 @@ class RoleFeaturesAndBackendSyncTest {
         val lunchOutcome = viewModel.mealScanOutcome.value
         assertTrue("Expected policy-pending meal result but got $lunchOutcome",
             lunchOutcome is MealVerificationResult.BlockedNoClearance)
-        assertTrue((lunchOutcome as MealVerificationResult.BlockedNoClearance).reason.contains("policy", ignoreCase = true))
+        assertTrue((lunchOutcome as MealVerificationResult.BlockedNoClearance).reason.contains("No meal was recorded as served", ignoreCase = true))
         viewModel.dismissMealOutcome()
 
         viewModel.setActiveMealType(MealType.DINNER)
