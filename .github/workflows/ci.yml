@@ -41,11 +41,11 @@ jobs:
       - name: Apply issuer lifecycle audit migration
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261125152300_trusted_issuer_lifecycle_audit.sql
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261126144609_trusted_issuer_lifecycle_audit.sql
       - name: Apply student school-change guard migration
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261125153000_block_unapproved_student_school_changes.sql
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261126144613_block_unapproved_student_school_changes.sql
       - name: Verify migration behaviour and privileges
         env:
           PGPASSWORD: postgres
