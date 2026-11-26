@@ -25,6 +25,13 @@ import java.io.File
  * roster, private profile, card, gate-log, meal, attendance, exam-exception
  * and private-photo operations.
  */
+/**
+ * Client-side mirror of the server-side student registry write boundary.
+ * Supabase RLS remains authoritative; this guard prevents unauthorized writes
+ * from being queued or attempted by read-only operational roles.
+ */
+internal fun canWriteStudentRecords(role: String): Boolean = role == "ADMIN"
+
 class SupabaseCloudBackend(
     private val context: Context,
     private val client: SupabaseClient = SupabaseClientFactory.getInstance(context.applicationContext),
@@ -243,17 +250,15 @@ class SupabaseCloudBackend(
     override suspend fun pushStudentChanges(students: List<StudentEntity>): Result<Unit> = runCatching {
         if (students.isEmpty()) return@runCatching
         val role = activeRole()
-        if (role !in setOf("ADMIN", "HEAD_TEACHER")) {
-            throw SecurityException("Only school leadership can update student records.")
+        if (!canWriteStudentRecords(role)) {
+            throw SecurityException("Only an administrator can update student records and photos.")
         }
 
         for (student in students) {
             val photoPath = uploadPhotoIfLocal(student)
-            if (role == "ADMIN") {
-                client.from("students").upsert(
-                    StudentRow.from(student, schoolId, photoPath)
-                ) { onConflict = "school_id,id" }
-            }
+            client.from("students").upsert(
+                StudentRow.from(student, schoolId, photoPath)
+            ) { onConflict = "school_id,id" }
             client.from("student_private").upsert(
                 StudentPrivateRow(
                     schoolId = schoolId,
