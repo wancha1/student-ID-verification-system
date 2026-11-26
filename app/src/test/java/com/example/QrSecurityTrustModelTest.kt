@@ -702,6 +702,26 @@ class QrSecurityTrustModelTest {
         }
         assertTrue("Rejected local revocation must not mutate trust state", TrustedIssuerRegistry.isTrusted(kid))
 
+        // New local issuer keys are also rejected, not just attempts to restore a revoked key.
+        val unauthorizedSigner = SoftwareCardSigner(TestCardCryptoHelper.generateKeyPair())
+        try {
+            TrustedIssuerRegistry.registerTrustedKey(unauthorizedSigner.publicKey, "Unapproved local issuer")
+            fail("Local issuer enrollment must be disabled for new keys")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("Local issuer enrollment is disabled", ignoreCase = true))
+        }
+        try {
+            TrustedIssuerRegistry.registerTrustedKeyBase64(
+                CardCryptoUtils.encodePublicKeyToBase64(unauthorizedSigner.publicKey),
+                "Unapproved Base64 issuer"
+            )
+            fail("Local Base64 issuer enrollment must be disabled")
+        } catch (expected: SecurityException) {
+            assertTrue(expected.message!!.contains("Local issuer enrollment is disabled", ignoreCase = true))
+        }
+        assertFalse("Unapproved local issuer must never enter the trust registry",
+            TrustedIssuerRegistry.isTrusted(unauthorizedSigner.keyId))
+
         // Seed the exact persisted representation received from an authoritative server.
         // This avoids using the disabled local revocation API as a test setup shortcut.
         TrustedIssuerRegistry.clearAll()
