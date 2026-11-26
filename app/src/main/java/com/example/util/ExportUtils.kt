@@ -77,7 +77,8 @@ object ExportUtils {
         sb.append("• Total Gate Scans Recorded: $totalScans\n")
         sb.append("• Unique Students Verified: $uniqueStudentsScanned\n")
         sb.append("• Access Approved: $approvedScans (${if (totalScans > 0) (approvedScans * 100 / totalScans) else 0}%)\n")
-        sb.append("• Access Denied / Flagged: $deniedScans (${if (totalScans > 0) (deniedScans * 100 / totalScans) else 0}%)\n\n")
+        sb.append("• Access Denied: $deniedScans (${if (totalScans > 0) (deniedScans * 100 / totalScans) else 0}%)\n")
+        sb.append("• Policy Pending: $pendingScans\n\n")
 
         sb.append("📋 RECENT GATE ACTIVITY HIGHLIGHTS (LAST 10):\n")
         scanLogs.take(10).forEachIndexed { index, log ->
