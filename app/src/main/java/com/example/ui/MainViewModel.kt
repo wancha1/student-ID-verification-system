@@ -418,7 +418,17 @@ class MainViewModel(
         }
         viewModelScope.launch {
             _isScannerOpen.value = false
-            val scanResult = repository.verifyStudentByQr(rawCode)
+            val verifiedResult = repository.verifyStudentByQr(rawCode)
+            val scanResult = if (verifiedResult is StudentScanResult.Success) {
+                val direction = _gateDirection.value.name
+                verifiedResult.copy(
+                    isApproved = false,
+                    reason = "Identity and active card verified. $direction movement is not authorized until the school approves the gate policy. No movement authorization was issued.",
+                    isPolicyPending = true
+                )
+            } else {
+                verifiedResult
+            }
             _activeScanResult.value = scanResult
 
             val guard = _currentUser.value?.name ?: "Security Guard"
@@ -441,7 +451,7 @@ class MainViewModel(
                             cardId = card?.id,
                             cardIdentifier = card?.cardIdentifier ?: "CRD-UNKNOWN",
                             qrPayload = card?.qrPayload ?: rawCode,
-                            decision = if (scanResult.isApproved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
+                            decision = if (scanResult.isPolicyPending) GateVerificationDecision.POLICY_PENDING else if (scanResult.isApproved) GateVerificationDecision.APPROVED else GateVerificationDecision.NOT_APPROVED,
                             feeStatus = student.feesStatus,
                             cardStatus = card?.status ?: CardStatus.ACTIVE,
                             isDayScholar = student.isDayScholar,
@@ -450,13 +460,14 @@ class MainViewModel(
                             isOfflineDecision = scanResult.isOfflineData,
                             dataSyncTimestampAtScan = scanResult.lastSyncTimestamp,
                             guardName = guard,
-                            deviceIdentifier = "GateTerminal-01",
-                            gateLocation = "Gate 1 (Main Entrance)"
+                            deviceIdentifier = _currentUser.value?.station ?: "GateTerminal",
+                            gateLocation = _currentUser.value?.station ?: "Gate"
                         )
                     )
 
                     context?.let { ctx ->
-                        FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
+                        if (scanResult.isPolicyPending) FeedbackHelper.playWarningSoundAndHaptic(ctx)
+                        else FeedbackHelper.playFeedback(ctx, scanResult.isApproved)
                     }
                 }
 
