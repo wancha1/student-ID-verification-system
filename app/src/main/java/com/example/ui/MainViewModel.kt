@@ -1012,12 +1012,6 @@ class MainViewModel(
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
         _isMealScannerOpen.value = false
-        val selectedMeal = _activeMealType.value
-        if (!selectedMeal.isEnabledForServing) {
-            _userFeedbackMessage.value = "${selectedMeal.label} is disabled. Only lunch and supper can be served."
-            FeedbackHelper.playDeniedSoundAndHaptic(context)
-            return
-        }
         val user = _currentUser.value
         if (user == null || !user.hasPermission(StaffPermission.SERVE_MEALS)) {
             _userFeedbackMessage.value = "Access Denied: Unauthenticated session. Meal Staff authorization is required."
@@ -1026,47 +1020,25 @@ class MainViewModel(
             return
         }
 
-        // Production path uses the shared verifier, which validates the exact signed card,
-        // checks its lifecycle status, enforces meal permissions, and persists the event to Room.
+        // The shared verifier keeps production scans fail-closed. The school has not
+        // approved meal periods, eligibility, exceptions or a serving fallback yet.
         if (repository.database != null && repository.syncManagerInstance != null) {
             _selectedDepartment.value = ScanDepartment.MEALS
             scanUnifiedQr(rawCode, context)
             return
         }
 
-        // Test/demo repositories have no Room database. Still use the repository's full
-        // credential and card-lifecycle verifier rather than trusting the QR signature alone.
+        // Demo/test repositories must not bypass the same policy boundary.
         viewModelScope.launch {
             when (val verification = repository.verifyStudentByQr(rawCode)) {
                 is StudentScanResult.Success -> {
-                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                    val meal = _activeMealType.value
-                    val previous = _mealRecords.value.find {
-                        it.studentId == verification.student.id &&
-                            it.mealType == meal && it.mealDate == today &&
-                            it.status == MealServingStatus.SERVED
-                    }
-                    if (previous != null) {
-                        _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
-                            verification.student, meal, previous
-                        )
-                        FeedbackHelper.playWarningSoundAndHaptic(context)
-                    } else {
-                        val record = MealRecord(
-                            studentId = verification.student.id,
-                            studentNumber = verification.student.studentNumber,
-                            studentName = verification.student.fullName,
-                            gradeClass = verification.student.gradeClass,
-                            mealType = meal,
-                            mealDate = today,
-                            timestamp = System.currentTimeMillis(),
-                            serverName = user.name,
-                            status = MealServingStatus.SERVED
-                        )
-                        _mealRecords.value = listOf(record) + _mealRecords.value
-                        _mealScanOutcome.value = MealVerificationResult.Success(record)
-                        FeedbackHelper.playApprovedSoundAndHaptic(context)
-                    }
+                    _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                        verification.student,
+                        "Meal policy is not approved/configured. No meal was recorded. Follow the school's approved manual procedure."
+                    )
+                    _userFeedbackMessage.value =
+                        "Student identity found. Meal eligibility remains pending school policy; no serving was recorded."
+                    FeedbackHelper.playWarningSoundAndHaptic(context)
                 }
                 else -> {
                     _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode)
@@ -1367,7 +1339,10 @@ class MainViewModel(
                                 teacherName = user.name
                             )
                         }
-                        context?.let { FeedbackHelper.playFeedback(it, result.isAllowed) }
+                        context?.let {
+                            if (result.isPolicyPending) FeedbackHelper.playWarningSoundAndHaptic(it)
+                            else FeedbackHelper.playFeedback(it, result.isAllowed)
+                        }
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
