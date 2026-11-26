@@ -13,7 +13,7 @@ Do not run until all of these are true:
 
 1. The missing initial schema migration `20261111131447` has been recovered from a trusted source and checked into the repository.
 2. The migration history is canonical: one file per timestamp/path, no divergent copies of `20261124130000_security_integrity_guardrails.sql`, and the finance guard has one authoritative definition.
-3. A brand-new disposable database can apply the combined 23-migration chain in timestamp order without manual intervention. This replay has passed in the disposable local Supabase CI stack.
+3. A brand-new disposable database can apply the combined 24-migration chain in timestamp order without manual intervention. This replay has passed in the disposable local Supabase CI stack.
 4. The staging schema matches the migration assumptions: `schools.id`, `trusted_issuers`, `staff_memberships`, `student_finances`, `audit_events`, and every audit-trigger source table have been inspected.
 5. The operator has a staging-only SQL connection capable of `SET ROLE authenticated`. Do not place service-role keys or passwords in this file or commit them.
 6. The fixture IDs below refer only to synthetic staging records and are visible to the intended test roles.
@@ -285,8 +285,10 @@ In a disposable transaction, install a temporary test-only BEFORE INSERT trigger
 
 - Clean replay of the combined 23-migration chain: PASS in disposable local Supabase CI.
 - Issuer lifecycle staging checks: PASS for revoked-key tombstones, enrollment/revocation audit events, immutable lifecycle history, blocked physical deletion, blocked direct student school reassignment and restricted authenticated-role privileges. Synthetic writes were rolled back.
-- Finance membership tests FIN-01 through FIN-06: NOT YET EXECUTED as a complete targeted suite.
-- Audit tests AUD-01 through AUD-10: NOT YET EXECUTED as a complete targeted suite; synthetic audit rows and the append-only table exist in staging.
+- Finance membership checks: PASS for ordinary-Admin self-grant, enrollment, transfer, deactivation, demotion and school-move rejection; PASS for finance-Admin transfer and deactivation of another finance membership.
+- Finance fee-status sync: the original nested trigger path failed. The proposed internal-context fix passed a staging transaction dry-run: OUTSTANDING/CLEARED changes synchronized, the internal flag reset, and direct non-finance edits remained blocked. The dry-run was rolled back; no migration was persisted to staging.
+- Finance policy decision: the current guard permits the sole finance-authorized Admin to deactivate themselves. The school must define a recovery/second-approver rule before accepting this behavior.
+- Audit checks AUD-01 through AUD-10: PASS for synthetic student event capture and actor attribution, PII-safe snapshots, non-allowlisted-field suppression, failed-write suppression, school isolation, ordinary-staff denial, client write denial, delete-event identity retention, append-only enforcement and business-write rollback when audit insertion fails. Trigger coverage was verified on nine protected tables; full event-capture exercises for every table remain outstanding.
 - Issuer enrollment approval path and revocation recovery exercise: BLOCKED pending server-authoritative enrollment implementation.
 
 The overall suite remains **NOT GREEN** until every applicable test has a recorded PASS, FAIL or BLOCKED result.
