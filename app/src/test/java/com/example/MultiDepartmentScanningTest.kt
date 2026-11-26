@@ -138,14 +138,12 @@ class MultiDepartmentScanningTest {
                 cardId = dayScholarCardId,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                signer = testSigner
             )
 
             boarderQrPayload = CardCryptoManager.signCardPayload(
                 cardId = boarderCardId,
                 validFrom = validFrom,
                 validUntil = validUntil,
-                signer = testSigner
             )
 
             val c1 = CardEntity(
@@ -213,7 +211,9 @@ class MultiDepartmentScanningTest {
 
         assertTrue(entryResult is DepartmentVerificationResult.Success)
         val successEntry = entryResult as DepartmentVerificationResult.Success
-        assertTrue(successEntry.isAllowed)
+        assertFalse("Valid card identity alone must not authorize entry while policy is pending", successEntry.isAllowed)
+        assertTrue(successEntry.isPolicyPending)
+        assertTrue(successEntry.statusHeadline.contains("PENDING", ignoreCase = true))
         assertEquals(GateDirection.ENTRY, successEntry.gateDirection)
 
         // 2. Exit scan
@@ -228,94 +228,62 @@ class MultiDepartmentScanningTest {
 
         assertTrue(exitResult is DepartmentVerificationResult.Success)
         val successExit = exitResult as DepartmentVerificationResult.Success
-        assertTrue(successExit.isAllowed)
+        assertFalse("Exit must not be authorized before LTC approves exit policy", successExit.isAllowed)
+        assertTrue(successExit.isPolicyPending)
+        assertTrue(successExit.statusHeadline.contains("PENDING", ignoreCase = true))
         assertEquals(GateDirection.EXIT, successExit.gateDirection)
 
-        // 3. Verify logs in database
+        // 3. Both directions are audit records, not authorization decisions.
         val logs = database.scanLogDao().getAllLogsFlow().first()
         assertEquals(2, logs.size)
+        assertTrue(logs.all { it.decision == "POLICY_PENDING" && !it.isApproved })
+        assertTrue(logs.all { it.gateLocation == "Main Gate 1" })
     }
 
-    @Test
-    fun test02_MealsWorkflow_DayScholarLunchOnly_BoarderLunchAndSupper() = runBlocking {
+    
+
+@Test
+    fun test02_MealsWorkflow_RemainsPendingUntilPolicyApproved() = runBlocking {
         val mealStaff = AuthUser(
             role = UserRole.MEAL_SERVING_STAFF,
             name = "Chef Mary",
             station = "Main Dining Hall"
         )
 
-        // Day scholar: LUNCH is eligible
-        val dayLunchResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = dayScholarQrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = mealStaff,
-            database = database,
-            syncManager = syncManager,
-            mealType = MealType.LUNCH
+        val cases = listOf(
+            dayScholarQrPayload to MealType.LUNCH,
+            dayScholarQrPayload to MealType.DINNER,
+            boarderQrPayload to MealType.LUNCH,
+            boarderQrPayload to MealType.DINNER,
+            boarderQrPayload to MealType.BREAKFAST
         )
-        assertTrue(dayLunchResult is DepartmentVerificationResult.Success)
-        assertTrue((dayLunchResult as DepartmentVerificationResult.Success).isAllowed)
-
-        // Day scholar: DINNER (Supper) is NOT eligible
-        val dayDinnerResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = dayScholarQrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = mealStaff,
-            database = database,
-            syncManager = syncManager,
-            mealType = MealType.DINNER
-        )
-        assertTrue(dayDinnerResult is DepartmentVerificationResult.Success)
-        assertFalse((dayDinnerResult as DepartmentVerificationResult.Success).isAllowed)
-        assertEquals(MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE, dayDinnerResult.mealStatus)
-
-        // Boarder: LUNCH and DINNER both eligible
-        val boarderLunch = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = boarderQrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = mealStaff,
-            database = database,
-            syncManager = syncManager,
-            mealType = MealType.LUNCH
-        )
-        assertTrue(boarderLunch is DepartmentVerificationResult.Success)
-        assertTrue((boarderLunch as DepartmentVerificationResult.Success).isAllowed)
-
-        val boarderDinner = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = boarderQrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = mealStaff,
-            database = database,
-            syncManager = syncManager,
-            mealType = MealType.DINNER
-        )
-        assertTrue(boarderDinner is DepartmentVerificationResult.Success)
-        assertTrue((boarderDinner as DepartmentVerificationResult.Success).isAllowed)
-
-        // Boarder: Breakfast is ineligible under strict LTC Lunch & Supper policy
-        val boarderBreakfast = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = boarderQrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = mealStaff,
-            database = database,
-            syncManager = syncManager,
-            mealType = MealType.BREAKFAST
-        )
-        assertTrue(boarderBreakfast is DepartmentVerificationResult.Success)
-        assertFalse((boarderBreakfast as DepartmentVerificationResult.Success).isAllowed)
-        assertEquals(MealServingStatus.BLOCKED_NO_MEAL_CLEARANCE, boarderBreakfast.mealStatus)
+        for ((payload, mealType) in cases) {
+            val result = QrUnifiedVerifier.verifyAndProcessScan(
+                rawQrCode = payload,
+                department = ScanDepartment.MEALS,
+                currentUser = mealStaff,
+                database = database,
+                syncManager = syncManager,
+                mealType = mealType
+            )
+            assertTrue(result is DepartmentVerificationResult.Success)
+            val success = result as DepartmentVerificationResult.Success
+            assertFalse(success.isAllowed)
+            assertTrue(success.isPolicyPending)
+            assertEquals(MealServingStatus.POLICY_PENDING, success.mealStatus)
+        }
     }
 
+    
+
     @Test
-    fun test03_MealsWorkflow_DuplicateMealPrevention() = runBlocking {
+    fun test03_MealsWorkflow_NoUnapprovedMealRecordsArePersisted() = runBlocking {
         val mealStaff = AuthUser(
             role = UserRole.MEAL_SERVING_STAFF,
             name = "Chef Mary",
             station = "Main Dining Hall"
         )
-
-        // First serving
-        val firstServe = QrUnifiedVerifier.verifyAndProcessScan(
+        val result = QrUnifiedVerifier.verifyAndProcessScan(
             rawQrCode = dayScholarQrPayload,
             department = ScanDepartment.MEALS,
             currentUser = mealStaff,
@@ -323,21 +291,12 @@ class MultiDepartmentScanningTest {
             syncManager = syncManager,
             mealType = MealType.LUNCH
         )
-        assertTrue(firstServe is DepartmentVerificationResult.Success)
-
-        // Immediate duplicate attempt for same meal & date
-        val duplicateServe = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = dayScholarQrPayload,
-            department = ScanDepartment.MEALS,
-            currentUser = mealStaff,
-            database = database,
-            syncManager = syncManager,
-            mealType = MealType.LUNCH
-        )
-        assertTrue("Duplicate meal must be blocked", duplicateServe is DepartmentVerificationResult.DuplicateAction)
+        assertTrue(result is DepartmentVerificationResult.Success)
+        assertTrue((result as DepartmentVerificationResult.Success).isPolicyPending)
+        assertTrue(database.mealRecordDao().observeAll().first().isEmpty())
     }
 
-    @Test
+@Test
     fun test04_ClassroomAttendance_RollCallAndDuplicatePrevention() = runBlocking {
         val teacher = AuthUser(
             role = UserRole.TEACHERS,
@@ -385,91 +344,33 @@ class MultiDepartmentScanningTest {
     }
 
     @Test
-    fun test05_Examinations_ClearanceAndAuthorizedExceptionApproval() = runBlocking {
+    fun test05_Examinations_RemainPendingUntilPolicyApproved() = runBlocking {
         val examOfficer = AuthUser(
             role = UserRole.EXAMINATION_STAFF,
             name = "Invigilator Jane",
             station = "Main Hall"
         )
 
-        // 1. Cleared student is allowed immediately
-        val clearedStudentResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = dayScholarQrPayload,
-            department = ScanDepartment.EXAMINATIONS,
-            currentUser = examOfficer,
-            database = database,
-            syncManager = syncManager,
-            examCode = "UNEB-UCE-2026"
-        )
-        assertTrue(clearedStudentResult is DepartmentVerificationResult.Success)
-        assertEquals(ExamClearanceStatus.CLEARED_FULL, (clearedStudentResult as DepartmentVerificationResult.Success).examStatus)
-
-        // 2. Outstanding fees student is blocked
-        val blockedResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = boarderQrPayload,
-            department = ScanDepartment.EXAMINATIONS,
-            currentUser = examOfficer,
-            database = database,
-            syncManager = syncManager,
-            examCode = "UNEB-UCE-2026"
-        )
-        assertTrue(blockedResult is DepartmentVerificationResult.Success)
-        assertFalse((blockedResult as DepartmentVerificationResult.Success).isAllowed)
-        assertEquals(ExamClearanceStatus.BLOCKED_FEES, blockedResult.examStatus)
-
-        // 3. Bursar recommends an exception
-        database.examExceptionDao().insertOrUpdate(
-            com.example.data.local.ExamExceptionEntity(
-                id = UUID.randomUUID().toString(),
-                studentId = boarderStudentId,
-                studentNumber = "LTC-2026-0002",
-                studentName = "Sarah Achieng",
-                examCode = "UNEB-UCE-2026",
-                requestedByBursar = "Bursar Richard",
-                recommendationReason = "Parent committed promissory note to settle balance before Term ends",
-                isApproved = false,
-                requestedAt = System.currentTimeMillis()
+        for (payload in listOf(dayScholarQrPayload, boarderQrPayload)) {
+            val result = QrUnifiedVerifier.verifyAndProcessScan(
+                rawQrCode = payload,
+                department = ScanDepartment.EXAMINATIONS,
+                currentUser = examOfficer,
+                database = database,
+                syncManager = syncManager,
+                examCode = "UNEB-UCE-2026"
             )
-        )
-
-        // 4. While unapproved, exam officer sees PENDING_BURSAR_RECOMMENDED
-        val pendingResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = boarderQrPayload,
-            department = ScanDepartment.EXAMINATIONS,
-            currentUser = examOfficer,
-            database = database,
-            syncManager = syncManager,
-            examCode = "UNEB-UCE-2026"
-        )
-        assertTrue(pendingResult is DepartmentVerificationResult.Success)
-        assertFalse((pendingResult as DepartmentVerificationResult.Success).isAllowed)
-        assertEquals(ExamClearanceStatus.PENDING_BURSAR_RECOMMENDED, (pendingResult as DepartmentVerificationResult.Success).examStatus)
-
-        // 5. Authorized Head Teacher approves exception
-        val existingEx = database.examExceptionDao().findException(boarderStudentId, "UNEB-UCE-2026")!!
-        database.examExceptionDao().insertOrUpdate(
-            existingEx.copy(
-                isApproved = true,
-                approvedByHeadTeacher = "Head Teacher Dr. Otim",
-                approvedAt = System.currentTimeMillis()
-            )
-        )
-
-        // 6. Now exam officer scans same badge -> CLEARED_SPECIAL_EXCEPTION
-        val approvedResult = QrUnifiedVerifier.verifyAndProcessScan(
-            rawQrCode = boarderQrPayload,
-            department = ScanDepartment.EXAMINATIONS,
-            currentUser = examOfficer,
-            database = database,
-            syncManager = syncManager,
-            examCode = "UNEB-UCE-2026"
-        )
-        assertTrue(approvedResult is DepartmentVerificationResult.Success)
-        assertTrue((approvedResult as DepartmentVerificationResult.Success).isAllowed)
-        assertEquals(ExamClearanceStatus.CLEARED_SPECIAL_EXCEPTION, (approvedResult as DepartmentVerificationResult.Success).examStatus)
+            assertTrue(result is DepartmentVerificationResult.Success)
+            val success = result as DepartmentVerificationResult.Success
+            assertFalse(success.isAllowed)
+            assertTrue(success.isPolicyPending)
+            assertEquals(ExamClearanceStatus.POLICY_PENDING, success.examStatus)
+        }
     }
 
-    @Test
+    
+
+@Test
     fun test06_PermissionDenied_RoleMismatch() = runBlocking {
         // Teacher tries to scan for gate entry
         val teacher = AuthUser(

@@ -25,7 +25,8 @@ enum class MealType(
 enum class MealServingStatus {
     SERVED,
     BLOCKED_DOUBLE_SERVING,
-    BLOCKED_NO_MEAL_CLEARANCE
+    BLOCKED_NO_MEAL_CLEARANCE,
+    POLICY_PENDING
 }
 
 data class MealRecord(
@@ -53,4 +54,5 @@ sealed class MealVerificationResult {
         val scannedCode: String get() = rawCode
     }
     data class BlockedNoClearance(val student: Student, val reason: String) : MealVerificationResult()
+    data class PolicyPending(val student: Student, val reason: String) : MealVerificationResult()
 }

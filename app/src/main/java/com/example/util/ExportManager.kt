@@ -271,7 +271,8 @@ object ExportManager {
 
         logs.forEachIndexed { i, log ->
             val isApp = log.decision == GateVerificationDecision.APPROVED
-            val decClass = if (isApp) "approved" else "denied"
+            val isPending = log.decision == GateVerificationDecision.POLICY_PENDING
+            val decClass = when { isPending -> "pending"; isApp -> "approved"; else -> "denied" }
             val timeStr = dateTimeFormatter.format(Date(log.timestamp))
             sb.append("""
                 <tr>

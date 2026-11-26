@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -182,6 +183,13 @@ fun GateDecisionBadge(
     isLarge: Boolean = false
 ) {
     val (bgColor, borderColor, contentColor, icon, text) = when (decision) {
+        GateVerificationDecision.POLICY_PENDING -> Tuple5(
+            PendingAmberLight,
+            PendingAmber,
+            Color(0xFF92400E),
+            Icons.Default.Warning,
+            "POLICY PENDING"
+        )
         GateVerificationDecision.APPROVED -> Tuple5(
             ApprovedGreenLight,
             ApprovedGreen,
@@ -216,6 +224,13 @@ fun GateDecisionBadge(
             Color(0xFF1F2937),
             Icons.Default.QrCodeScanner,
             "INVALID QR"
+        )
+        GateVerificationDecision.POLICY_PENDING -> Tuple5(
+            PendingAmberLight,
+            PendingAmber,
+            Color(0xFF92400E),
+            Icons.Default.Warning,
+            "POLICY PENDING"
         )
     }
 

@@ -93,14 +93,12 @@ class RoleFeaturesAndBackendSyncTest {
         boardingQrPayload = CardCryptoManager.signCardPayload(
             cardId = boardingCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31",
-            signer = testSigner
+            validUntil = "2026-12-31"
         )
         dayScholarQrPayload = CardCryptoManager.signCardPayload(
             cardId = dayScholarCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31",
-            signer = testSigner
+            validUntil = "2026-12-31"
         )
 
         val boarder = StudentEntity(
@@ -372,7 +370,7 @@ class RoleFeaturesAndBackendSyncTest {
     }
 
     @Test
-    fun gateStaffVerifiesQrLogsEntryAndCannotExportOrEditStudentsOrServeMeals() = runBlocking {
+    fun gateStaffVerifiesQrLogsPendingDecisionAndCannotExportOrEditStudentsOrServeMeals() = runBlocking {
         viewModel.loginAs(UserRole.GATE_STAFF, "Guard Ocen")
         val guard = viewModel.currentUser.value!!
         assertFalse(guard.hasPermission(StaffPermission.EXPORT_DATA))
@@ -383,11 +381,14 @@ class RoleFeaturesAndBackendSyncTest {
         waitUntil { viewModel.activeScanResult.value != null && database.scanLogDao().getAllLogsFlow().first().isNotEmpty() }
         val result = viewModel.activeScanResult.value
         assertTrue(result is StudentScanResult.Success)
-        assertTrue((result as StudentScanResult.Success).isApproved)
+        assertFalse((result as StudentScanResult.Success).isApproved)
+        assertTrue(result.isPolicyPending)
 
         val logs = database.scanLogDao().getAllLogsFlow().first()
         assertEquals(boardingStudentId, logs.first().studentId)
         assertEquals("Guard Ocen", logs.first().guardName)
+        assertEquals(GateVerificationDecision.POLICY_PENDING.name, logs.first().decision)
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
 
         // Denied meal serving
         viewModel.verifyAndServeMeal(boardingQrPayload, context)
@@ -396,42 +397,36 @@ class RoleFeaturesAndBackendSyncTest {
         assertTrue(database.mealRecordDao().observeAll().first().isEmpty())
     }
 
-    @Test
-    fun mealStaffServesLunchBlocksDoubleServingBlocksDayScholarSupperAndRejectsInvalidQr() = runBlocking {
+        @Test
+    fun mealStaffCannotServeUntilPolicyIsApprovedAndRejectsInvalidQr() = runBlocking {
         viewModel.loginAs(UserRole.MEAL_SERVING_STAFF, "Cook Nighty")
         val cook = viewModel.currentUser.value!!
         assertFalse(cook.hasPermission(StaffPermission.EXPORT_DATA))
         assertFalse(cook.hasPermission(StaffPermission.VERIFY_GATE_ACCESS))
 
-        // 1. Lunch for boarder -> Success & persisted to Room
         viewModel.setActiveMealType(MealType.LUNCH)
         viewModel.verifyAndServeMeal(boardingQrPayload, context)
         waitUntil { viewModel.mealScanOutcome.value != null }
-
-        val firstOutcome = viewModel.mealScanOutcome.value
-        assertTrue("Expected MealVerificationResult.Success but got $firstOutcome", firstOutcome is MealVerificationResult.Success)
-        assertEquals(boardingStudentId, (firstOutcome as MealVerificationResult.Success).record.studentId)
+        val lunchOutcome = viewModel.mealScanOutcome.value
+        assertTrue("Expected policy-pending meal result but got $lunchOutcome",
+            lunchOutcome is MealVerificationResult.PolicyPending)
+        assertTrue((lunchOutcome as MealVerificationResult.PolicyPending).reason.contains("No meal was recorded as served", ignoreCase = true))
         viewModel.dismissMealOutcome()
 
-        // 2. Duplicate lunch for same boarder -> BlockedDoubleServing
-        viewModel.verifyAndServeMeal(boardingQrPayload, context)
-        waitUntil { viewModel.mealScanOutcome.value != null }
-        val duplicateOutcome = viewModel.mealScanOutcome.value
-        assertTrue("Expected BlockedDoubleServing but got $duplicateOutcome", duplicateOutcome is MealVerificationResult.BlockedDoubleServing)
-        viewModel.dismissMealOutcome()
-
-        // 3. Supper (DINNER) for Day Scholar -> BlockedNoClearance
         viewModel.setActiveMealType(MealType.DINNER)
         viewModel.verifyAndServeMeal(dayScholarQrPayload, context)
         waitUntil { viewModel.mealScanOutcome.value != null }
-        val daySupperOutcome = viewModel.mealScanOutcome.value
-        assertTrue("Expected BlockedNoClearance for Day Scholar supper but got $daySupperOutcome", daySupperOutcome is MealVerificationResult.BlockedNoClearance)
+        val dinnerOutcome = viewModel.mealScanOutcome.value
+        assertTrue("Day scholar meal must remain pending too: $dinnerOutcome",
+            dinnerOutcome is MealVerificationResult.PolicyPending)
         viewModel.dismissMealOutcome()
 
-        // 4. Bare student ID (tampered/non-V2) -> StudentNotFound (must never silently fail or leave dialog stuck)
         viewModel.verifyAndServeMeal("LTC-2026-8101", context)
         waitUntil { viewModel.mealScanOutcome.value != null }
-        val invalidOutcome = viewModel.mealScanOutcome.value
-        assertTrue("Expected StudentNotFound for bare student ID but got $invalidOutcome", invalidOutcome is MealVerificationResult.StudentNotFound)
+        assertTrue(viewModel.mealScanOutcome.value is MealVerificationResult.StudentNotFound)
+        assertTrue("No unapproved meal serving may be persisted",
+            database.mealRecordDao().observeAll().first().isEmpty())
     }
+
+
 }
