@@ -1043,7 +1043,7 @@ class MainViewModel(
         viewModelScope.launch {
             when (val verification = repository.verifyStudentByQr(rawCode)) {
                 is StudentScanResult.Success -> {
-                    _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                    _mealScanOutcome.value = MealVerificationResult.PolicyPending(
                         verification.student,
                         "Meal policy is not approved/configured. No meal was recorded. Follow the school's approved manual procedure."
                     )
@@ -1333,10 +1333,17 @@ class MainViewModel(
                                 )
                                 _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
                             } else {
-                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
-                                    student = result.student,
-                                    reason = result.statusDetail
-                                )
+                                _mealScanOutcome.value = if (result.isPolicyPending) {
+                                    MealVerificationResult.PolicyPending(
+                                        student = result.student,
+                                        reason = result.statusDetail
+                                    )
+                                } else {
+                                    MealVerificationResult.BlockedNoClearance(
+                                        student = result.student,
+                                        reason = result.statusDetail
+                                    )
+                                }
                             }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
