@@ -68,8 +68,9 @@ In particular, `20261112000300_mark_clean_ltc_start.sql` had no corresponding ro
 - Migration versions: strictly chronological.
 - Archived noncanonical files: 9.
 - Live database writes: none.
-- Clean-database replay: initial run exposed the missing RLS event-trigger prerequisite; replay is being rerun with the supplemental migration.
-- Staging replay: not required for the source-only sanitization; existing staging history remains unchanged.
+- Clean-database replay: passed in the disposable Supabase local stack for the combined 23-migration sequence (18 recorded baseline + 1 supplemental prerequisite + 4 later security migrations).
+- Staging dry-run of the supplemental prerequisite created the missing `ensure_rls` event trigger inside a transaction; rollback was verified, so no staging object was persisted.
+- Staging history remains unchanged; the supplemental migration was tested transactionally and rolled back.
 
 ## Required next checks
 
