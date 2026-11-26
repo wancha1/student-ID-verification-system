@@ -163,6 +163,21 @@ class RoleScannerRoutingTest {
     }
 
     @Test
+    fun gateScanNeverAuthorizesMovementBeforeSchoolPolicyApproval() = runBlocking {
+        val authed = viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222")
+        assertTrue("Gate staff should authenticate", authed)
+
+        viewModel.handleBarcodeScan(qrPayload, context)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        val result = viewModel.activeScanResult.value as? StudentScanResult.Success
+        assertNotNull("A valid card should still verify identity", result)
+        assertFalse("A valid identity alone must not authorize gate movement", result!!.isApproved)
+        assertTrue("Gate movement must remain policy-pending", result.isPolicyPending)
+        assertTrue(result.reason.contains("No movement authorization was issued"))
+    }
+
+    @Test
     fun testMealStaffScannerFlow() = runBlocking {
         val authed = viewModel.authenticateAndLogin(context, UserRole.MEAL_SERVING_STAFF, "3333")
         assertTrue("Meal staff should authenticate", authed)
