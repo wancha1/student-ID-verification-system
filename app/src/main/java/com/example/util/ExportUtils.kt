@@ -26,7 +26,7 @@ object ExportUtils {
         for (log in logs) {
             val dateStr = dateFormatter.format(Date(log.timestamp))
             val timeStr = timeFormatter.format(Date(log.timestamp))
-            val isApprovedStr = if (log.decision == GateVerificationDecision.APPROVED) "APPROVED" else "DENIED"
+            val isApprovedStr = when (log.decision) { GateVerificationDecision.APPROVED -> "APPROVED"; GateVerificationDecision.POLICY_PENDING -> "PENDING"; else -> "DENIED" }
 
             sb.append(escapeCsv(log.id)).append(",")
             sb.append(escapeCsv(log.studentNumber ?: log.studentId ?: "N/A")).append(",")
@@ -60,7 +60,8 @@ object ExportUtils {
         val boarders = totalStudents - dayScholars
         val totalScans = scanLogs.size
         val approvedScans = scanLogs.count { it.decision == GateVerificationDecision.APPROVED }
-        val deniedScans = scanLogs.count { it.decision != GateVerificationDecision.APPROVED }
+        val deniedScans = scanLogs.count { it.decision != GateVerificationDecision.APPROVED && it.decision != GateVerificationDecision.POLICY_PENDING }
+        val pendingScans = scanLogs.count { it.decision == GateVerificationDecision.POLICY_PENDING }
         val uniqueStudentsScanned = scanLogs.mapNotNull { it.studentNumber ?: it.studentId }.distinct().size
 
         val reportDate = SimpleDateFormat("EEEE, MMMM d, yyyy • HH:mm", Locale.getDefault()).format(Date())
@@ -81,7 +82,7 @@ object ExportUtils {
         sb.append("📋 RECENT GATE ACTIVITY HIGHLIGHTS (LAST 10):\n")
         scanLogs.take(10).forEachIndexed { index, log ->
             val time = timeFormatter.format(Date(log.timestamp))
-            val outcome = if (log.decision == GateVerificationDecision.APPROVED) "✅ [APPROVED]" else "❌ [DENIED - ${log.decision.name}]"
+            val outcome = when (log.decision) { GateVerificationDecision.APPROVED -> "✅ [APPROVED]"; GateVerificationDecision.POLICY_PENDING -> "🟠 [POLICY PENDING]"; else -> "❌ [DENIED - ${log.decision.name}]" }
             sb.append("${index + 1}. $time - ${log.studentName} (${log.studentNumber ?: "ID"}) -> $outcome\n   Reason: ${log.reason}\n")
         }
 
