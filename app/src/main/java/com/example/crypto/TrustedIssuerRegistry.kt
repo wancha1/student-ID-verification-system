@@ -23,7 +23,7 @@ data class TrustedIssuerEntry(
  * - Stores PUBLIC verification keys ONLY.
  * - Possesses ZERO signing or private key capabilities.
  * - Supports key rotation and multiple concurrent valid issuer keys.
- * - Allows explicit revocation of retired or compromised issuer keys without database restructuring.
+ * - Retains server-provisioned revocation tombstones; local devices cannot authoritatively revoke keys.
  * - Backed by persistent SharedPreferences so registrations survive process termination and device reboot.
  */
 object TrustedIssuerRegistry {
@@ -138,16 +138,14 @@ object TrustedIssuerRegistry {
     }
 
     /**
-     * Revokes an issuer key. Cards signed by this key will immediately be rejected.
+     * Local devices cannot authoritatively revoke issuer keys. Revocation must be
+     * approved and distributed by the school server; local-only mutation would
+     * create inconsistent trust decisions across terminals.
      */
     internal fun revokeIssuer(kid: String): Boolean {
-        val cleanKid = kid.trim().lowercase()
-        val existing = getIssuerEntry(cleanKid) ?: return false
-        val updated = existing.copy(isRevoked = true)
-        entryCache[cleanKid] = updated
-        keyCache.remove(cleanKid)
-        persistEntry(updated)
-        return true
+        throw SecurityException(
+            "Local issuer revocation is disabled. Revoke issuer '${kid.trim()}' through the school server."
+        )
     }
 
     /**
