@@ -85,7 +85,7 @@ class RoleScannerRoutingTest {
         testKeyPair = TestCardCryptoHelper.generateKeyPair()
         testSigner = SoftwareCardSigner(testKeyPair)
         CardCryptoManager.setActiveSigner(testSigner)
-        TrustedIssuerRegistry.registerTrustedKey(testSigner.publicKey, "Authority")
+        TestCardCryptoHelper.seedTrustedIssuer(testSigner.publicKey, "Authority")
 
         val now = System.currentTimeMillis()
         val student = StudentEntity(
