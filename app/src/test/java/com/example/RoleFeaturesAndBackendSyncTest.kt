@@ -75,7 +75,7 @@ class RoleFeaturesAndBackendSyncTest {
         context = ApplicationProvider.getApplicationContext()
         SecurityManager.resetForTesting(context)
         TrustedIssuerRegistry.initialize(context)
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         CardCryptoManager.resetForTesting()
 
         database = AppDatabase.createInMemory(context)
