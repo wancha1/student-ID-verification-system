@@ -27,6 +27,16 @@ object TestCardCryptoHelper {
     }
 
     /**
+     * Clears test-only issuer fixtures. No production registry wipe API exists.
+     */
+    fun clearTrustedIssuerFixtures() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("ltc_trusted_issuer_registry", Context.MODE_PRIVATE)
+        check(prefs.edit().clear().commit()) { "Could not clear test issuer fixtures" }
+        TrustedIssuerRegistry.initialize(context)
+    }
+
+    /**
      * Seeds a server-provisioned trust record for tests. This helper is test-source
      * only; production code has no local enrollment path.
      */
