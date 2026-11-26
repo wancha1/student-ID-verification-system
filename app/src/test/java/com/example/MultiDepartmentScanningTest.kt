@@ -64,7 +64,7 @@ class MultiDepartmentScanningTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         CardCryptoManager.resetForTesting()
 
         database = AppDatabase.createInMemory(context)
@@ -188,7 +188,7 @@ class MultiDepartmentScanningTest {
     fun tearDown() {
         database.close()
         CardCryptoManager.resetForTesting()
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
     }
 
     @Test
