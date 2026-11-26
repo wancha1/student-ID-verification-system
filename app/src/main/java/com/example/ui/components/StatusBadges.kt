@@ -183,6 +183,13 @@ fun GateDecisionBadge(
     isLarge: Boolean = false
 ) {
     val (bgColor, borderColor, contentColor, icon, text) = when (decision) {
+        GateVerificationDecision.POLICY_PENDING -> Tuple5(
+            PendingAmberLight,
+            PendingAmber,
+            Color(0xFF92400E),
+            Icons.Default.Warning,
+            "POLICY PENDING"
+        )
         GateVerificationDecision.APPROVED -> Tuple5(
             ApprovedGreenLight,
             ApprovedGreen,
