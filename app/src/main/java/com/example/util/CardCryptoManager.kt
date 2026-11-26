@@ -245,8 +245,9 @@ object CardCryptoManager {
      * Resets state for unit/Robolectric test isolation.
      */
     internal fun resetForTesting() {
+        // Test-only signing state reset. Trust records are managed separately and
+        // must never be bulk-deleted by a production-source helper.
         activeSigner = null
-        TrustedIssuerRegistry.clearAll()
     }
 
     /**
