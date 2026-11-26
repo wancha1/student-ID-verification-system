@@ -173,7 +173,7 @@ fun GuardDashboardScreen(
                             }
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = ApprovedGreenLight
+                                color = PendingAmberLight
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -183,14 +183,14 @@ fun GuardDashboardScreen(
                                         modifier = Modifier
                                             .size(7.dp)
                                             .clip(CircleShape)
-                                            .background(ApprovedGreen)
+                                            .background(PendingAmber)
                                     )
                                     Spacer(Modifier.width(5.dp))
                                     Text(
-                                        text = "READY",
+                                        text = "POLICY PENDING",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = ApprovedGreenText
+                                        color = PendingAmber
                                     )
                                 }
                             }
