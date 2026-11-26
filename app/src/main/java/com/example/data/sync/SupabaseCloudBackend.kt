@@ -20,7 +20,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.encodeToJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import java.io.File
 
 /**
