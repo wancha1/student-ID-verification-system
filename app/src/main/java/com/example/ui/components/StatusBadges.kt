@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
