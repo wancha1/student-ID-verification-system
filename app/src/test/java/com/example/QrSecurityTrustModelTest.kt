@@ -61,7 +61,7 @@ class QrSecurityTrustModelTest {
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         TrustedIssuerRegistry.initialize(context)
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         CardCryptoManager.resetForTesting()
 
         database = AppDatabase.createInMemory(context)
@@ -140,7 +140,7 @@ class QrSecurityTrustModelTest {
     fun tearDown() {
         database.close()
         CardCryptoManager.resetForTesting()
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
     }
 
     // =========================================================================
@@ -724,7 +724,7 @@ class QrSecurityTrustModelTest {
 
         // Seed the exact persisted representation received from an authoritative server.
         // This avoids using the disabled local revocation API as a test setup shortcut.
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         val prefs = context.getSharedPreferences("ltc_trusted_issuer_registry", Context.MODE_PRIVATE)
         assertTrue(
             "Revoked issuer tombstone must be persisted",
