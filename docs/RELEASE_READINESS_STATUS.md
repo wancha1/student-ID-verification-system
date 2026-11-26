@@ -12,7 +12,7 @@ The intended dependency order is:
 3. **PR #81 — issuer lifecycle and fail-closed app protections:** 23 migrations.
 4. **PR #79 — finance fee-status synchronization guard:** 24 migrations.
 
-All four PRs are draft. No PR has been merged. The branches are directly stacked, with each child branch based on its intended parent. The 19-, 21-, 23- and 24-migration clean-replay jobs have passed in disposable local Supabase runs; the latest rebased CI runs are being repeated. Targeted PostgreSQL integration tests for issuer lifecycle, school-transfer blocking and finance fee-status synchronization have passed.
+All four PRs are draft. No PR has been merged. The branches are directly stacked, with each child branch based on its intended parent. Clean replay of the 19-, 21-, 23- and 24-migration stacks passed in earlier disposable local Supabase runs. Latest rebased CI runs are in progress; PostgreSQL integration tests have passed on the current PR #81 and #79 heads.
 
 ## Validated in disposable staging
 
@@ -57,6 +57,10 @@ Local PII protection, encrypted backup/restore and recovery acceptance are not c
 ### 6. School policy acceptance — still open
 
 The current finance guard permits the sole finance-authorized Admin to deactivate their own membership. The school must decide whether this is allowed and define a second-approver or recovery process. Gate movement and meal-serving policies also remain fail-closed pending formal school approval.
+
+## Current CI investigation (2026-11-26)
+
+The previous Android run exposed two test-harness defects, not confirmed application regressions: Robolectric tests were blocking the main dispatcher with `runBlocking`, preventing `viewModelScope` work from completing; and one invalid-QR test waited for `StudentNotFound` while asserting `InvalidQr`. A shared unconfined Main-dispatcher test rule and corrected result predicate have been added. The previous clean-replay job also hit a host-port collision on 54322; the local Supabase CI job now uses isolated database/shadow ports. These fixes are being validated by the latest CI runs. Do not count the Android suite as green until that run completes.
 
 ## Environment safety
 
