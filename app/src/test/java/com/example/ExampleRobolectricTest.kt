@@ -225,7 +225,8 @@ class ExampleRobolectricTest {
 
     @Test
     fun testGuardScanWorkflowAndAuditLogging() = runBlocking {
-        viewModel.loginAs(UserRole.SECURITY_GUARD)
+        viewModel.loginAs(UserRole.GATE_STAFF)
+        assertEquals("Gate staff session must be authorized before scanning", UserRole.GATE_STAFF, viewModel.currentUser.value?.role)
 
         val s1 = repository.getStudentByStudentNumber("OAK-2026-0001")!!
         val card1 = repository.getActiveCardForStudent(s1.id)!!
