@@ -70,19 +70,11 @@ object TrustedIssuerRegistry {
             )
         }
 
-        val base64 = CardCryptoUtils.encodePublicKeyToBase64(publicKey)
-        val entry = TrustedIssuerEntry(
-            kid = kid,
-            publicKeyBase64 = base64,
-            label = label,
-            enrolledAt = existing?.enrolledAt ?: enrolledAt,
-            isRevoked = false
+        // There is no server-authorized enrollment workflow in this release.
+        // Never let a local device add or reactivate a trusted issuer.
+        throw SecurityException(
+            "Local issuer enrollment is disabled. Provision issuer '$kid' through the school server."
         )
-
-        keyCache[kid] = publicKey
-        entryCache[kid] = entry
-        persistEntry(entry)
-        return entry
     }
 
     /**
