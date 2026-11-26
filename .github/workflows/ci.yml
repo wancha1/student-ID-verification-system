@@ -130,10 +130,6 @@ jobs:
           version: v2.stable
       - name: Generate local Supabase configuration
         run: supabase init --force
-      - name: Avoid shared-runner PostgreSQL port collisions
-        run: |
-          sed -i '/^\[db\]/,/^\[/{s/^port = 54322$/port = 54342/; s/^shadow_port = 54320$/shadow_port = 54340/;}' supabase/config.toml
-          grep -A8 '^\[db\]' supabase/config.toml
       - name: Start disposable local Supabase stack
         run: supabase start
       - name: Replay every canonical migration from an empty database
@@ -173,6 +169,10 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261126144613_block_unapproved_student_school_changes.sql
+      - name: Apply finance fee-status sync guard migration
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261126170000_fix_finance_fee_status_sync_guard.sql
       - name: Verify migration behaviour and privileges
         env:
           PGPASSWORD: postgres
