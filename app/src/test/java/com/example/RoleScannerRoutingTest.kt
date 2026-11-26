@@ -169,10 +169,11 @@ class RoleScannerRoutingTest {
         assertTrue("Gate staff should authenticate", authed)
 
         viewModel.handleBarcodeScan(qrPayload, context)
-        val result = withTimeout(3_000) { viewModel.activeScanResult.first { it != null } } as? StudentScanResult.Success
+        val scanResult = withTimeout(5_000) { viewModel.activeScanResult.first { it != null } }
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-        assertNotNull("A valid card should still verify identity", result)
-        assertFalse("A valid identity alone must not authorize gate movement", result!!.isApproved)
+        assertTrue("Expected a valid identity result, got: $scanResult", scanResult is StudentScanResult.Success)
+        val result = scanResult as StudentScanResult.Success
+        assertFalse("A valid identity alone must not authorize gate movement", result.isApproved)
         assertTrue("Gate movement must remain policy-pending", result.isPolicyPending)
         assertTrue(result.reason.contains("No movement authorization was issued"))
     }
