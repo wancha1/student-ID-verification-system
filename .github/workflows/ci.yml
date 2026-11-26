@@ -15,6 +15,110 @@ permissions:
   contents: read
 
 jobs:
+  android:
+    name: Android compile and unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+      - name: Validate Supabase real-token test script syntax
+        run: bash -n scripts/supabase-real-token-smoke.sh
+      - name: Generate ephemeral debug keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+      - name: Generate ephemeral CI-only release keystore
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-store-password
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/release-ci.keystore" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$STORE_PASSWORD" \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 2 \
+            -dname "CN=CI Only,O=Non-Production,C=UG"
+      - name: Compile debug and release APK variants
+        env:
+          STORE_PASSWORD: ci-only-store-password
+          KEY_PASSWORD: ci-only-store-password
+        run: |
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/release-ci.keystore" \
+            STORE_PASSWORD="$STORE_PASSWORD" \
+            KEY_PASSWORD="$STORE_PASSWORD" \
+            gradle --no-daemon --no-build-cache assembleDebug assembleRelease
+      - name: Prefetch Robolectric Android 14 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="14-robolectric-10818077-i7"
+          artifact="$HOME/.m2/repository/org/robolectric/android-all-instrumented/$version/android-all-instrumented-$version.jar"
+          mkdir -p "$(dirname "$artifact")"
+          if [ ! -s "$artifact" ]; then
+            relative="org/robolectric/android-all-instrumented/$version/android-all-instrumented-$version.jar"
+            downloaded=false
+            for mirror in \
+              "https://maven-central.storage-download.googleapis.com/maven2" \
+              "https://repo.maven.apache.org/maven2" \
+              "https://repo1.maven.org/maven2"; do
+              if curl --fail --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 "$mirror/$relative" -o "$artifact"; then
+                downloaded=true
+                break
+              fi
+            done
+            test "$downloaded" = true
+          fi
+          test -s "$artifact"
+      - name: Run Android unit tests
+        run: gradle --no-daemon testDebugUnitTest --stacktrace
+      - name: Run device smoke tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          # API 34 keeps the CI smoke test on a stable, widely supported image.
+          api-level: 34
+          arch: x86_64
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          # Avoid runner-side settings writes that caused ADB broken-pipe failures.
+          disable-animations: false
+          script: gradle --no-daemon connectedDebugAndroidTest
+      - name: Upload debug APK
+        # Preserve the compiled APK even if the emulator smoke test fails.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltc-debug-apk-ci-build-not-release
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload Android unit-test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
+
   supabase-migration-replay:
     name: Replay canonical Supabase migrations from empty database
     runs-on: ubuntu-24.04
@@ -33,3 +137,39 @@ jobs:
       - name: Stop disposable local Supabase stack
         if: always()
         run: supabase stop --no-backup
+
+  database-migrations:
+    name: PostgreSQL migration integration tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scholink_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d scholink_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare synthetic Supabase-compatible schema
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/bootstrap.sql
+      - name: Apply issuer lifecycle audit migration
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261126144609_trusted_issuer_lifecycle_audit.sql
+      - name: Apply student school-change guard migration
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261126144613_block_unapproved_student_school_changes.sql
+      - name: Verify migration behaviour and privileges
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/assertions.sql

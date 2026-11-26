@@ -28,6 +28,7 @@ import com.example.util.QrUnifiedVerifier
 import com.example.util.SecurityManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -113,7 +114,6 @@ class RoleScannerRoutingTest {
             cardId = cardId,
             validFrom = "2026-01-01",
             validUntil = "2026-12-31",
-            signer = testSigner
         )
 
         val card = CardEntity(
@@ -161,6 +161,21 @@ class RoleScannerRoutingTest {
         // Close scanner (simulating BackHandler)
         viewModel.closeScanner()
         assertFalse("Scanner should be closed after Back navigation", viewModel.isScannerOpen.value)
+    }
+
+    @Test
+    fun gateScanNeverAuthorizesMovementBeforeSchoolPolicyApproval() = runBlocking {
+        val authed = viewModel.authenticateAndLogin(context, UserRole.GATE_STAFF, "2222")
+        assertTrue("Gate staff should authenticate", authed)
+
+        viewModel.handleBarcodeScan(qrPayload, context)
+        val scanResult = withTimeout(5_000) { viewModel.activeScanResult.first { it != null } }
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue("Expected a valid identity result, got: $scanResult", scanResult is StudentScanResult.Success)
+        val result = scanResult as StudentScanResult.Success
+        assertFalse("A valid identity alone must not authorize gate movement", result.isApproved)
+        assertTrue("Gate movement must remain policy-pending", result.isPolicyPending)
+        assertTrue(result.reason.contains("No movement authorization was issued"))
     }
 
     @Test

@@ -54,18 +54,28 @@ object TrustedIssuerRegistry {
     /**
      * Enrolls or updates an authoritative issuer public key in the trusted registry.
      */
-    fun registerTrustedKey(
+    internal fun registerTrustedKey(
         publicKey: PublicKey,
         label: String = "Authoritative LTC Issuer",
         enrolledAt: Long = System.currentTimeMillis()
     ): TrustedIssuerEntry {
         val kid = CardCryptoUtils.computeKeyId(publicKey)
+
+        // A revoked key identifier is a permanent tombstone. Re-registering the
+        // same public key must never reactivate credentials signed by it.
+        val existing = getIssuerEntry(kid)
+        if (existing?.isRevoked == true) {
+            throw SecurityException(
+                "Issuer key '$kid' has been revoked and cannot be re-enrolled. Generate and approve a new key."
+            )
+        }
+
         val base64 = CardCryptoUtils.encodePublicKeyToBase64(publicKey)
         val entry = TrustedIssuerEntry(
             kid = kid,
             publicKeyBase64 = base64,
             label = label,
-            enrolledAt = enrolledAt,
+            enrolledAt = existing?.enrolledAt ?: enrolledAt,
             isRevoked = false
         )
 
@@ -78,7 +88,7 @@ object TrustedIssuerRegistry {
     /**
      * Enrolls an issuer public key from its X.509 Base64 representation.
      */
-    fun registerTrustedKeyBase64(
+    internal fun registerTrustedKeyBase64(
         publicKeyBase64: String,
         label: String = "Enrolled Issuer",
         enrolledAt: Long = System.currentTimeMillis()
@@ -130,7 +140,7 @@ object TrustedIssuerRegistry {
     /**
      * Revokes an issuer key. Cards signed by this key will immediately be rejected.
      */
-    fun revokeIssuer(kid: String): Boolean {
+    internal fun revokeIssuer(kid: String): Boolean {
         val cleanKid = kid.trim().lowercase()
         val existing = getIssuerEntry(cleanKid) ?: return false
         val updated = existing.copy(isRevoked = true)
@@ -143,21 +153,14 @@ object TrustedIssuerRegistry {
     /**
      * Removes an issuer key from the registry completely.
      */
-    fun removeIssuer(kid: String): Boolean {
+    internal fun removeIssuer(kid: String): Boolean {
         val cleanKid = kid.trim().lowercase()
-        entryCache.remove(cleanKid)
-        keyCache.remove(cleanKid)
-        val prefs = getPrefs() ?: return true
-        val kids = prefs.getStringSet(KEY_ISSUER_KIDS, emptySet())?.toMutableSet() ?: mutableSetOf()
-        kids.remove(cleanKid)
-        prefs.edit()
-            .putStringSet(KEY_ISSUER_KIDS, kids)
-            .remove("$KEY_PREFIX_PUBKEY$cleanKid")
-            .remove("$KEY_PREFIX_LABEL$cleanKid")
-            .remove("$KEY_PREFIX_ENROLLED_AT$cleanKid")
-            .remove("$KEY_PREFIX_REVOKED$cleanKid")
-            .apply()
-        return true
+        if (getIssuerEntry(cleanKid) == null) return false
+        // Keep revoked-key tombstones permanently. Deleting an entry would
+        // permit the same public key to be enrolled again on this device.
+        throw SecurityException(
+            "Issuer entries cannot be physically removed. Revoke the key and retain its tombstone."
+        )
     }
 
     /**
@@ -171,7 +174,7 @@ object TrustedIssuerRegistry {
     /**
      * Clears all trusted issuers (for test isolation and clean resetting).
      */
-    fun clearAll() {
+    internal fun clearAll() {
         keyCache.clear()
         entryCache.clear()
         val prefs = getPrefs()

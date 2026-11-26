@@ -6,6 +6,7 @@ package com.example.model
 enum class GateVerificationDecision(val title: String) {
     APPROVED("ENTRY APPROVED"),
     NOT_APPROVED("ENTRY NOT APPROVED"),
+    POLICY_PENDING("GATE POLICY PENDING"),
     CARD_INACTIVE("CARD INACTIVE"),
     STUDENT_NOT_FOUND("STUDENT NOT FOUND"),
     INVALID_QR("INVALID QR CODE")
@@ -21,7 +22,8 @@ sealed class StudentScanResult {
         val isApproved: Boolean,
         val reason: String,
         val isOfflineData: Boolean,
-        val lastSyncTimestamp: Long = System.currentTimeMillis()
+        val lastSyncTimestamp: Long = System.currentTimeMillis(),
+        val isPolicyPending: Boolean = false
     ) : StudentScanResult()
 
     data class CardInactive(

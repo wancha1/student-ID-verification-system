@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FileDownload
@@ -75,6 +76,8 @@ import com.example.ui.theme.ApprovedGreenLight
 import com.example.ui.theme.ApprovedGreenText
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.Navy900
+import com.example.ui.theme.PendingAmber
+import com.example.ui.theme.PendingAmberLight
 import com.example.ui.theme.RejectedRed
 import com.example.ui.theme.RejectedRedLight
 import com.example.ui.theme.RejectedRedText
@@ -98,13 +101,15 @@ fun GateAccessLogsScreen(
     val filteredLogs = remember(scanLogs, selectedFilter) {
         when (selectedFilter) {
             "APPROVED" -> scanLogs.filter { it.decision == GateVerificationDecision.APPROVED }
-            "DENIED" -> scanLogs.filter { it.decision != GateVerificationDecision.APPROVED }
+            "DENIED" -> scanLogs.filter { it.decision != GateVerificationDecision.APPROVED && it.decision != GateVerificationDecision.POLICY_PENDING }
+            "PENDING" -> scanLogs.filter { it.decision == GateVerificationDecision.POLICY_PENDING }
             else -> scanLogs
         }
     }
 
     val approvedCount = remember(scanLogs) { scanLogs.count { it.decision == GateVerificationDecision.APPROVED } }
-    val deniedCount = remember(scanLogs) { scanLogs.count { it.decision != GateVerificationDecision.APPROVED } }
+    val deniedCount = remember(scanLogs) { scanLogs.count { it.decision != GateVerificationDecision.APPROVED && it.decision != GateVerificationDecision.POLICY_PENDING } }
+    val pendingCount = remember(scanLogs) { scanLogs.count { it.decision == GateVerificationDecision.POLICY_PENDING } }
     val context = LocalContext.current
 
     BackHandler(onBack = onBack)
@@ -231,6 +236,20 @@ fun GateAccessLogsScreen(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("filter_chip_denied")
+                )
+
+                FilterChip(
+                    selected = selectedFilter == "PENDING",
+                    onClick = { selectedFilter = "PENDING" },
+                    label = { Text("Pending ($pendingCount)") },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PendingAmberLight,
+                        selectedLabelColor = PendingAmber
+                    ),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("filter_chip_pending")
                 )
             }
 
@@ -401,6 +420,7 @@ fun GateLogItemCard(
     modifier: Modifier = Modifier
 ) {
     val isApproved = log.decision == GateVerificationDecision.APPROVED
+    val isPending = log.decision == GateVerificationDecision.POLICY_PENDING
     val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
     val formattedTime = remember(log.timestamp) { timeFormatter.format(Date(log.timestamp)) }
 
@@ -424,7 +444,7 @@ fun GateLogItemCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (isApproved) ApprovedGreenLight else RejectedRedLight),
+                    .background(when { isPending -> PendingAmberLight; isApproved -> ApprovedGreenLight; else -> RejectedRedLight }),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -434,9 +454,10 @@ fun GateLogItemCard(
                         GateVerificationDecision.CARD_INACTIVE -> Icons.Default.Block
                         GateVerificationDecision.STUDENT_NOT_FOUND -> Icons.Default.Error
                         GateVerificationDecision.INVALID_QR -> Icons.Default.QrCodeScanner
+                        GateVerificationDecision.POLICY_PENDING -> Icons.Default.Warning
                     },
                     contentDescription = null,
-                    tint = if (isApproved) ApprovedGreen else RejectedRed,
+                    tint = when { isPending -> PendingAmber; isApproved -> ApprovedGreen; else -> RejectedRed },
                     modifier = Modifier.size(20.dp)
                 )
             }
