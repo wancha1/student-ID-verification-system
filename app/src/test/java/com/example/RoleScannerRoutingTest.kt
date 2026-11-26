@@ -69,7 +69,7 @@ class RoleScannerRoutingTest {
         context = ApplicationProvider.getApplicationContext()
         SecurityManager.resetForTesting(context)
         TrustedIssuerRegistry.initialize(context)
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         CardCryptoManager.resetForTesting()
 
         SecurityManager.provisionInitialAdmin(context, "System Admin", "1234")
@@ -148,7 +148,7 @@ class RoleScannerRoutingTest {
     fun tearDown() {
         database.close()
         CardCryptoManager.resetForTesting()
-        TrustedIssuerRegistry.clearAll()
+        TestCardCryptoHelper.clearTrustedIssuerFixtures()
         SecurityManager.resetForTesting(context)
     }
 
