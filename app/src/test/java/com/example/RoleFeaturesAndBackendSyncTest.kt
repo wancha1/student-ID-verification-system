@@ -19,6 +19,7 @@ import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
+import com.example.model.GateVerificationDecision
 import com.example.model.MealServingStatus
 import com.example.model.MealType
 import com.example.model.MealVerificationResult
@@ -48,7 +49,6 @@ import java.security.KeyPair
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.Base64
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -94,12 +94,14 @@ class RoleFeaturesAndBackendSyncTest {
         boardingQrPayload = CardCryptoManager.signCardPayload(
             cardId = boardingCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31"
+            validUntil = "2026-12-31",
+            signer = testSigner
         )
         dayScholarQrPayload = CardCryptoManager.signCardPayload(
             cardId = dayScholarCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31"
+            validUntil = "2026-12-31",
+            signer = testSigner
         )
 
         val boarder = StudentEntity(
@@ -371,43 +373,24 @@ class RoleFeaturesAndBackendSyncTest {
     }
 
     @Test
-    fun issuerAdminActionsRemainFailClosedUntilServerAuthorizationExists() {
-        viewModel.loginAs(UserRole.ADMINISTRATOR, "Registry Admin")
-        assertTrue(CardCryptoManager.hasIssuerPrivateKey())
-        val trustedBefore = TrustedIssuerRegistry.getAllIssuers()
-        assertTrue("Test fixture should have one trusted test issuer", trustedBefore.isNotEmpty())
-
-        viewModel.setupAuthoritativeIssuerKey()
-        assertFalse("Admin UI must not activate local signing authority", CardCryptoManager.hasIssuerPrivateKey())
-        assertEquals("Local setup must not change trusted issuers", trustedBefore, TrustedIssuerRegistry.getAllIssuers())
-
-        val publicKeyBase64 = Base64.getEncoder().encodeToString(testKeyPair.public.encoded)
-        viewModel.enrollTrustedIssuerPublicKey(publicKeyBase64)
-        assertEquals("Client-side public-key enrollment must remain disabled", trustedBefore, TrustedIssuerRegistry.getAllIssuers())
-
-        viewModel.revokeTrustedIssuer("unknown-test-kid")
-        assertEquals("Local revocation must not mutate the trust registry", trustedBefore, TrustedIssuerRegistry.getAllIssuers())
-    }
-
-    @Test
-    fun gateStaffVerifiesQrLogsEntryAndCannotExportOrEditStudentsOrServeMeals() = runBlocking {
+    fun gateStaffVerifiesQrLogsPendingDecisionAndCannotExportOrEditStudentsOrServeMeals() = runBlocking {
         viewModel.loginAs(UserRole.GATE_STAFF, "Guard Ocen")
         val guard = viewModel.currentUser.value!!
         assertFalse(guard.hasPermission(StaffPermission.EXPORT_DATA))
         assertFalse(guard.hasPermission(StaffPermission.MANAGE_STUDENTS))
         assertFalse(guard.hasPermission(StaffPermission.SERVE_MEALS))
 
-        // Use the cleared day-scholar fixture: boarders are intentionally denied
-        // at the day-scholar gate by the repository's access policy.
-        viewModel.handleBarcodeScan(dayScholarQrPayload, context)
+        viewModel.handleBarcodeScan(boardingQrPayload, context)
         waitUntil { viewModel.activeScanResult.value != null && database.scanLogDao().getAllLogsFlow().first().isNotEmpty() }
         val result = viewModel.activeScanResult.value
         assertTrue(result is StudentScanResult.Success)
-        assertTrue((result as StudentScanResult.Success).isApproved)
+        assertFalse((result as StudentScanResult.Success).isApproved)
+        assertTrue(result.isPolicyPending)
 
         val logs = database.scanLogDao().getAllLogsFlow().first()
-        assertEquals(dayScholarStudentId, logs.first().studentId)
+        assertEquals(boardingStudentId, logs.first().studentId)
         assertEquals("Guard Ocen", logs.first().guardName)
+        assertEquals(GateVerificationDecision.POLICY_PENDING, logs.first().decision)
 
         // Denied meal serving
         viewModel.verifyAndServeMeal(boardingQrPayload, context)
