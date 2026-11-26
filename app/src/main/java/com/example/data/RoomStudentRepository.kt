@@ -60,6 +60,9 @@ class RoomStudentRepository(
     override val scanLogsFlow: Flow<List<ScanLog>> = database.scanLogDao().getAllLogsFlow()
         .map { entities -> entities.map { it.toDomain() } }
 
+    val allCardsFlow: Flow<List<Card>> = database.cardDao().getAllCardsFlow()
+        .map { entities -> entities.map { it.toDomain() } }
+
     private val _guardianNotifications = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.model.GuardianNotification>>(emptyList())
     override val guardianNotificationsFlow: Flow<List<com.example.model.GuardianNotification>> = _guardianNotifications
 
@@ -437,6 +440,31 @@ class RoomStudentRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun syncFeeStatusToCloud(
+        studentId: String,
+        newStatus: FeeStatus,
+        outstandingAmount: Double
+    ): Result<Unit> = withContext(ioDispatcher) {
+        if (!syncManager.syncInfo.value.isOnline) {
+            return@withContext Result.failure(IllegalStateException("Device is offline"))
+        }
+        val now = System.currentTimeMillis()
+        val remoteResult = remoteCloudDataSource.updateRemoteFeeStatus(
+            studentId = studentId,
+            newStatus = newStatus,
+            outstandingAmount = outstandingAmount,
+            updatedAt = now
+        )
+        if (remoteResult.isSuccess) {
+            val pendingFees = database.pendingChangeDao().getPendingFeeChanges()
+                .filter { it.recordId == studentId }
+            pendingFees.forEach { change ->
+                database.pendingChangeDao().markSynced(change.changeId, now)
+            }
+        }
+        remoteResult
     }
 
     override suspend fun addStudent(student: Student): Result<Unit> = withContext(ioDispatcher) {

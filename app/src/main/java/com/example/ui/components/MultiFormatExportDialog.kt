@@ -3,17 +3,17 @@ package com.example.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.TableChart
@@ -35,17 +35,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.SchoolPrimary
+import com.example.ui.theme.ApprovedGreen
 import com.example.util.ExportFormat
 
 @Composable
 fun MultiFormatExportDialog(
     title: String = "Export Data",
-    subtitle: String = "Download formatted reports compatible with Office & Google Workspace",
+    subtitle: String = "Compatible with Excel, Word & Google Workspace",
     recordCount: Int = 0,
     datasetTitle: String = title,
     onDismiss: () -> Unit,
@@ -61,10 +62,10 @@ fun MultiFormatExportDialog(
                 Icon(
                     imageVector = Icons.Default.FileDownload,
                     contentDescription = null,
-                    tint = SchoolPrimary,
-                    modifier = Modifier.size(24.dp)
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
                 Column {
                     Text(
                         text = displayTitle,
@@ -87,18 +88,18 @@ fun MultiFormatExportDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "SELECT DOWNLOAD FORMAT",
+                    text = "SELECT FORMAT",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = SchoolPrimary,
-                    letterSpacing = 1.sp
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 0.8.sp
                 )
 
                 FormatOptionItem(
                     format = ExportFormat.EXCEL_XLS,
                     isSelected = selectedFormat == ExportFormat.EXCEL_XLS,
                     icon = Icons.Default.TableChart,
-                    accentColor = Color(0xFF15803D),
+                    accentColor = ApprovedGreen,
                     onSelect = { selectedFormat = ExportFormat.EXCEL_XLS },
                     testTag = "export_option_excel_xls"
                 )
@@ -107,7 +108,7 @@ fun MultiFormatExportDialog(
                     format = ExportFormat.WORD_DOC,
                     isSelected = selectedFormat == ExportFormat.WORD_DOC,
                     icon = Icons.Default.Description,
-                    accentColor = Color(0xFF2563EB),
+                    accentColor = MaterialTheme.colorScheme.primary,
                     onSelect = { selectedFormat = ExportFormat.WORD_DOC },
                     testTag = "export_option_word_doc"
                 )
@@ -116,7 +117,7 @@ fun MultiFormatExportDialog(
                     format = ExportFormat.EXCEL_CSV,
                     isSelected = selectedFormat == ExportFormat.EXCEL_CSV,
                     icon = Icons.Default.TableChart,
-                    accentColor = Color(0xFF0D9488),
+                    accentColor = Color(0xFF0F766E),
                     onSelect = { selectedFormat = ExportFormat.EXCEL_CSV },
                     testTag = "export_option_excel_csv"
                 )
@@ -135,21 +136,25 @@ fun MultiFormatExportDialog(
             Button(
                 onClick = { onExport(selectedFormat) },
                 enabled = recordCount > 0,
-                modifier = Modifier.testTag("button_confirm_export_download")
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("button_confirm_export_download")
             ) {
                 Icon(
                     imageVector = Icons.Default.FileDownload,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(Modifier.width(6.dp))
                 Text("Download ${selectedFormat.extension.uppercase()}")
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("button_cancel_export")
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("button_cancel_export")
             ) {
                 Text("Cancel")
             }
@@ -161,7 +166,7 @@ fun MultiFormatExportDialog(
 private fun FormatOptionItem(
     format: ExportFormat,
     isSelected: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     accentColor: Color,
     onSelect: () -> Unit,
     testTag: String
@@ -174,47 +179,47 @@ private fun FormatOptionItem(
         ),
         border = BorderStroke(
             width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) accentColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+            color = if (isSelected) accentColor else MaterialTheme.colorScheme.outlineVariant
         ),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 56.dp)
             .clickable(onClick = onSelect)
             .testTag(testTag)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = accentColor.copy(alpha = 0.15f),
+                color = accentColor.copy(alpha = 0.14f),
                 modifier = Modifier.size(36.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .size(20.dp)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = format.label,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = format.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

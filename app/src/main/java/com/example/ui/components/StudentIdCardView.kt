@@ -24,15 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DirectionsBus
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
@@ -371,14 +363,13 @@ private fun SecurityGuillochePattern(modifier: Modifier = Modifier) {
 }
 
 /**
- * Full Dialog preview with print / export / test scan affordances.
+ * Full Dialog preview for a student's printable ID card.
  */
 @Composable
 fun DigitalIdCardDialog(
     student: Student,
     card: StudentCard?,
-    onDismiss: () -> Unit,
-    onTestScan: (String) -> Unit = {}
+    onDismiss: () -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -439,41 +430,6 @@ fun DigitalIdCardDialog(
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
-
-                // Card Actions Grid
-                Text(
-                    text = "ID Badge Actions",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            // Test scan this student's active card QR payload
-                            val testPayload = card?.qrPayload?.takeIf { it.isNotBlank() } ?: student.uniqueQrCode
-                            onTestScan(testPayload)
-                            onDismiss()
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("button_test_scan_card"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondary
-                        )
-                    ) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Simulate Gate Scan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedButton(
                     onClick = onDismiss,

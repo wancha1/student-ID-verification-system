@@ -161,8 +161,33 @@ class SupabaseCloudBackend(
     override suspend fun fetchAllRemoteCards(): Result<List<CardEntity>> =
         fetchCardsUpdatedSince(-1L)
 
+    override suspend fun fetchGateLogsUpdatedSince(timestamp: Long): Result<List<ScanLogEntity>> = runCatching {
+        val role = activeRole()
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "GATE_OFFICER")) {
+            return@runCatching emptyList()
+        }
+        buildList {
+            var offset = 0L
+            while (true) {
+                val page = client.from("gate_logs").select {
+                    filter {
+                        eq("school_id", schoolId)
+                        gt("timestamp_ms", timestamp)
+                    }
+                    range(offset..(offset + PAGE_SIZE - 1))
+                }.decodeList<GateLogRow>()
+                addAll(page)
+                if (page.size < PAGE_SIZE) break
+                offset += PAGE_SIZE
+            }
+        }.map { it.toEntity() }
+    }
+
     override suspend fun fetchAllRemoteMealRecords(): Result<List<MealRecordEntity>> = runCatching {
-        activeRole()
+        val role = activeRole()
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "MEAL_STAFF")) {
+            return@runCatching emptyList()
+        }
         buildList {
             var offset = 0L
             while (true) {
@@ -178,7 +203,10 @@ class SupabaseCloudBackend(
     }
 
     override suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>> = runCatching {
-        activeRole()
+        val role = activeRole()
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "TEACHER", "DIRECTOR_OF_STUDIES")) {
+            return@runCatching emptyList()
+        }
         buildList {
             var offset = 0L
             while (true) {
@@ -194,7 +222,10 @@ class SupabaseCloudBackend(
     }
 
     override suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>> = runCatching {
-        activeRole()
+        val role = activeRole()
+        if (role !in setOf("ADMIN", "HEAD_TEACHER", "BURSAR", "EXAM_STAFF")) {
+            return@runCatching emptyList()
+        }
         buildList {
             var offset = 0L
             while (true) {
@@ -501,25 +532,49 @@ class SupabaseCloudBackend(
     private data class GateLogRow(
         @SerialName("school_id") val schoolId: String,
         val id: String,
-        @SerialName("student_id") val studentId: String?,
-        @SerialName("student_number") val studentNumber: String,
-        @SerialName("student_name") val studentName: String,
-        @SerialName("card_id") val cardId: String?,
-        @SerialName("card_identifier") val cardIdentifier: String?,
-        @SerialName("qr_payload") val qrPayload: String,
+        @SerialName("student_id") val studentId: String? = null,
+        @SerialName("student_number") val studentNumber: String? = null,
+        @SerialName("student_name") val studentName: String? = null,
+        @SerialName("card_id") val cardId: String? = null,
+        @SerialName("card_identifier") val cardIdentifier: String? = null,
+        @SerialName("qr_payload") val qrPayload: String? = null,
         val decision: String,
-        @SerialName("gate_location") val gateLocation: String,
+        @SerialName("gate_location") val gateLocation: String? = null,
         @SerialName("timestamp_ms") val timestamp: Long,
-        @SerialName("fee_status") val feeStatus: String?,
-        @SerialName("card_status") val cardStatus: String?,
-        @SerialName("is_day_scholar") val isDayScholar: Boolean,
-        @SerialName("is_approved") val isApproved: Boolean,
-        val reason: String,
-        @SerialName("is_offline_decision") val isOfflineDecision: Boolean,
-        @SerialName("data_sync_timestamp_at_scan") val dataSyncTimestampAtScan: Long,
-        @SerialName("guard_name") val guardName: String,
-        @SerialName("device_identifier") val deviceIdentifier: String
+        @SerialName("fee_status") val feeStatus: String? = null,
+        @SerialName("card_status") val cardStatus: String? = null,
+        @SerialName("is_day_scholar") val isDayScholar: Boolean? = null,
+        @SerialName("is_approved") val isApproved: Boolean? = null,
+        val reason: String? = null,
+        @SerialName("is_offline_decision") val isOfflineDecision: Boolean = false,
+        @SerialName("data_sync_timestamp_at_scan") val dataSyncTimestampAtScan: Long? = null,
+        @SerialName("guard_name") val guardName: String? = null,
+        @SerialName("device_identifier") val deviceIdentifier: String? = null
     ) {
+        fun toEntity(gradeClassFallback: String = "") = ScanLogEntity(
+            id = id,
+            studentId = studentId,
+            studentNumber = studentNumber,
+            studentName = studentName ?: "Student",
+            gradeClass = gradeClassFallback,
+            cardId = cardId,
+            cardIdentifier = cardIdentifier,
+            qrPayload = qrPayload.orEmpty(),
+            decision = decision,
+            feeStatus = feeStatus,
+            cardStatus = cardStatus,
+            isDayScholar = isDayScholar ?: true,
+            isApproved = isApproved ?: (decision == "APPROVED"),
+            reason = reason.orEmpty(),
+            isOfflineDecision = isOfflineDecision,
+            dataSyncTimestampAtScan = dataSyncTimestampAtScan ?: timestamp,
+            timestamp = timestamp,
+            guardName = guardName ?: "Gate Staff",
+            deviceIdentifier = deviceIdentifier ?: "GateTerminal",
+            gateLocation = gateLocation ?: "Gate 1 (Main Entrance)",
+            isSyncedToCloud = true
+        )
+
         companion object {
             fun from(l: ScanLogEntity, school: String) = GateLogRow(
                 school, l.id, l.studentId, l.studentNumber ?: "UNKNOWN", l.studentName,

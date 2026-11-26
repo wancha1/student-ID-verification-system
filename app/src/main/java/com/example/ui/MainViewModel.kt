@@ -94,6 +94,7 @@ class MainViewModel(
                 val staff = authenticator.restoreSession()
                 if (staff != null && _currentUser.value == null) {
                     loginAs(staff.role, staff.displayName, staff.hasExplicitFinanceAccess)
+                    syncInBackground()
                 }
             } catch (_: Exception) {
                 // Fail closed: network, configuration or membership errors never grant a role.
@@ -108,6 +109,11 @@ class MainViewModel(
     // Students list from repository
     val allStudents: StateFlow<List<Student>> = repository.studentsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Issued physical ID cards from Room repository (used for Batch CR80 Print Studio)
+    val allCards: StateFlow<List<Card>> = (
+        (repository as? com.example.data.RoomStudentRepository)?.allCardsFlow ?: flowOf(emptyList())
+    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Gate verification audit logs
     val scanLogs: StateFlow<List<ScanLog>> = repository.scanLogsFlow
@@ -306,14 +312,17 @@ class MainViewModel(
     fun loginAs(role: UserRole, customName: String? = null, hasFinancePermission: Boolean = false) {
         if (role !in VERSION_ONE_ROLES) {
             _currentUser.value = null
+            repository.syncManagerInstance?.setActiveRole(null, false)
             _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
             return
         }
+        val effectiveFinance = (role == UserRole.ADMINISTRATOR && hasFinancePermission)
+        repository.syncManagerInstance?.setActiveRole(role, effectiveFinance)
         _currentUser.value = AuthUser(
             role = role,
             name = customName ?: role.defaultUsername,
             station = role.subtitle,
-            hasExplicitFinanceAccess = hasFinancePermission
+            hasExplicitFinanceAccess = effectiveFinance
         )
         dismissScanResult()
     }
@@ -326,7 +335,8 @@ class MainViewModel(
         context: Context,
         role: UserRole,
         pin: String,
-        customName: String? = null
+        customName: String? = null,
+        hasExplicitFinanceAccess: Boolean = false
     ): Boolean {
         if (role !in VERSION_ONE_ROLES) {
             _userFeedbackMessage.value = "This staff role is not enabled in Version 1."
@@ -346,12 +356,14 @@ class MainViewModel(
             role == UserRole.ADMINISTRATOR -> SecurityManager.getAdminName(context)
             else -> role.defaultUsername
         }
+        val effectiveFinance = (role == UserRole.ADMINISTRATOR && hasExplicitFinanceAccess)
         val user = AuthUser(
             role = role,
             name = resolvedName,
             station = role.subtitle,
-            hasExplicitFinanceAccess = role == UserRole.BURSAR_FINANCE
+            hasExplicitFinanceAccess = effectiveFinance
         )
+        repository.syncManagerInstance?.setActiveRole(role, effectiveFinance)
         _currentUser.value = user
         SecurityManager.saveActiveSession(context, user)
         dismissScanResult()
@@ -359,12 +371,18 @@ class MainViewModel(
         return true
     }
 
+    fun syncInBackground() {
+        viewModelScope.launch {
+            runCatching { repository.syncWithCloud() }
+        }
+    }
 
     /**
      * Locks terminal session. Unlocks only after entering valid staff credentials.
      */
     fun lockSession() {
         _currentUser.value = null
+        repository.syncManagerInstance?.setActiveRole(null, false)
         dismissScanResult()
     }
 
@@ -632,7 +650,18 @@ class MainViewModel(
             if (result.isSuccess) {
                 val student = repository.getStudentById(studentId) ?: repository.getStudentByStudentNumber(studentId)
                 val statusText = if (newStatus == FeeStatus.CLEARED) "CLEARED" else "OUTSTANDING"
-                _userFeedbackMessage.value = "Fees for ${student?.fullName ?: studentId} marked $statusText. Gate scanner updated immediately!"
+
+                val roomRepo = repository as? com.example.data.RoomStudentRepository
+                if (roomRepo != null) {
+                    val cloudResult = roomRepo.syncFeeStatusToCloud(studentId, newStatus, outstandingAmount)
+                    _userFeedbackMessage.value = if (cloudResult.isSuccess) {
+                        "Fees for ${student?.fullName ?: studentId} marked $statusText and synced to cloud."
+                    } else {
+                        "Fees for ${student?.fullName ?: studentId} saved locally ($statusText). Cloud sync pending."
+                    }
+                } else {
+                    _userFeedbackMessage.value = "Fees for ${student?.fullName ?: studentId} marked $statusText. Gate scanner updated immediately!"
+                }
 
                 if (_currentScannedStudent.value?.id.equals(studentId, ignoreCase = true) ||
                     _currentScannedStudent.value?.studentNumber.equals(studentId, ignoreCase = true)
@@ -988,6 +1017,7 @@ class MainViewModel(
     }
 
     fun verifyAndServeMeal(rawCode: String, context: Context? = null) {
+        _isMealScannerOpen.value = false
         val selectedMeal = _activeMealType.value
         if (!selectedMeal.isEnabledForServing) {
             _userFeedbackMessage.value = "${selectedMeal.label} is disabled. Only lunch and supper can be served."
@@ -1236,10 +1266,7 @@ class MainViewModel(
 
     fun clearLogs() {
         if (!requirePermission(StaffPermission.SYSTEM_CONFIGURATION, "Clearing gate activity audit logs")) return
-        viewModelScope.launch {
-            repository.clearScanLogs()
-            _userFeedbackMessage.value = "Gate activity audit logs cleared."
-        }
+        _userFeedbackMessage.value = "Gate activity audit logs are immutable in Version 1 and cannot be deleted."
     }
 
     fun resetDemoData() {
@@ -1343,17 +1370,25 @@ class MainViewModel(
                         _currentScannedCard.value = result.card
                         _scanError.value = null
                         if (result.department == ScanDepartment.MEALS) {
-                            val newMeal = MealRecord(
-                                studentId = result.student.id,
-                                studentNumber = result.student.studentNumber,
-                                studentName = result.student.fullName,
-                                gradeClass = result.student.gradeClass,
-                                mealType = result.mealType ?: MealType.LUNCH,
-                                timestamp = System.currentTimeMillis(),
-                                serverName = user.name,
-                                status = result.mealStatus ?: MealServingStatus.SERVED
-                            )
-                            _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            val resolvedMealType = result.mealType ?: _activeMealType.value
+                            if (result.isAllowed) {
+                                val newMeal = MealRecord(
+                                    studentId = result.student.id,
+                                    studentNumber = result.student.studentNumber,
+                                    studentName = result.student.fullName,
+                                    gradeClass = result.student.gradeClass,
+                                    mealType = resolvedMealType,
+                                    timestamp = System.currentTimeMillis(),
+                                    serverName = user.name,
+                                    status = result.mealStatus ?: MealServingStatus.SERVED
+                                )
+                                _mealScanOutcome.value = MealVerificationResult.Success(newMeal)
+                            } else {
+                                _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                    student = result.student,
+                                    reason = result.statusDetail
+                                )
+                            }
                         } else if (result.department == ScanDepartment.ATTENDANCE) {
                             val newAtt = AttendanceRecord(
                                 studentId = result.student.id,
@@ -1370,22 +1405,71 @@ class MainViewModel(
                     }
                     is DepartmentVerificationResult.DuplicateAction -> {
                         _scanError.value = result.message
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            val meal = _activeMealType.value
+                            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                            val existingRecord = db.mealRecordDao()
+                                .findServing(result.student.id, meal.name, today)
+                                ?.toDomain()
+                                ?: MealRecord(
+                                    studentId = result.student.id,
+                                    studentNumber = result.student.studentNumber,
+                                    studentName = result.student.fullName,
+                                    gradeClass = result.student.gradeClass,
+                                    mealType = meal,
+                                    mealDate = today,
+                                    timestamp = result.existingEventTimestamp ?: System.currentTimeMillis(),
+                                    serverName = "Dining Terminal",
+                                    status = MealServingStatus.SERVED
+                                )
+                            _mealScanOutcome.value = MealVerificationResult.BlockedDoubleServing(
+                                student = result.student,
+                                mealType = meal,
+                                previousRecord = existingRecord
+                            )
+                        }
                         context?.let { FeedbackHelper.playWarningSoundAndHaptic(it) }
                     }
                     is DepartmentVerificationResult.PermissionDenied -> {
                         _scanError.value = result.message
+                        _userFeedbackMessage.value = "Access Denied: ${result.message}"
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(rawCode = result.message)
+                        }
                         context?.let { FeedbackHelper.playDeniedSoundAndHaptic(it) }
                     }
                     is DepartmentVerificationResult.CardInactive -> {
                         _scanError.value = result.reason
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.BlockedNoClearance(
+                                student = result.student ?: Student(
+                                    id = result.card.id,
+                                    studentNumber = result.card.cardIdentifier,
+                                    firstName = "Card",
+                                    lastName = "Inactive",
+                                    gradeClass = ""
+                                ),
+                                reason = result.reason
+                            )
+                        }
                         context?.let { FeedbackHelper.playFeedback(it, false) }
                     }
                     is DepartmentVerificationResult.InvalidCredential -> {
                         _scanError.value = result.errorReason
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(
+                                rawCode = result.rawCode
+                            )
+                        }
                         context?.let { FeedbackHelper.playFeedback(it, false) }
                     }
                     is DepartmentVerificationResult.StudentNotFound -> {
                         _scanError.value = result.reason
+                        if (_selectedDepartment.value == ScanDepartment.MEALS) {
+                            _mealScanOutcome.value = MealVerificationResult.StudentNotFound(
+                                rawCode = result.cardId
+                            )
+                        }
                         context?.let { FeedbackHelper.playFeedback(it, false) }
                     }
                 }

@@ -13,22 +13,20 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,19 +34,13 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,7 +53,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -72,15 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.camera.CameraPreviewView
-import com.example.model.FeeStatus
-import com.example.model.Student
 import com.example.ui.theme.ApprovedGreen
-import com.example.ui.theme.ApprovedGreenLight
-import com.example.ui.theme.ApprovedGreenText
-import com.example.ui.theme.RejectedRed
-import com.example.ui.theme.RejectedRedLight
-import com.example.ui.theme.RejectedRedText
-import com.example.ui.theme.SchoolPrimary
+import com.example.ui.theme.GoldBright
 
 @Composable
 fun GuardScannerScreen(
@@ -103,8 +87,6 @@ fun GuardScannerScreen(
 
     var isFlashlightOn by remember { mutableStateOf(false) }
     var useFrontCamera by remember { mutableStateOf(false) }
-    var showManualDialog by remember { mutableStateOf(false) }
-    var manualStudentId by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -124,25 +106,19 @@ fun GuardScannerScreen(
             .background(Color.Black)
     ) {
         if (hasCameraPermission) {
-            // Live CameraX Feed
             CameraPreviewView(
                 modifier = Modifier.fillMaxSize(),
                 isFlashlightOn = isFlashlightOn,
                 useFrontCamera = useFrontCamera,
                 isScanningActive = true,
-                onBarcodeScanned = { rawCode ->
-                    onBarcodeDetected(rawCode)
-                }
+                onBarcodeScanned = onBarcodeDetected
             )
-
-            // Viewfinder Target Overlay
             ScannerViewfinderOverlay()
         } else {
-            // Camera Permission Request Fallback
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -159,26 +135,31 @@ fun GuardScannerScreen(
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = cameraPermissionMessage,
                     color = Color.White.copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(16.dp)
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
                 )
+                Spacer(modifier = Modifier.height(20.dp))
                 Button(
                     onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                    modifier = Modifier.testTag("button_request_camera_permission")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("button_request_camera_permission")
                 ) {
                     Text("Grant Camera Permission")
                 }
             }
         }
 
-        // Top Scanner Action Bar
+        // Top Bar with safe status bar padding & 48dp circular buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 40.dp, start = 16.dp, end = 16.dp),
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -186,7 +167,7 @@ fun GuardScannerScreen(
                 onClick = onCloseScanner,
                 modifier = Modifier
                     .testTag("button_close_scanner")
-                    .size(44.dp)
+                    .size(48.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
             ) {
                 Icon(
@@ -198,50 +179,48 @@ fun GuardScannerScreen(
 
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = Color.Black.copy(alpha = 0.6f)
+                color = Color.Black.copy(alpha = 0.65f)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF22C55E))
+                            .background(ApprovedGreen)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = screenTitle,
                         color = Color.White,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.8.sp
                     )
                 }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Flashlight toggle
                 IconButton(
                     onClick = { isFlashlightOn = !isFlashlightOn },
                     modifier = Modifier
                         .testTag("button_toggle_flashlight")
-                        .size(44.dp)
+                        .size(48.dp)
                         .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                 ) {
                     Icon(
                         imageVector = if (isFlashlightOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                        contentDescription = "Flashlight",
-                        tint = if (isFlashlightOn) Color(0xFFFBBF24) else Color.White
+                        contentDescription = "Toggle Flashlight",
+                        tint = if (isFlashlightOn) GoldBright else Color.White
                     )
                 }
 
-                // Camera Switch
                 IconButton(
                     onClick = { useFrontCamera = !useFrontCamera },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                 ) {
                     Icon(
@@ -253,84 +232,29 @@ fun GuardScannerScreen(
             }
         }
 
-        // Bottom Controls: Quick Test Barcodes & Manual Entry
-        Column(
+        // Bottom Thumb-Zone Dock with safe navigation bar padding
+        Surface(
+            color = Color.Black.copy(alpha = 0.78f),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.75f))
-                .padding(top = 12.dp, bottom = 24.dp, start = 16.dp, end = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "STUDENT ID VERIFICATION",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
+                    text = "Point camera at the QR code on the student ID badge",
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
                 )
-
-                TextButton(
-                    onClick = { showManualDialog = true },
-                    modifier = Modifier.testTag("button_scanner_manual_code")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Keyboard,
-                        contentDescription = null,
-                        tint = Color(0xFF60A5FA),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Type Code",
-                        color = Color(0xFF60A5FA),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
             }
         }
-    }
-
-    // Manual Code Dialog
-    if (showManualDialog) {
-        AlertDialog(
-            onDismissRequest = { showManualDialog = false },
-            title = { Text("Manual QR Code Lookup", fontWeight = FontWeight.Bold) },
-            text = {
-                OutlinedTextField(
-                    value = manualStudentId,
-                    onValueChange = { manualStudentId = it.uppercase() },
-                    placeholder = { Text("e.g. STU-2026-0001") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .testTag("input_scanner_manual_code")
-                        .fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (manualStudentId.isNotBlank()) {
-                            onBarcodeDetected(manualStudentId.trim())
-                            showManualDialog = false
-                        }
-                    }
-                ) {
-                    Text("Verify")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showManualDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }
 
@@ -350,41 +274,36 @@ private fun ScannerViewfinderOverlay() {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val frameSize = size.width * 0.72f
         val left = (size.width - frameSize) / 2f
-        val top = (size.height - frameSize) / 2.3f
-        val cornerLength = 36f
+        val top = (size.height - frameSize) / 2.2f
+        val cornerLength = 38f
         val strokeWidth = 8f
+        val bracketColor = Color(0xFF60A5FA)
 
-        // Transparent Viewfinder Target Frame
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.4f),
+            color = Color.White.copy(alpha = 0.35f),
             topLeft = Offset(left, top),
             size = Size(frameSize, frameSize),
-            cornerRadius = CornerRadius(16f, 16f),
+            cornerRadius = CornerRadius(18f, 18f),
             style = Stroke(width = 2f)
         )
 
-        // Corner 1: Top-Left
-        drawLine(Color(0xFF3B82F6), Offset(left, top), Offset(left + cornerLength, top), strokeWidth)
-        drawLine(Color(0xFF3B82F6), Offset(left, top), Offset(left, top + cornerLength), strokeWidth)
+        drawLine(bracketColor, Offset(left, top), Offset(left + cornerLength, top), strokeWidth)
+        drawLine(bracketColor, Offset(left, top), Offset(left, top + cornerLength), strokeWidth)
 
-        // Corner 2: Top-Right
-        drawLine(Color(0xFF3B82F6), Offset(left + frameSize, top), Offset(left + frameSize - cornerLength, top), strokeWidth)
-        drawLine(Color(0xFF3B82F6), Offset(left + frameSize, top), Offset(left + frameSize, top + cornerLength), strokeWidth)
+        drawLine(bracketColor, Offset(left + frameSize, top), Offset(left + frameSize - cornerLength, top), strokeWidth)
+        drawLine(bracketColor, Offset(left + frameSize, top), Offset(left + frameSize, top + cornerLength), strokeWidth)
 
-        // Corner 3: Bottom-Left
-        drawLine(Color(0xFF3B82F6), Offset(left, top + frameSize), Offset(left + cornerLength, top + frameSize), strokeWidth)
-        drawLine(Color(0xFF3B82F6), Offset(left, top + frameSize), Offset(left, top + frameSize - cornerLength), strokeWidth)
+        drawLine(bracketColor, Offset(left, top + frameSize), Offset(left + cornerLength, top + frameSize), strokeWidth)
+        drawLine(bracketColor, Offset(left, top + frameSize), Offset(left, top + frameSize - cornerLength), strokeWidth)
 
-        // Corner 4: Bottom-Right
-        drawLine(Color(0xFF3B82F6), Offset(left + frameSize, top + frameSize), Offset(left + frameSize - cornerLength, top + frameSize), strokeWidth)
-        drawLine(Color(0xFF3B82F6), Offset(left + frameSize, top + frameSize), Offset(left + frameSize, top + frameSize - cornerLength), strokeWidth)
+        drawLine(bracketColor, Offset(left + frameSize, top + frameSize), Offset(left + frameSize - cornerLength, top + frameSize), strokeWidth)
+        drawLine(bracketColor, Offset(left + frameSize, top + frameSize), Offset(left + frameSize, top + frameSize - cornerLength), strokeWidth)
 
-        // Laser Scan Line
         val currentLaserY = top + (frameSize * laserPosition)
         drawLine(
-            color = Color(0xFFEF4444),
-            start = Offset(left + 8f, currentLaserY),
-            end = Offset(left + frameSize - 8f, currentLaserY),
+            color = Color(0xFF22C55E),
+            start = Offset(left + 12f, currentLaserY),
+            end = Offset(left + frameSize - 12f, currentLaserY),
             strokeWidth = 4f
         )
     }

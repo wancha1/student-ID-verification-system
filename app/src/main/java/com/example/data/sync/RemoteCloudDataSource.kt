@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.withLock
 interface RemoteCloudDataSource {
     suspend fun fetchStudentsUpdatedSince(timestamp: Long): Result<List<StudentEntity>>
     suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>>
+    suspend fun fetchGateLogsUpdatedSince(timestamp: Long): Result<List<ScanLogEntity>> = Result.success(emptyList())
     suspend fun fetchAllRemoteMealRecords(): Result<List<MealRecordEntity>>
     suspend fun fetchAllRemoteAttendanceRecords(): Result<List<AttendanceRecordEntity>>
     suspend fun fetchAllRemoteExamExceptions(): Result<List<ExamExceptionEntity>>
@@ -66,6 +67,12 @@ class InMemoryCloudBackend : RemoteCloudDataSource {
     override suspend fun fetchCardsUpdatedSince(timestamp: Long): Result<List<CardEntity>> = mutex.withLock {
         delay(50)
         val modified = remoteCardsMap.values.filter { it.updatedAt > timestamp }
+        Result.success(modified)
+    }
+
+    override suspend fun fetchGateLogsUpdatedSince(timestamp: Long): Result<List<ScanLogEntity>> = mutex.withLock {
+        delay(50)
+        val modified = remoteLogsList.filter { it.timestamp > timestamp }
         Result.success(modified)
     }
 

@@ -2,45 +2,48 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// School Brand Colors (Deep Navy, Royal Blue, Gold, Slate)
-val Navy900 = Color(0xFF0F172A)
-val Navy800 = Color(0xFF1E293B)
+// Core Institutional Palette (Lira Town College — Crisp Slate, Deep Navy, Warm Gold)
+val Navy950 = Color(0xFF07111E)
+val Navy900 = Color(0xFF0B1B2E)
+val Navy800 = Color(0xFF162A44)
 val Navy700 = Color(0xFF334155)
-val SchoolPrimary = Color(0xFF1E3A8A)      // Deep Navy Blue
-val SchoolPrimaryLight = Color(0xFF2563EB) // Royal Blue
-val SchoolPrimaryContainer = Color(0xFFDBEAFE)
-val SchoolOnPrimaryContainer = Color(0xFF1E3A8A)
 
-val GoldAccent = Color(0xFFD97706)        // School Gold / Amber
+val SchoolPrimary = Color(0xFF0F2942)
+val SchoolPrimaryLight = Color(0xFF2563EB)
+val SchoolPrimaryContainer = Color(0xFFE0ECFA)
+val SchoolOnPrimaryContainer = Color(0xFF0B1B2E)
+
+val GoldAccent = Color(0xFFC98A1C)
+val GoldBright = Color(0xFFE8C170)
 val GoldLight = Color(0xFFFEF3C7)
 
-// Verification Access Control Colors (High Contrast)
-val ApprovedGreen = Color(0xFF16A34A)       // Primary Emerald Green
-val ApprovedGreenDark = Color(0xFF15803D)
+// High-Contrast Semantic Verification Colors
+val ApprovedGreen = Color(0xFF15803D)
+val ApprovedGreenDark = Color(0xFF166534)
 val ApprovedGreenLight = Color(0xFFDCFCE7)
 val ApprovedGreenText = Color(0xFF14532D)
 
-val RejectedRed = Color(0xFFDC2626)         // Primary Crimson Red
-val RejectedRedDark = Color(0xFFB91C1C)
+val RejectedRed = Color(0xFFB91C1C)
+val RejectedRedDark = Color(0xFF991B1B)
 val RejectedRedLight = Color(0xFFFEE2E2)
 val RejectedRedText = Color(0xFF7F1D1D)
 
-val PendingAmber = Color(0xFFD97706)
+val PendingAmber = Color(0xFFB45309)
 val PendingAmberLight = Color(0xFFFEF3C7)
 
-// Neutral Grays and Backgrounds
-val BgLight = Color(0xFFF8FAFC)
+// Crisp Light Surfaces
+val BgLight = Color(0xFFF6F8FB)
 val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceVariantLight = Color(0xFFF1F5F9)
+val SurfaceVariantLight = Color(0xFFEDF1F7)
 val TextPrimaryLight = Color(0xFF0F172A)
 val TextSecondaryLight = Color(0xFF475569)
-val TextMutedLight = Color(0xFF94A3B8)
+val TextMutedLight = Color(0xFF64748B)
 val DividerLight = Color(0xFFE2E8F0)
 
-// Dark Theme Colors
-val BgDark = Color(0xFF0B0F19)
-val SurfaceDark = Color(0xFF151C2C)
-val SurfaceVariantDark = Color(0xFF1E293B)
+// Clean Dark Surfaces
+val BgDark = Color(0xFF0A111C)
+val SurfaceDark = Color(0xFF121C2D)
+val SurfaceVariantDark = Color(0xFF1C293E)
 val TextPrimaryDark = Color(0xFFF8FAFC)
 val TextSecondaryDark = Color(0xFFCBD5E1)
-val DividerDark = Color(0xFF334155)
+val DividerDark = Color(0xFF263449)

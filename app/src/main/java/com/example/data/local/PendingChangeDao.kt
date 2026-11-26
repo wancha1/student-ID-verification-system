@@ -21,6 +21,9 @@ interface PendingChangeDao {
     @Query("SELECT * FROM pending_changes WHERE status = 'FAILED' AND entityType != 'FEE_STATUS' ORDER BY createdAt ASC")
     suspend fun getFailedChanges(): List<PendingChangeEntity>
 
+    @Query("SELECT * FROM pending_changes WHERE status IN ('PENDING', 'FAILED') AND entityType = 'FEE_STATUS' ORDER BY createdAt ASC")
+    suspend fun getPendingFeeChanges(): List<PendingChangeEntity>
+
     @Query("SELECT * FROM pending_changes WHERE changeId = :changeId LIMIT 1")
     suspend fun getChangeById(changeId: String): PendingChangeEntity?
 

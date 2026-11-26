@@ -2,10 +2,10 @@ package com.example.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.FactCheck
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SupervisorAccount
@@ -22,8 +22,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.model.UserRole
 
 /**
- * Premium design tokens and unique color palette configurations for each LTC duty role.
- * Crafted with luxury gradients, ambient glow tints, and distinctive typography headers.
+ * Cohesive role accent tokens built on top of the unified LTC Neutral & Navy system.
+ * Keeps every role immediately recognizable without jarring neon color shifts.
  */
 data class RoleThemeConfig(
     val role: UserRole,
@@ -52,238 +52,189 @@ data class RoleThemeConfig(
             onPrimaryContainer = onContainerColor,
             secondary = secondaryColor,
             onSecondary = Color.White,
-            secondaryContainer = containerColor.copy(alpha = 0.55f),
-            onSecondaryContainer = onContainerColor,
+            secondaryContainer = SurfaceVariantLight,
+            onSecondaryContainer = TextPrimaryLight,
             tertiary = tertiaryColor,
             onTertiary = Color.White,
             background = BgLight,
             onBackground = TextPrimaryLight,
-            surface = Color(0xF2FFFFFF),
+            surface = SurfaceLight,
             onSurface = TextPrimaryLight,
-            surfaceVariant = Color(0xE8FFFFFF),
+            surfaceVariant = SurfaceVariantLight,
             onSurfaceVariant = TextSecondaryLight,
             error = RejectedRed,
             onError = Color.White,
-            outline = accentBorderColor.copy(alpha = 0.5f),
-            outlineVariant = accentBorderColor.copy(alpha = 0.2f)
+            outline = Color(0xFF94A3B8),
+            outlineVariant = DividerLight
         )
     }
 
     fun darkColorScheme(): ColorScheme {
         return darkColorScheme(
             primary = accentGlowColor,
-            onPrimary = Color(0xFF0F172A),
+            onPrimary = Navy950,
             primaryContainer = secondaryColor,
             onPrimaryContainer = containerColor,
             secondary = accentGlowColor.copy(alpha = 0.85f),
-            onSecondary = Color(0xFF0F172A),
-            secondaryContainer = Color(0xFF1E293B),
-            onSecondaryContainer = Color(0xFFF1F5F9),
-            tertiary = tertiaryColor,
-            onTertiary = Color(0xFF0F172A),
+            onSecondary = Navy950,
+            secondaryContainer = SurfaceVariantDark,
+            onSecondaryContainer = TextPrimaryDark,
+            tertiary = GoldBright,
+            onTertiary = Navy950,
             background = BgDark,
             onBackground = TextPrimaryDark,
-            surface = Color(0xD91B2638),
+            surface = SurfaceDark,
             onSurface = TextPrimaryDark,
-            surfaceVariant = Color(0xCC263449),
+            surfaceVariant = SurfaceVariantDark,
             onSurfaceVariant = TextSecondaryDark,
-            error = Color(0xFFEF4444),
-            onError = Color.White,
-            outline = accentGlowColor.copy(alpha = 0.5f),
-            outlineVariant = accentGlowColor.copy(alpha = 0.25f)
+            error = Color(0xFFF87171),
+            onError = Navy950,
+            outline = Color(0xFF475569),
+            outlineVariant = DividerDark
         )
     }
 }
 
 object RoleThemes {
 
-    // 1. Administrator: Imperial Gold & Obsidian Slate
     val AdministratorTheme = RoleThemeConfig(
         role = UserRole.ADMINISTRATOR,
-        primaryColor = Color(0xFFD97706),       // Warm Gold
-        secondaryColor = Color(0xFFB45309),     // Deep Amber Bronze
-        tertiaryColor = Color(0xFF1E293B),      // Slate Obsidian
-        accentGlowColor = Color(0xFFFBBF24),    // Radiant Gold
-        containerColor = Color(0xFFFEF3C7),     // Pale Champagne
+        primaryColor = Color(0xFF0F2942),
+        secondaryColor = Color(0xFF1D4368),
+        tertiaryColor = GoldAccent,
+        accentGlowColor = Color(0xFF60A5FA),
+        containerColor = Color(0xFFFEF3C7),
         onContainerColor = Color(0xFF78350F),
         badgeTextColor = Color(0xFF78350F),
-        stationBadge = "REGISTRY HQ",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF291B07))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF291B07), Color(0xFF111827))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF3B2506), Color(0xFF0A0F1D))
-        ),
+        stationBadge = "ADMIN REGISTRY",
+        cardGradient = Brush.horizontalGradient(listOf(Navy900, Navy800)),
+        headerGradient = Brush.verticalGradient(listOf(Navy900, Navy950)),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Navy900, Navy950)),
         icon = Icons.Default.AdminPanelSettings,
-        departmentTagline = "REGISTRY & GOVERNANCE TERMINAL",
-        dutyMotto = "Official Student Roster • ID Badge Authority • Security Provisioning",
-        quickStatLabel = "Total Enrolled",
-        accentBorderColor = Color(0xFFF59E0B)
+        departmentTagline = "REGISTRY & GOVERNANCE",
+        dutyMotto = "Student Roster • ID Cards • Access Logs",
+        quickStatLabel = "Registered",
+        accentBorderColor = GoldAccent
     )
 
-    // 2. Bursar / Finance: Emerald Teal & Mint Cashmere
     val BursarFinanceTheme = RoleThemeConfig(
         role = UserRole.BURSAR_FINANCE,
-        primaryColor = Color(0xFF0D9488),       // Emerald Teal
-        secondaryColor = Color(0xFF047857),     // Malachite Green
-        tertiaryColor = Color(0xFF065F46),      // Deep Forest
-        accentGlowColor = Color(0xFF2DD4BF),    // Luminous Mint
-        containerColor = Color(0xFFCCFBF1),     // Pale Mint Mist
+        primaryColor = Color(0xFF0F766E),
+        secondaryColor = Color(0xFF115E59),
+        tertiaryColor = GoldAccent,
+        accentGlowColor = Color(0xFF2DD4BF),
+        containerColor = Color(0xFFCCFBF1),
         onContainerColor = Color(0xFF115E59),
-        badgeTextColor = Color(0xFF065F46),
+        badgeTextColor = Color(0xFF115E59),
         stationBadge = "BURSARY DESK",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF064E3B), Color(0xFF0F766E), Color(0xFF115E59))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF042F2E), Color(0xFF0F172A))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF032B2A), Color(0xFF06181B))
-        ),
+        cardGradient = Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF134E4A))),
+        headerGradient = Brush.verticalGradient(listOf(Color(0xFF134E4A), Navy950)),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Color(0xFF134E4A), Navy950)),
         icon = Icons.Default.AccountBalance,
-        departmentTagline = "BURSARY & FISCAL CLEARANCE",
-        dutyMotto = "Tuition Roster • Ledger Clearance • Revenue Accounting",
+        departmentTagline = "FINANCE & FEE CLEARANCE",
+        dutyMotto = "Tuition Roster • Ledger Clearance",
         quickStatLabel = "Fees Cleared",
-        accentBorderColor = Color(0xFF14B8A6)
+        accentBorderColor = Color(0xFF0D9488)
     )
 
-    // 3. Gate Staff: Tactical Sapphire & Electric Cobalt
     val GateStaffTheme = RoleThemeConfig(
         role = UserRole.GATE_STAFF,
-        primaryColor = Color(0xFF1D4ED8),       // Royal Guard Cobalt
-        secondaryColor = Color(0xFF1E3A8A),     // Deep Navy
-        tertiaryColor = Color(0xFF0284C7),      // Precision Azure
-        accentGlowColor = Color(0xFF60A5FA),    // Electric Azure
-        containerColor = Color(0xFFDBEAFE),     // Pale Ice Blue
-        onContainerColor = Color(0xFF1E40AF),
+        primaryColor = Color(0xFF1D4ED8),
+        secondaryColor = Color(0xFF1E3A8A),
+        tertiaryColor = GoldAccent,
+        accentGlowColor = Color(0xFF60A5FA),
+        containerColor = Color(0xFFDBEAFE),
+        onContainerColor = Color(0xFF1E3A8A),
         badgeTextColor = Color(0xFF1E3A8A),
-        stationBadge = "GATE 1 TURNSTILE",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF172554), Color(0xFF1E3A8A), Color(0xFF1D4ED8))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF0F172A), Color(0xFF1E3A8A))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF0A1329), Color(0xFF090E1A))
-        ),
+        stationBadge = "GATE 1",
+        cardGradient = Brush.horizontalGradient(listOf(Navy900, Color(0xFF1E3A8A))),
+        headerGradient = Brush.verticalGradient(listOf(Navy900, Color(0xFF1E3A8A))),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Navy950, Navy900)),
         icon = Icons.Default.Security,
-        departmentTagline = "PERIMETER & ACCESS CONTROL",
-        dutyMotto = "Gate 1 Main Turnstile • QR Telemetry • Boarding & Day Scholar Control",
+        departmentTagline = "GATE ACCESS CONTROL",
+        dutyMotto = "QR Verification • Entry Telemetry",
         quickStatLabel = "Verified Today",
-        accentBorderColor = Color(0xFF3B82F6)
+        accentBorderColor = Color(0xFF2563EB)
     )
 
-    // 4. Meal-Serving Staff: Culinary Ruby & Warm Amber
     val MealServingStaffTheme = RoleThemeConfig(
         role = UserRole.MEAL_SERVING_STAFF,
-        primaryColor = Color(0xFFE11D48),       // Dining Ruby
-        secondaryColor = Color(0xFFBE123C),     // Gourmet Crimson
-        tertiaryColor = Color(0xFFF97316),      // Warm Amber
-        accentGlowColor = Color(0xFFFB7185),    // Coral Glow
-        containerColor = Color(0xFFFFE4E6),     // Soft Blossom
-        onContainerColor = Color(0xFF9F1239),
-        badgeTextColor = Color(0xFF881337),
+        primaryColor = Color(0xFFB45309),
+        secondaryColor = Color(0xFF92400E),
+        tertiaryColor = Navy900,
+        accentGlowColor = Color(0xFFFBBF24),
+        containerColor = Color(0xFFFEF3C7),
+        onContainerColor = Color(0xFF78350F),
+        badgeTextColor = Color(0xFF78350F),
         stationBadge = "DINING HALL",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF4C0519), Color(0xFF881337), Color(0xFF9F1239))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF4C0519), Color(0xFF1E1B4B))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF3B0313), Color(0xFF120817))
-        ),
+        cardGradient = Brush.horizontalGradient(listOf(Navy900, Color(0xFF78350F))),
+        headerGradient = Brush.verticalGradient(listOf(Color(0xFF78350F), Navy950)),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Color(0xFF451A03), Navy950)),
         icon = Icons.Default.Restaurant,
-        departmentTagline = "DINING HALL & NUTRITION SERVICES",
-        dutyMotto = "Dining Hall Turnstile • Meal Session Verification • Anti-Double Serving",
-        quickStatLabel = "Meals Served",
-        accentBorderColor = Color(0xFFF43F5E)
+        departmentTagline = "DINING SERVICES",
+        dutyMotto = "Lunch & Supper Verification",
+        quickStatLabel = "Served Today",
+        accentBorderColor = Color(0xFFD97706)
     )
 
-    // 5. Teachers: Scholarly Indigo & Royal Iris
     val TeachersTheme = RoleThemeConfig(
         role = UserRole.TEACHERS,
-        primaryColor = Color(0xFF4F46E5),       // Academic Indigo
-        secondaryColor = Color(0xFF4338CA),     // Scholastic Iris
-        tertiaryColor = Color(0xFF6366F1),      // Radiant Violet
-        accentGlowColor = Color(0xFF818CF8),    // Radiant Lavender
-        containerColor = Color(0xFFE0E7FF),     // Pale Periwinkle
-        onContainerColor = Color(0xFF3730A3),
+        primaryColor = Color(0xFF3730A3),
+        secondaryColor = Color(0xFF312E81),
+        tertiaryColor = GoldAccent,
+        accentGlowColor = Color(0xFF818CF8),
+        containerColor = Color(0xFFE0E7FF),
+        onContainerColor = Color(0xFF312E81),
         badgeTextColor = Color(0xFF312E81),
-        stationBadge = "FACULTY PORTAL",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF3730A3))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF1E1B4B), Color(0xFF0F172A))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF18153B), Color(0xFF0B0D18))
-        ),
-        icon = Icons.Default.MenuBook,
-        departmentTagline = "ACADEMICS & CLASSROOM ROSTER",
-        dutyMotto = "Class Roll-Call • Attendance Verification • Student Directories",
+        stationBadge = "FACULTY",
+        cardGradient = Brush.horizontalGradient(listOf(Navy900, Color(0xFF312E81))),
+        headerGradient = Brush.verticalGradient(listOf(Color(0xFF312E81), Navy950)),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Color(0xFF1E1B4B), Navy950)),
+        icon = Icons.AutoMirrored.Filled.MenuBook,
+        departmentTagline = "CLASSROOM ROSTER",
+        dutyMotto = "Roll-Call & Attendance",
         quickStatLabel = "Class Roster",
-        accentBorderColor = Color(0xFF6366F1)
+        accentBorderColor = Color(0xFF4F46E5)
     )
 
-    // 6. Examination Staff: Precision Cyan & Arctic Steel
     val ExaminationStaffTheme = RoleThemeConfig(
         role = UserRole.EXAMINATION_STAFF,
-        primaryColor = Color(0xFF0284C7),       // Exams Cyan
-        secondaryColor = Color(0xFF0369A1),     // Steel Azure
-        tertiaryColor = Color(0xFF0891B2),      // Deep Cyan
-        accentGlowColor = Color(0xFF38BDF8),    // Arctic Glow
-        containerColor = Color(0xFFE0F2FE),     // Pale Sky
+        primaryColor = Color(0xFF0369A1),
+        secondaryColor = Color(0xFF075985),
+        tertiaryColor = GoldAccent,
+        accentGlowColor = Color(0xFF38BDF8),
+        containerColor = Color(0xFFE0F2FE),
         onContainerColor = Color(0xFF075985),
-        badgeTextColor = Color(0xFF0C4A6E),
+        badgeTextColor = Color(0xFF075985),
         stationBadge = "EXAM CONTROL",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF082F49), Color(0xFF0C4A6E), Color(0xFF0369A1))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF082F49), Color(0xFF0F172A))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF051F30), Color(0xFF07111C))
-        ),
-        icon = Icons.Default.FactCheck,
-        departmentTagline = "STANDARDS & EXAM CLEARANCE",
-        dutyMotto = "UNEB Examination Hall Access • Requirements Compliance • Candidate Slips",
-        quickStatLabel = "Exam Cleared",
-        accentBorderColor = Color(0xFF0EA5E9)
+        cardGradient = Brush.horizontalGradient(listOf(Navy900, Color(0xFF075985))),
+        headerGradient = Brush.verticalGradient(listOf(Color(0xFF075985), Navy950)),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Color(0xFF082F49), Navy950)),
+        icon = Icons.AutoMirrored.Filled.FactCheck,
+        departmentTagline = "EXAM CLEARANCE",
+        dutyMotto = "Candidate Verification",
+        quickStatLabel = "Cleared",
+        accentBorderColor = Color(0xFF0284C7)
     )
 
-    // 7. Head Teacher / Management: Sovereign Purple & Radiant Platinum
     val HeadTeacherManagementTheme = RoleThemeConfig(
         role = UserRole.HEAD_TEACHER_MANAGEMENT,
-        primaryColor = Color(0xFF7C3AED),       // Sovereign Purple
-        secondaryColor = Color(0xFF6D28D9),     // Majestic Violet
-        tertiaryColor = Color(0xFF9333EA),      // Imperial Amethyst
-        accentGlowColor = Color(0xFFA78BFA),    // Regal Amethyst
-        containerColor = Color(0xFFEDE9FE),     // Platinum Lilac
-        onContainerColor = Color(0xFF5B21B6),
-        badgeTextColor = Color(0xFF4C1D95),
-        stationBadge = "EXECUTIVE SUITE",
-        cardGradient = Brush.horizontalGradient(
-            colors = listOf(Color(0xFF2E1065), Color(0xFF4C1D95), Color(0xFF5B21B6))
-        ),
-        headerGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF2E1065), Color(0xFF0F172A))
-        ),
-        darkHeaderGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF230D4F), Color(0xFF0A0717))
-        ),
+        primaryColor = Color(0xFF0F2942),
+        secondaryColor = Color(0xFF1E3A5F),
+        tertiaryColor = GoldAccent,
+        accentGlowColor = GoldBright,
+        containerColor = Color(0xFFFEF3C7),
+        onContainerColor = Color(0xFF78350F),
+        badgeTextColor = Color(0xFF78350F),
+        stationBadge = "LEADERSHIP",
+        cardGradient = Brush.horizontalGradient(listOf(Navy900, Navy800)),
+        headerGradient = Brush.verticalGradient(listOf(Navy900, Navy950)),
+        darkHeaderGradient = Brush.verticalGradient(listOf(Navy900, Navy950)),
         icon = Icons.Default.SupervisorAccount,
-        departmentTagline = "EXECUTIVE OVERSIGHT & BOARD COMMAND",
-        dutyMotto = "Institutional Governance • Emergency Override Authority • Campus Intelligence",
+        departmentTagline = "SCHOOL LEADERSHIP",
+        dutyMotto = "Operational Oversight",
         quickStatLabel = "Active Students",
-        accentBorderColor = Color(0xFF8B5CF6)
+        accentBorderColor = GoldAccent
     )
 
     fun getThemeForRole(role: UserRole): RoleThemeConfig {
