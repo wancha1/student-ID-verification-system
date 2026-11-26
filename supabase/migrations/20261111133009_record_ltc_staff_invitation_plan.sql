@@ -9,10 +9,6 @@ create table if not exists private.staff_invitation_plan (
   primary key (school_id, email)
 );
 revoke all on private.staff_invitation_plan from public, anon, authenticated;
-insert into private.staff_invitation_plan (school_id,email,role)
-values
-('ltc_school_01','wanchaaaron@gmail.com','ADMIN'),
-('ltc_school_01','aaronwancha@gmail.com','HEAD_TEACHER'),
-('ltc_school_01','introvertcorner85@gmail.com','GATE_OFFICER'),
-('ltc_school_01','darklordlucian85@gmail.com','MEAL_STAFF')
-on conflict (school_id,email) do update set role=excluded.role, status='PENDING_AUTH_INVITE';
+-- Personal email seed records from the historical applied migration were
+-- intentionally omitted from source control. Provision staff invitations
+-- through the authorized school-server workflow instead.
