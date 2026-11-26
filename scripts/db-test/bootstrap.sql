@@ -19,13 +19,13 @@ CREATE OR REPLACE FUNCTION private.is_active_staff(p_school_id text, p_roles tex
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $$
   SELECT current_setting('test.staff_authorized', true) = 'true'
      AND (
        p_roles IS NULL
        OR current_setting('test.staff_role', true) = ANY(p_roles)
      )
-$;
+$$;
 
 CREATE TABLE public.trusted_issuers (
   school_id text NOT NULL,
