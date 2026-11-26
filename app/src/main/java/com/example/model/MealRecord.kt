@@ -54,4 +54,5 @@ sealed class MealVerificationResult {
         val scannedCode: String get() = rawCode
     }
     data class BlockedNoClearance(val student: Student, val reason: String) : MealVerificationResult()
+    data class PolicyPending(val student: Student, val reason: String) : MealVerificationResult()
 }
