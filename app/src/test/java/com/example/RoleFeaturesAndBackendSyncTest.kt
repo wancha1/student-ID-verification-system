@@ -19,7 +19,6 @@ import com.example.model.CardStatus
 import com.example.model.DayScholarStatus
 import com.example.model.FeeStatus
 import com.example.model.GateVerificationDecision
-import com.example.model.GateVerificationDecision
 import com.example.model.MealServingStatus
 import com.example.model.MealType
 import com.example.model.MealVerificationResult
@@ -94,14 +93,12 @@ class RoleFeaturesAndBackendSyncTest {
         boardingQrPayload = CardCryptoManager.signCardPayload(
             cardId = boardingCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31",
-            signer = testSigner
+            validUntil = "2026-12-31"
         )
         dayScholarQrPayload = CardCryptoManager.signCardPayload(
             cardId = dayScholarCardId,
             validFrom = "2026-01-01",
-            validUntil = "2026-12-31",
-            signer = testSigner
+            validUntil = "2026-12-31"
         )
 
         val boarder = StudentEntity(
