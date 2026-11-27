@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AttendanceRecordEntity::class,
         ExamExceptionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -163,6 +163,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Non-destructive migration adding explicit exam exception decision state. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `decisionStatus` TEXT NOT NULL DEFAULT 'PENDING'")
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `decisionReason` TEXT")
+                db.execSQL("UPDATE `exam_exceptions` SET `decisionStatus` = 'APPROVED' WHERE `isApproved` = 1")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -170,7 +179,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "oakridge_student_access.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                 INSTANCE = instance
                 instance
