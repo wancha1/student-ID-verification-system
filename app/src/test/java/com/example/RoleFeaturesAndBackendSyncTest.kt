@@ -352,7 +352,7 @@ class RoleFeaturesAndBackendSyncTest {
         assertTrue("Head Teacher must pull remote gate logs", syncedLogs.any { it.id == remoteLog.id })
         assertTrue("Head Teacher must pull remote meal records", syncedMeals.any { it.id == remoteMeal.id })
         assertTrue("V1 Head Teacher must not pull attendance records", syncedAttendance.isEmpty())
-        assertTrue("V1 Head Teacher must not pull exam exceptions", syncedExceptions.isEmpty())
+        assertTrue("Head Teacher must pull exam exceptions for leadership review", syncedExceptions.any { it.id == remoteException.id })
 
         // Write attempts must all be denied
         viewModel.updateFeeStatus(boardingStudentId, FeeStatus.OUTSTANDING, 100000.0)
