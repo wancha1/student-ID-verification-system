@@ -202,3 +202,76 @@ CREATE POLICY "meal team can read meal records"
 CREATE POLICY "meal operators can create meal records"
   ON public.meals FOR INSERT TO authenticated
   WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','MEAL_STAFF']::text[]));
+
+
+-- Minimal academic workflow fixtures for immutable audit migration tests.
+CREATE TABLE public.attendance_records (
+  school_id text NOT NULL,
+  id text NOT NULL,
+  student_id text NOT NULL,
+  student_number text NOT NULL,
+  student_name text NOT NULL,
+  grade_class text NOT NULL,
+  subject text NOT NULL,
+  session_name text NOT NULL,
+  lesson_date text NOT NULL,
+  timestamp_ms bigint NOT NULL,
+  teacher_name text NOT NULL,
+  is_present boolean NOT NULL,
+  notes text NOT NULL DEFAULT '',
+  is_correction boolean NOT NULL DEFAULT false,
+  corrected_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at_ms bigint NOT NULL,
+  PRIMARY KEY (school_id, id),
+  UNIQUE (school_id, student_id, lesson_date, session_name)
+);
+ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE ON public.attendance_records TO authenticated;
+CREATE POLICY attendance_fixture_read ON public.attendance_records
+  FOR SELECT TO authenticated
+  USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','TEACHER','DIRECTOR_OF_STUDIES']::text[]));
+CREATE POLICY attendance_fixture_insert ON public.attendance_records
+  FOR INSERT TO authenticated
+  WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','TEACHER','DIRECTOR_OF_STUDIES']::text[]));
+CREATE POLICY attendance_fixture_update ON public.attendance_records
+  FOR UPDATE TO authenticated
+  USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','TEACHER','DIRECTOR_OF_STUDIES']::text[]))
+  WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','TEACHER','DIRECTOR_OF_STUDIES']::text[]));
+
+CREATE TABLE public.exam_exceptions (
+  school_id text NOT NULL,
+  id text NOT NULL,
+  student_id text NOT NULL,
+  student_number text NOT NULL,
+  student_name text NOT NULL,
+  exam_code text NOT NULL,
+  requested_by_bursar text NOT NULL,
+  recommendation_reason text NOT NULL,
+  is_approved boolean NOT NULL DEFAULT false,
+  approved_by_head_teacher text,
+  requested_at_ms bigint NOT NULL,
+  approved_at_ms bigint,
+  updated_at_ms bigint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (school_id, id),
+  UNIQUE (school_id, student_id, exam_code),
+  CHECK ((is_approved = false AND approved_at_ms IS NULL AND approved_by_head_teacher IS NULL)
+      OR (is_approved = true AND approved_at_ms IS NOT NULL AND approved_by_head_teacher IS NOT NULL))
+);
+ALTER TABLE public.exam_exceptions ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE ON public.exam_exceptions TO authenticated;
+CREATE POLICY exam_fixture_read ON public.exam_exceptions
+  FOR SELECT TO authenticated
+  USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER','BURSAR','EXAM_STAFF']::text[]));
+CREATE POLICY exam_fixture_insert ON public.exam_exceptions
+  FOR INSERT TO authenticated
+  WITH CHECK (is_approved = false AND private.is_active_staff(school_id, ARRAY['ADMIN','BURSAR']::text[]));
+CREATE POLICY exam_fixture_bursar_update ON public.exam_exceptions
+  FOR UPDATE TO authenticated
+  USING (is_approved = false AND private.is_active_staff(school_id, ARRAY['BURSAR']::text[]))
+  WITH CHECK (is_approved = false AND private.is_active_staff(school_id, ARRAY['BURSAR']::text[]));
+CREATE POLICY exam_fixture_leadership_update ON public.exam_exceptions
+  FOR UPDATE TO authenticated
+  USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]))
+  WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]));
