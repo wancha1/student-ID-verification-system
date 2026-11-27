@@ -341,7 +341,7 @@ class RoleFeaturesAndBackendSyncTest {
         viewModel.loginAs(UserRole.HEAD_TEACHER_MANAGEMENT, "Head Teacher Okello", hasFinancePermission = false)
         assertTrue(viewModel.currentUser.value!!.hasPermission(StaffPermission.EXPORT_DATA))
 
-        // Sync should pull gate logs and meals, while skipping attendance and exam exceptions for Head Teacher
+        // Sync should pull gate logs, meals and exam exceptions for Head Teacher, while keeping teacher attendance records restricted to Teachers
         repository.getSyncManager().syncNow()
 
         val syncedLogs = database.scanLogDao().getAllLogsFlow().first()
