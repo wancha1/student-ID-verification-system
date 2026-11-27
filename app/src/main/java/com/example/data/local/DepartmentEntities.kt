@@ -151,7 +151,8 @@ data class ExamExceptionEntity(
     val approvedAt: Long? = null,
     val isSyncedToCloud: Boolean = false,
     val decisionStatus: String = if (isApproved) "APPROVED" else "PENDING",
-    val decisionReason: String? = null
+    val decisionReason: String? = null,
+    val updatedAt: Long = approvedAt ?: requestedAt
 ) {
     fun toDomain(): ExamException = ExamException(
         id = id,
@@ -189,7 +190,8 @@ data class ExamExceptionEntity(
             approvedAt = e.approvedAt,
             isSyncedToCloud = isSynced,
             decisionStatus = e.decisionStatus.name,
-            decisionReason = e.decisionReason
+            decisionReason = e.decisionReason,
+            updatedAt = e.approvedAt ?: e.requestedAt
         )
     }
 }
