@@ -234,5 +234,6 @@ jobs:
             && -n "${TEST_SENTINEL_EXAM_EVENT_ID:-}" ]]; then
             bash scripts/supabase-real-token-smoke.sh
           else
-            echo "SKIPPED: configure isolated staging Auth users and sentinel record IDs as repository secrets."
+            echo "::error::Release gate blocked: configure isolated staging Auth users and sentinel record IDs as repository secrets. Role-boundary tests must not silently skip."
+            exit 1
           fi
