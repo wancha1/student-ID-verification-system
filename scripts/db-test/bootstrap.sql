@@ -277,3 +277,14 @@ CREATE POLICY exam_fixture_leadership_update ON public.exam_exceptions
   FOR UPDATE TO authenticated
   USING (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]))
   WITH CHECK (private.is_active_staff(school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]));
+
+-- School seed fixture for the idempotent LTC tenant migration.
+CREATE TABLE public.schools (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  school_code text NOT NULL UNIQUE,
+  is_active boolean NOT NULL DEFAULT true,
+  student_privacy_migration_complete boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
