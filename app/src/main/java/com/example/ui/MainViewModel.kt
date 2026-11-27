@@ -1509,6 +1509,7 @@ class MainViewModel(
                 approvedAt = if (decision == "APPROVED") now else null,
                 decisionStatus = decision,
                 decisionReason = reason,
+                updatedAt = now,
                 isSyncedToCloud = false
             )
             db.examExceptionDao().insertOrUpdate(updated)
