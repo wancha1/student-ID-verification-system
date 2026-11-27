@@ -92,6 +92,9 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest --stacktrace
       - name: Run device smoke tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # This runner has no KVM; Android Emulator otherwise exits before opening ADB.
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           # API 34 keeps the CI smoke test on a stable, widely supported image.
           api-level: 34
@@ -181,6 +184,10 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261127090000_scholink_append_only_event_sync.sql
+      - name: Apply meal and academic audit migration
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261127120000_scholink_meal_and_academic_audit.sql
       - name: Verify migration behaviour and privileges
         env:
           PGPASSWORD: postgres
