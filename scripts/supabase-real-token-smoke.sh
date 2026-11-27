@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${SUPABASE_URL:?Set SUPABASE_URL}"
 : "${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY}"
+: "${TEST_SCHOOL_ID:?Set the isolated staging school ID (not the production tenant ID)}"
 : "${TEST_SENTINEL_STUDENT_ID:?Set a pre-seeded, non-sensitive staging student ID}"
 : "${TEST_SENTINEL_GATE_LOG_ID:?Set a pre-seeded staging gate-log ID}"
 : "${TEST_SENTINEL_MEAL_ID:?Set a pre-seeded staging meal ID}"
@@ -37,7 +38,7 @@ check_membership() {
   local role="$1" token="$2" uid="$3" expected="$4" expected_finance="$5"
   local response="$tmp/$role-membership.json" code count actual active finance
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-    "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.ltc_school_01&user_id=eq.$uid" \
+    "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.$TEST_SCHOOL_ID&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] || { echo "::error::$role membership lookup returned HTTP $code."; exit 1; }
   count="$(jq 'length' "$response")"
@@ -51,7 +52,7 @@ check_membership() {
 
   # A valid token must not reveal a membership in a different school tenant.
   code="$(curl --silent --show-error --output "$tmp/$role-other-school.json" --write-out '%{http_code}' \
-    "$api/rest/v1/staff_memberships?select=user_id&school_id=neq.ltc_school_01&user_id=eq.$uid" \
+    "$api/rest/v1/staff_memberships?select=user_id&school_id=neq.$TEST_SCHOOL_ID&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] && [[ "$(jq 'length' "$tmp/$role-other-school.json")" == "0" ]] || {
     echo "::error::$role token crossed the school-tenant boundary."
@@ -126,7 +127,7 @@ check_rpc_boundaries() {
     MEAL_STAFF) meal_allowed=true ;;
   esac
   local gate_payload meal_payload
-  gate_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_GATE_LOG_ID" \
+  gate_payload="$(jq -n --arg school "$TEST_SCHOOL_ID" --arg id "$TEST_SENTINEL_GATE_LOG_ID" \
     '{p_row:{school_id:$school,id:$id,student_number:"AUTHZ-PROBE",student_name:"Synthetic",decision:"APPROVED",gate_location:"CI sentinel",timestamp_ms:1}}')"
   meal_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_MEAL_ID" --arg student "$TEST_SENTINEL_STUDENT_ID" \
     '{p_row:{school_id:$school,id:$id,student_id:$student,student_number:"AUTHZ-PROBE",student_name:"Synthetic",grade_class:"CI",meal_type:"LUNCH",meal_date:"2000-01-01",status:"SERVED",notes:"",serving_station:"CI sentinel",timestamp_ms:1}}')"
@@ -145,7 +146,7 @@ check_finance_boundary() {
     -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' \
     -H 'Prefer: return=minimal' \
-    --data '{"school_id":"ltc_school_01","student_id":"__ltc_authz_probe_nonexistent__","outstanding_amount":1,"fee_status":"OUTSTANDING","updated_at_ms":1}')"
+    --data '{"school_id":"$TEST_SCHOOL_ID","student_id":"__ltc_authz_probe_nonexistent__","outstanding_amount":1,"fee_status":"OUTSTANDING","updated_at_ms":1}')"
 
   if [[ "$role" == "ADMIN" ]]; then
     [[ "$code" == "409" ]] || {
@@ -174,7 +175,7 @@ run_role() {
   check_role_data_boundaries "$expected" "$token"
   check_rpc_boundaries "$expected" "$token"
   check_finance_boundary "$expected" "$token"
-  echo "PASS: $expected real Auth token, active LTC membership, cross-school denial and finance boundary"
+  echo "PASS: $expected real Auth token, active staging membership, cross-school denial and finance boundary"
 }
 
 run_role ADMIN ADMIN "${TEST_ADMIN_EMAIL:?}" "${TEST_ADMIN_PASSWORD:?}"
