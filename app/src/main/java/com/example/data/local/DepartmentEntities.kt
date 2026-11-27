@@ -172,7 +172,8 @@ data class ExamExceptionEntity(
             if (isApproved) com.example.model.ExamExceptionDecisionStatus.APPROVED
             else com.example.model.ExamExceptionDecisionStatus.PENDING
         },
-        decisionReason = decisionReason
+        decisionReason = decisionReason,
+        updatedAt = updatedAt
     )
 
     companion object {
