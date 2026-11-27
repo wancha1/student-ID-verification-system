@@ -1462,25 +1462,58 @@ class MainViewModel(
     }
 
     fun approveExamException(studentId: String, examCode: String = "UNEB-UCE-2026") {
-        if (!requirePermission(StaffPermission.EMERGENCY_OVERRIDE, "Approving exam exception")) {
-            _userFeedbackMessage.value = "Access Denied: Only Head Teacher / Executive Management can approve examination exceptions."
+        decideExamException(studentId, examCode, "APPROVED", null)
+    }
+
+    fun rejectExamException(
+        studentId: String,
+        examCode: String = "UNEB-UCE-2026",
+        reason: String
+    ) {
+        if (reason.isBlank()) {
+            _userFeedbackMessage.value = "A reason is required when rejecting an exam exception."
+            return
+        }
+        decideExamException(studentId, examCode, "REJECTED", reason.trim())
+    }
+
+    private fun decideExamException(
+        studentId: String,
+        examCode: String,
+        decision: String,
+        reason: String?
+    ) {
+        if (!requirePermission(StaffPermission.EMERGENCY_OVERRIDE, "Deciding exam exception")) {
+            _userFeedbackMessage.value = "Access Denied: Only Head Teacher / Executive Management can decide examination exceptions."
             return
         }
         viewModelScope.launch {
             val db = repository.database
-            if (db != null) {
-                val existing = db.examExceptionDao().findException(studentId, examCode)
-                if (existing != null) {
-                    val approved = existing.copy(
-                        isApproved = true,
-                        approvedByHeadTeacher = _currentUser.value?.name ?: "Head Teacher",
-                        approvedAt = System.currentTimeMillis()
-                    )
-                    db.examExceptionDao().insertOrUpdate(approved)
-                    repository.syncManagerInstance?.notifyLocalLogAdded()
-                    _userFeedbackMessage.value = "Exam exception APPROVED by Head Teacher for ${existing.studentName}!"
-                }
+            if (db == null) {
+                _userFeedbackMessage.value = "Exam exception decisions require the local database."
+                return@launch
             }
+            val existing = db.examExceptionDao().findException(studentId, examCode)
+            if (existing == null) {
+                _userFeedbackMessage.value = "No pending exam exception was found."
+                return@launch
+            }
+            if (existing.decisionStatus != "PENDING") {
+                _userFeedbackMessage.value = "This exam exception already has a final decision."
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            val updated = existing.copy(
+                isApproved = decision == "APPROVED",
+                approvedByHeadTeacher = if (decision == "APPROVED") _currentUser.value?.name ?: "School leadership" else null,
+                approvedAt = if (decision == "APPROVED") now else null,
+                decisionStatus = decision,
+                decisionReason = reason,
+                isSyncedToCloud = false
+            )
+            db.examExceptionDao().insertOrUpdate(updated)
+            repository.syncManagerInstance?.notifyLocalLogAdded()
+            _userFeedbackMessage.value = "Exam exception $decision locally recorded for ${existing.studentName}; it will not authorize exam access until server synchronization succeeds."
         }
     }
 
