@@ -11,9 +11,11 @@ GRANT USAGE ON SCHEMA private TO authenticated;
 CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid
 LANGUAGE sql STABLE
-AS $$
+AS $
   SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
-$$;
+$;
+GRANT USAGE ON SCHEMA auth TO authenticated;
+GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 
 CREATE OR REPLACE FUNCTION private.is_active_staff(p_school_id text, p_roles text[])
 RETURNS boolean
