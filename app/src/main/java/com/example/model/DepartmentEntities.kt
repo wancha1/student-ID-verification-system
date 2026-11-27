@@ -25,6 +25,8 @@ data class AttendanceRecord(
 /**
  * Domain model for an Examination exception review request.
  */
+enum class ExamExceptionDecisionStatus { PENDING, APPROVED, REJECTED }
+
 data class ExamException(
     val id: String = UUID.randomUUID().toString(),
     val studentId: String,
@@ -36,5 +38,8 @@ data class ExamException(
     val isApproved: Boolean = false,
     val approvedByHeadTeacher: String? = null,
     val requestedAt: Long = System.currentTimeMillis(),
-    val approvedAt: Long? = null
+    val approvedAt: Long? = null,
+    val decisionStatus: ExamExceptionDecisionStatus =
+        if (isApproved) ExamExceptionDecisionStatus.APPROVED else ExamExceptionDecisionStatus.PENDING,
+    val decisionReason: String? = null
 )
