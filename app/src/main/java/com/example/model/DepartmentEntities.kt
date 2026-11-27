@@ -41,5 +41,6 @@ data class ExamException(
     val approvedAt: Long? = null,
     val decisionStatus: ExamExceptionDecisionStatus =
         if (isApproved) ExamExceptionDecisionStatus.APPROVED else ExamExceptionDecisionStatus.PENDING,
-    val decisionReason: String? = null
+    val decisionReason: String? = null,
+    val updatedAt: Long = approvedAt ?: requestedAt
 )
