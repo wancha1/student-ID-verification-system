@@ -112,7 +112,33 @@ UPDATE public.exam_exceptions
 SET decision_status = CASE WHEN is_approved THEN 'APPROVED' ELSE 'PENDING' END;
 ALTER TABLE public.exam_exceptions
   ADD CONSTRAINT exam_exceptions_decision_status_check
-  CHECK (decision_status IN ('PENDING', 'APPROVED', 'REJECTED'));
+  CHECK (decision_status IN ('PENDING', 'APPROVED', 'REJECTED')),
+  ADD CONSTRAINT exam_exceptions_decision_approval_consistency_check
+  CHECK (
+    (decision_status = 'APPROVED' AND is_approved = true AND approved_at_ms IS NOT NULL AND approved_by_head_teacher IS NOT NULL)
+    OR (decision_status IN ('PENDING','REJECTED') AND is_approved = false AND approved_at_ms IS NULL AND approved_by_head_teacher IS NULL)
+  );
+
+CREATE OR REPLACE FUNCTION private.guard_exam_exception_decision()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $
+BEGIN
+  IF NEW.decision_status IS DISTINCT FROM OLD.decision_status THEN
+    IF OLD.decision_status <> 'PENDING'
+       OR NOT private.is_active_staff(NEW.school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]) THEN
+      RAISE EXCEPTION 'Only school leadership may make a one-time exam exception decision'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+CREATE TRIGGER exam_exception_decision_guard
+  BEFORE UPDATE ON public.exam_exceptions
+  FOR EACH ROW EXECUTE FUNCTION private.guard_exam_exception_decision();
 
 CREATE OR REPLACE FUNCTION private.audit_exam_exception_change()
 RETURNS trigger
