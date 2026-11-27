@@ -187,7 +187,9 @@ data class ExamExceptionEntity(
             approvedByHeadTeacher = e.approvedByHeadTeacher,
             requestedAt = e.requestedAt,
             approvedAt = e.approvedAt,
-            isSyncedToCloud = isSynced
+            isSyncedToCloud = isSynced,
+            decisionStatus = e.decisionStatus.name,
+            decisionReason = e.decisionReason
         )
     }
 }
