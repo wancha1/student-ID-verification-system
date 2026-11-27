@@ -124,7 +124,7 @@ CREATE OR REPLACE FUNCTION private.guard_exam_exception_decision()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = ''
-AS $
+AS $$
 BEGIN
   IF NEW.decision_status IS DISTINCT FROM OLD.decision_status THEN
     IF OLD.decision_status <> 'PENDING'
@@ -135,7 +135,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE TRIGGER exam_exception_decision_guard
   BEFORE UPDATE ON public.exam_exceptions
