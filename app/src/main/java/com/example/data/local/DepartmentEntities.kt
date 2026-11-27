@@ -191,7 +191,7 @@ data class ExamExceptionEntity(
             isSyncedToCloud = isSynced,
             decisionStatus = e.decisionStatus.name,
             decisionReason = e.decisionReason,
-            updatedAt = e.approvedAt ?: e.requestedAt
+            updatedAt = e.updatedAt
         )
     }
 }
