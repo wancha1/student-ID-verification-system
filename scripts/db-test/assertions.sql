@@ -380,6 +380,16 @@ VALUES
 RESET ROLE;
 SELECT set_config('test.staff_role', 'ADMIN', false);
 SET ROLE authenticated;
+DO $
+BEGIN
+  BEGIN
+    PERFORM public.scholink_decide_exam_exception('school-test','exam-2','REJECTED',NULL);
+    RAISE EXCEPTION 'A rejection without a reason must be rejected';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'A rejection without a reason must be rejected' THEN RAISE; END IF;
+    IF position('reason is required' in lower(SQLERRM)) = 0 THEN RAISE; END IF;
+  END;
+END $;
 SELECT public.scholink_decide_exam_exception('school-test','exam-2','REJECTED','Evidence is incomplete');
 RESET ROLE;
 DO $$
