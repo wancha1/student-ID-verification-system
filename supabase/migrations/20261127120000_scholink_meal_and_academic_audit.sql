@@ -132,6 +132,10 @@ BEGIN
       RAISE EXCEPTION 'Only school leadership may make a one-time exam exception decision'
         USING ERRCODE = '42501';
     END IF;
+    IF NEW.decision_by_user_id IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'Exam decision actor must match the authenticated user'
+        USING ERRCODE = '42501';
+    END IF;
   END IF;
   RETURN NEW;
 END;
