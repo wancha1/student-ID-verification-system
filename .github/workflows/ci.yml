@@ -92,6 +92,9 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest --stacktrace
       - name: Run device smoke tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # This runner has no KVM; Android Emulator otherwise exits before opening ADB.
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           # API 34 keeps the CI smoke test on a stable, widely supported image.
           api-level: 34
@@ -181,7 +184,48 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261127090000_scholink_append_only_event_sync.sql
+      - name: Apply meal and academic audit migration
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261127120000_scholink_meal_and_academic_audit.sql
       - name: Verify migration behaviour and privileges
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/assertions.sql
+
+
+  supabase-authenticated-role-tests:
+    name: Authenticated Supabase role-boundary tests (staging)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run role tests when isolated staging secrets are configured
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
+          TEST_HEAD_TEACHER_PASSWORD: ${{ secrets.TEST_HEAD_TEACHER_PASSWORD }}
+          TEST_GATE_OFFICER_EMAIL: ${{ secrets.TEST_GATE_OFFICER_EMAIL }}
+          TEST_GATE_OFFICER_PASSWORD: ${{ secrets.TEST_GATE_OFFICER_PASSWORD }}
+          TEST_MEAL_STAFF_EMAIL: ${{ secrets.TEST_MEAL_STAFF_EMAIL }}
+          TEST_MEAL_STAFF_PASSWORD: ${{ secrets.TEST_MEAL_STAFF_PASSWORD }}
+          TEST_SENTINEL_STUDENT_ID: ${{ secrets.TEST_SENTINEL_STUDENT_ID }}
+          TEST_SENTINEL_GATE_LOG_ID: ${{ secrets.TEST_SENTINEL_GATE_LOG_ID }}
+          TEST_SENTINEL_MEAL_ID: ${{ secrets.TEST_SENTINEL_MEAL_ID }}
+          TEST_SENTINEL_ATTENDANCE_EVENT_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_EVENT_ID }}
+          TEST_SENTINEL_EXAM_EVENT_ID: ${{ secrets.TEST_SENTINEL_EXAM_EVENT_ID }}
+        run: |
+          if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_PUBLISHABLE_KEY:-}" \
+            && -n "${TEST_ADMIN_EMAIL:-}" && -n "${TEST_ADMIN_PASSWORD:-}" \
+            && -n "${TEST_HEAD_TEACHER_EMAIL:-}" && -n "${TEST_HEAD_TEACHER_PASSWORD:-}" \
+            && -n "${TEST_GATE_OFFICER_EMAIL:-}" && -n "${TEST_GATE_OFFICER_PASSWORD:-}" \
+            && -n "${TEST_MEAL_STAFF_EMAIL:-}" && -n "${TEST_MEAL_STAFF_PASSWORD:-}" \
+            && -n "${TEST_SENTINEL_STUDENT_ID:-}" && -n "${TEST_SENTINEL_GATE_LOG_ID:-}" \
+            && -n "${TEST_SENTINEL_MEAL_ID:-}" && -n "${TEST_SENTINEL_ATTENDANCE_EVENT_ID:-}" \
+            && -n "${TEST_SENTINEL_EXAM_EVENT_ID:-}" ]]; then
+            bash scripts/supabase-real-token-smoke.sh
+          else
+            echo "SKIPPED: configure isolated staging Auth users and sentinel record IDs as repository secrets."
+          fi

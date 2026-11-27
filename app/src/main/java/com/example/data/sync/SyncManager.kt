@@ -342,6 +342,8 @@ class SyncManager(
                 }
 
                 val shouldPullExceptions = role == null || role in setOf(
+                    UserRole.ADMINISTRATOR,
+                    UserRole.HEAD_TEACHER_MANAGEMENT,
                     UserRole.EXAMINATION_STAFF,
                     UserRole.BURSAR_FINANCE
                 )
@@ -355,8 +357,8 @@ class SyncManager(
                         val local = database.examExceptionDao().findException(
                             remoteRecord.studentId, remoteRecord.examCode
                         )
-                        val remoteUpdatedAt = remoteRecord.approvedAt ?: remoteRecord.requestedAt
-                        val localUpdatedAt = local?.let { it.approvedAt ?: it.requestedAt } ?: Long.MIN_VALUE
+                        val remoteUpdatedAt = remoteRecord.updatedAt
+                        val localUpdatedAt = local?.updatedAt ?: Long.MIN_VALUE
                         if (local == null || remoteUpdatedAt >= localUpdatedAt) {
                             database.examExceptionDao().insertOrUpdate(
                                 remoteRecord.copy(isSyncedToCloud = true)

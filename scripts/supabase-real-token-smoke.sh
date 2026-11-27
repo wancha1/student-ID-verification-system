@@ -3,6 +3,11 @@ set -euo pipefail
 
 : "${SUPABASE_URL:?Set SUPABASE_URL}"
 : "${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY}"
+: "${TEST_SENTINEL_STUDENT_ID:?Set a pre-seeded, non-sensitive staging student ID}"
+: "${TEST_SENTINEL_GATE_LOG_ID:?Set a pre-seeded staging gate-log ID}"
+: "${TEST_SENTINEL_MEAL_ID:?Set a pre-seeded staging meal ID}"
+: "${TEST_SENTINEL_ATTENDANCE_EVENT_ID:?Set a pre-seeded staging attendance record ID}"
+: "${TEST_SENTINEL_EXAM_EVENT_ID:?Set a pre-seeded staging exam exception ID}"
 
 api="${SUPABASE_URL%/}"
 tmp="$(mktemp -d)"
@@ -54,6 +59,81 @@ check_membership() {
   }
 }
 
+check_row_visibility() {
+  local role="$1" token="$2" table="$3" column="$4" sentinel="$5" expected="$6"
+  local response="$tmp/$role-$table.json" code count
+  code="$(curl --silent --show-error --get --output "$response" --write-out '%{http_code}' \
+    "$api/rest/v1/$table" \
+    --data-urlencode "select=$column" \
+    --data-urlencode "school_id=eq.ltc_school_01" \
+    --data-urlencode "$column=eq.$sentinel" \
+    -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
+  [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code."; exit 1; }
+  count="$(jq 'length' "$response")"
+  [[ "$count" == "$expected" ]] || {
+    echo "::error::$role expected $expected visible sentinel row(s) in $table, got $count."
+    exit 1
+  }
+}
+
+check_role_data_boundaries() {
+  local role="$1" token="$2"
+  local private_expected=0 gate_expected=0 meal_expected=0 academic_expected=0 exam_expected=0
+  case "$role" in
+    ADMIN|HEAD_TEACHER)
+      private_expected=1; gate_expected=1; meal_expected=1; academic_expected=1; exam_expected=1 ;;
+    GATE_OFFICER)
+      gate_expected=1 ;;
+    MEAL_STAFF)
+      meal_expected=1 ;;
+  esac
+  check_row_visibility "$role" "$token" student_private student_id "$TEST_SENTINEL_STUDENT_ID" "$private_expected"
+  check_row_visibility "$role" "$token" gate_logs id "$TEST_SENTINEL_GATE_LOG_ID" "$gate_expected"
+  check_row_visibility "$role" "$token" meals id "$TEST_SENTINEL_MEAL_ID" "$meal_expected"
+  check_row_visibility "$role" "$token" attendance_record_events event_id "$TEST_SENTINEL_ATTENDANCE_EVENT_ID" "$academic_expected"
+  check_row_visibility "$role" "$token" exam_exception_events event_id "$TEST_SENTINEL_EXAM_EVENT_ID" "$exam_expected"
+}
+
+check_rpc_role() {
+  local role="$1" token="$2" rpc="$3" allowed="$4" payload="$5"
+  local response="$tmp/$role-$rpc.json" code
+  code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+    -X POST "$api/rest/v1/rpc/$rpc" \
+    -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+    -H "Authorization: Bearer $token" \
+    -H 'Content-Type: application/json' \
+    --data "$payload")"
+  if [[ "$allowed" == "true" ]]; then
+    [[ "$code" == "200" ]] && [[ "$(jq -r 'tostring' "$response")" == "false" ]] || {
+      echo "::error::$role should be allowed to call $rpc idempotently against its existing sentinel row (HTTP $code)."
+      cat "$response"
+      exit 1
+    }
+  else
+    [[ "$code" == "401" || "$code" == "403" ]] || {
+      echo "::error::$role must be denied $rpc by RLS (HTTP $code)."
+      cat "$response"
+      exit 1
+    }
+  fi
+}
+
+check_rpc_boundaries() {
+  local role="$1" token="$2" gate_allowed=false meal_allowed=false
+  case "$role" in
+    ADMIN) gate_allowed=true; meal_allowed=true ;;
+    GATE_OFFICER) gate_allowed=true ;;
+    MEAL_STAFF) meal_allowed=true ;;
+  esac
+  local gate_payload meal_payload
+  gate_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_GATE_LOG_ID" \
+    '{p_row:{school_id:$school,id:$id,student_number:"AUTHZ-PROBE",student_name:"Synthetic",decision:"APPROVED",gate_location:"CI sentinel",timestamp_ms:1}}')"
+  meal_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_MEAL_ID" --arg student "$TEST_SENTINEL_STUDENT_ID" \
+    '{p_row:{school_id:$school,id:$id,student_id:$student,student_number:"AUTHZ-PROBE",student_name:"Synthetic",grade_class:"CI",meal_type:"LUNCH",meal_date:"2000-01-01",status:"SERVED",notes:"",serving_station:"CI sentinel",timestamp_ms:1}}')"
+  check_rpc_role "$role" "$token" scholink_insert_gate_log_once "$gate_allowed" "$gate_payload"
+  check_rpc_role "$role" "$token" scholink_insert_meal_once "$meal_allowed" "$meal_payload"
+}
+
 check_finance_boundary() {
   local role="$1" token="$2" code
   # A deliberately nonexistent student_id ensures that even the authorized Admin
@@ -91,6 +171,8 @@ run_role() {
   local expected_finance=false
   [[ "$expected" == "ADMIN" ]] && expected_finance=true
   check_membership "$role" "$token" "$uid" "$expected" "$expected_finance"
+  check_role_data_boundaries "$expected" "$token"
+  check_rpc_boundaries "$expected" "$token"
   check_finance_boundary "$expected" "$token"
   echo "PASS: $expected real Auth token, active LTC membership, cross-school denial and finance boundary"
 }
