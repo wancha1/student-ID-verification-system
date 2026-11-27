@@ -389,3 +389,32 @@ BEGIN
 END $$;
 
 SELECT 'PASS: meal validation, attendance corrections, and exam decision audit' AS result;
+
+
+-- Replaying the same final exam decision is idempotent; changing a final decision is forbidden.
+SELECT set_config('test.staff_role', 'HEAD_TEACHER', false);
+SET ROLE authenticated;
+SELECT public.scholink_decide_exam_exception('school-test','exam-1','APPROVED','retry');
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.scholink_decide_exam_exception('school-test','exam-1','REJECTED','conflicting retry');
+    RAISE EXCEPTION 'A final exam decision must not be reversed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'A final exam decision must not be reversed' THEN RAISE; END IF;
+    IF position('already received a final decision' in lower(SQLERRM)) = 0 THEN RAISE; END IF;
+  END;
+END $$;
+RESET ROLE;
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.exam_exception_events
+      WHERE school_id='school-test' AND record_id='exam-1') <> 2 THEN
+    RAISE EXCEPTION 'Idempotent exam decision retry must not append another event';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.exam_exception_events
+      WHERE record_id='exam-1' AND event_type='APPROVED'
+        AND new_record->>'decision_by_user_id'='00000000-0000-0000-0000-000000000456') THEN
+    RAISE EXCEPTION 'Exam decision user ID missing from the immutable snapshot';
+  END IF;
+END $$;
