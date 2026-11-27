@@ -126,6 +126,11 @@ LANGUAGE plpgsql
 SET search_path = ''
 AS $$
 BEGIN
+  IF NEW.decision_by_user_id IS DISTINCT FROM OLD.decision_by_user_id
+     AND NEW.decision_status IS NOT DISTINCT FROM OLD.decision_status THEN
+    RAISE EXCEPTION 'Exam decision actor cannot be changed independently of the decision'
+      USING ERRCODE = '42501';
+  END IF;
   IF NEW.decision_status IS DISTINCT FROM OLD.decision_status THEN
     IF OLD.decision_status <> 'PENDING'
        OR NOT private.is_active_staff(NEW.school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]) THEN
