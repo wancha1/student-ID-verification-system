@@ -168,7 +168,9 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `decisionStatus` TEXT NOT NULL DEFAULT 'PENDING'")
                 db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `decisionReason` TEXT")
+                db.execSQL("ALTER TABLE `exam_exceptions` ADD COLUMN `updatedAt` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("UPDATE `exam_exceptions` SET `decisionStatus` = 'APPROVED' WHERE `isApproved` = 1")
+                db.execSQL("UPDATE `exam_exceptions` SET `updatedAt` = COALESCE(`approvedAt`, `requestedAt`)")
             }
         }
 
