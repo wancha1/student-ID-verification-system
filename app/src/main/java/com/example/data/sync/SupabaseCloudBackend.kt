@@ -342,8 +342,22 @@ class SupabaseCloudBackend(
             throw SecurityException("A bursar can submit requests but cannot approve exam exceptions.")
         }
         exceptions.forEach { record ->
-            client.from("exam_exceptions").upsert(ExamExceptionRow.from(record, schoolId)) {
-                onConflict = "school_id,student_id,exam_code"
+            if (record.isApproved) {
+                // Approval is a one-time, audited server transition. The RPC is
+                // idempotent for retries and records the authenticated actor.
+                client.postgrest.rpc(
+                    "scholink_decide_exam_exception",
+                    buildJsonObject {
+                        put("p_school_id", schoolId)
+                        put("p_record_id", record.id)
+                        put("p_decision", "APPROVED")
+                        put("p_reason", record.recommendationReason)
+                    }
+                )
+            } else {
+                client.from("exam_exceptions").upsert(ExamExceptionRow.from(record, schoolId)) {
+                    onConflict = "school_id,student_id,exam_code"
+                }
             }
         }
     }
