@@ -6,8 +6,8 @@ set -euo pipefail
 : "${TEST_SENTINEL_STUDENT_ID:?Set a pre-seeded, non-sensitive staging student ID}"
 : "${TEST_SENTINEL_GATE_LOG_ID:?Set a pre-seeded staging gate-log ID}"
 : "${TEST_SENTINEL_MEAL_ID:?Set a pre-seeded staging meal ID}"
-: "${TEST_SENTINEL_ATTENDANCE_ID:?Set a pre-seeded staging attendance record ID}"
-: "${TEST_SENTINEL_EXAM_ID:?Set a pre-seeded staging exam exception ID}"
+: "${TEST_SENTINEL_ATTENDANCE_EVENT_ID:?Set a pre-seeded staging attendance record ID}"
+: "${TEST_SENTINEL_EXAM_EVENT_ID:?Set a pre-seeded staging exam exception ID}"
 
 api="${SUPABASE_URL%/}"
 tmp="$(mktemp -d)"
@@ -64,7 +64,7 @@ check_row_visibility() {
   local response="$tmp/$role-$table.json" code count
   code="$(curl --silent --show-error --get --output "$response" --write-out '%{http_code}' \\
     "$api/rest/v1/$table" \\
-    --data-urlencode 'select=*' \\
+    --data-urlencode "select=$column" \\
     --data-urlencode "school_id=eq.ltc_school_01" \\
     --data-urlencode "$column=eq.$sentinel" \\
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
@@ -90,8 +90,8 @@ check_role_data_boundaries() {
   check_row_visibility "$role" "$token" student_private student_id "$TEST_SENTINEL_STUDENT_ID" "$private_expected"
   check_row_visibility "$role" "$token" gate_logs id "$TEST_SENTINEL_GATE_LOG_ID" "$gate_expected"
   check_row_visibility "$role" "$token" meals id "$TEST_SENTINEL_MEAL_ID" "$meal_expected"
-  check_row_visibility "$role" "$token" attendance_record_events record_id "$TEST_SENTINEL_ATTENDANCE_ID" "$academic_expected"
-  check_row_visibility "$role" "$token" exam_exception_events record_id "$TEST_SENTINEL_EXAM_ID" "$exam_expected"
+  check_row_visibility "$role" "$token" attendance_record_events event_id "$TEST_SENTINEL_ATTENDANCE_EVENT_ID" "$academic_expected"
+  check_row_visibility "$role" "$token" exam_exception_events event_id "$TEST_SENTINEL_EXAM_EVENT_ID" "$exam_expected"
 }
 
 check_finance_boundary() {
