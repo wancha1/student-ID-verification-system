@@ -345,26 +345,26 @@ fun StudentAccessApp(
                                                 modifier = Modifier.testTag("menu_gate_exeat")
                                             )
                                         }
+                                        if (user.role == UserRole.ADMINISTRATOR || user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                                            DropdownMenuItem(
+                                                text = { Text("Exam Exception Review") },
+                                                leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
+                                                onClick = {
+                                                    showExamExceptionsScreen = true
+                                                    showAttendanceScreen = false
+                                                    showRequirementsScreen = false
+                                                    showGuardianAlertsScreen = false
+                                                    showExeatScreen = false
+                                                    showLogsScreen = false
+                                                    showMealsScreen = false
+                                                    showOptionsMenu = false
+                                                },
+                                                modifier = Modifier.testTag("menu_view_exam_exceptions")
+                                            )
+                                        }
                                         if (user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                                             DropdownMenuItem(
-                                                text = { if (user.role == UserRole.ADMINISTRATOR || user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
-                                                DropdownMenuItem(
-                                                    text = { Text("Exam Exception Review") },
-                                                    leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
-                                                    onClick = {
-                                                        showExamExceptionsScreen = true
-                                                        showAttendanceScreen = false
-                                                        showRequirementsScreen = false
-                                                        showGuardianAlertsScreen = false
-                                                        showExeatScreen = false
-                                                        showLogsScreen = false
-                                                        showMealsScreen = false
-                                                        showOptionsMenu = false
-                                                    },
-                                                    modifier = Modifier.testTag("menu_view_exam_exceptions")
-                                                )
-                                            }
-                                            Text("Attendance Review") },
+                                                text = { Text("Attendance Review") },
                                                 leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
                                                 onClick = {
                                                     showAttendanceScreen = true
@@ -393,7 +393,7 @@ fun StudentAccessApp(
                                             )
                                         }
 
-                                        if (user.role == UserRole.ADMINISTRATOR) {
+if (user.role == UserRole.ADMINISTRATOR) {
                                             DropdownMenuItem(
                                                 text = { Text("Batch ID Badges") },
                                                 leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
