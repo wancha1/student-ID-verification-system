@@ -11,9 +11,9 @@ GRANT USAGE ON SCHEMA private TO authenticated;
 CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid
 LANGUAGE sql STABLE
-AS $
+AS $uid$
   SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
-$;
+$uid$;
 GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 
