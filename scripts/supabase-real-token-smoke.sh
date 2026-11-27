@@ -129,7 +129,7 @@ check_rpc_boundaries() {
   local gate_payload meal_payload
   gate_payload="$(jq -n --arg school "$TEST_SCHOOL_ID" --arg id "$TEST_SENTINEL_GATE_LOG_ID" \
     '{p_row:{school_id:$school,id:$id,student_number:"AUTHZ-PROBE",student_name:"Synthetic",decision:"APPROVED",gate_location:"CI sentinel",timestamp_ms:1}}')"
-  meal_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_MEAL_ID" --arg student "$TEST_SENTINEL_STUDENT_ID" \
+  meal_payload="$(jq -n --arg school "$TEST_SCHOOL_ID" --arg id "$TEST_SENTINEL_MEAL_ID" --arg student "$TEST_SENTINEL_STUDENT_ID" \
     '{p_row:{school_id:$school,id:$id,student_id:$student,student_number:"AUTHZ-PROBE",student_name:"Synthetic",grade_class:"CI",meal_type:"LUNCH",meal_date:"2000-01-01",status:"SERVED",notes:"",serving_station:"CI sentinel",timestamp_ms:1}}')"
   check_rpc_role "$role" "$token" scholink_insert_gate_log_once "$gate_allowed" "$gate_payload"
   check_rpc_role "$role" "$token" scholink_insert_meal_once "$meal_allowed" "$meal_payload"
