@@ -329,7 +329,17 @@ INSERT INTO public.exam_exceptions
 VALUES
   ('school-test','exam-1','student-test-1','SYN-001','Synthetic Student','UACE-MOCK',
    'Synthetic Bursar','Fee arrangement submitted',false,1700000000000,1700000000000);
-DO $$
+DO $
+BEGIN
+  BEGIN
+    UPDATE public.exam_exceptions
+    SET decision_status='REJECTED', decision_by_user_id=auth.uid()
+    WHERE school_id='school-test' AND id='exam-1';
+    RAISE EXCEPTION 'Bursar must not directly finalize an exam request';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $;
+DO $
 BEGIN
   BEGIN
     PERFORM public.scholink_decide_exam_exception('school-test','exam-1','APPROVED','not allowed');
