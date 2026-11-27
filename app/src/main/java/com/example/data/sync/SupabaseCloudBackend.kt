@@ -338,25 +338,30 @@ class SupabaseCloudBackend(
         if (role !in setOf("ADMIN", "HEAD_TEACHER", "BURSAR")) {
             throw SecurityException("Only the bursar or school leadership can sync exam exceptions.")
         }
-        if (role == "BURSAR" && exceptions.any { it.isApproved }) {
-            throw SecurityException("A bursar can submit requests but cannot approve exam exceptions.")
+        if (role == "BURSAR" && exceptions.any { it.decisionStatus != "PENDING" }) {
+            throw SecurityException("A bursar can submit requests but cannot decide exam exceptions.")
         }
         exceptions.forEach { record ->
-            if (record.isApproved) {
-                // Approval is a one-time, audited server transition. The RPC is
-                // idempotent for retries and records the authenticated actor.
-                client.postgrest.rpc(
-                    "scholink_decide_exam_exception",
-                    buildJsonObject {
-                        put("p_school_id", schoolId)
-                        put("p_record_id", record.id)
-                        put("p_decision", "APPROVED")
+            when (record.decisionStatus) {
+                "APPROVED", "REJECTED" -> {
+                    if (role !in setOf("ADMIN", "HEAD_TEACHER")) {
+                        throw SecurityException("Only school leadership can decide exam exceptions.")
                     }
-                )
-            } else {
-                client.from("exam_exceptions").upsert(ExamExceptionRow.from(record, schoolId)) {
+                    // Final decisions are made server-side and are idempotent on retry.
+                    client.postgrest.rpc(
+                        "scholink_decide_exam_exception",
+                        buildJsonObject {
+                            put("p_school_id", schoolId)
+                            put("p_record_id", record.id)
+                            put("p_decision", record.decisionStatus)
+                            record.decisionReason?.let { put("p_reason", it) }
+                        }
+                    )
+                }
+                "PENDING" -> client.from("exam_exceptions").upsert(ExamExceptionRow.from(record, schoolId)) {
                     onConflict = "school_id,student_id,exam_code"
                 }
+                else -> throw IllegalArgumentException("Unknown exam decision status: ${record.decisionStatus}")
             }
         }
     }
@@ -685,17 +690,32 @@ class SupabaseCloudBackend(
         @SerialName("approved_by_head_teacher") val approvedByHeadTeacher: String?,
         @SerialName("requested_at_ms") val requestedAt: Long,
         @SerialName("approved_at_ms") val approvedAt: Long?,
+        @SerialName("decision_status") val decisionStatus: String = if (isApproved) "APPROVED" else "PENDING",
+        @SerialName("decision_reason") val decisionReason: String? = null,
         @SerialName("updated_at_ms") val updatedAt: Long
     ) {
         fun toEntity() = ExamExceptionEntity(
-            id, studentId, studentNumber, studentName, examCode, requestedByBursar,
-            recommendationReason, isApproved, approvedByHeadTeacher, requestedAt, approvedAt, true
+            id = id,
+            studentId = studentId,
+            studentNumber = studentNumber,
+            studentName = studentName,
+            examCode = examCode,
+            requestedByBursar = requestedByBursar,
+            recommendationReason = recommendationReason,
+            isApproved = isApproved,
+            approvedByHeadTeacher = approvedByHeadTeacher,
+            requestedAt = requestedAt,
+            approvedAt = approvedAt,
+            isSyncedToCloud = true,
+            decisionStatus = decisionStatus,
+            decisionReason = decisionReason
         )
         companion object {
             fun from(e: ExamExceptionEntity, school: String) = ExamExceptionRow(
                 school, e.id, e.studentId, e.studentNumber, e.studentName, e.examCode,
                 e.requestedByBursar, e.recommendationReason, e.isApproved,
                 e.approvedByHeadTeacher, e.requestedAt, e.approvedAt,
+                e.decisionStatus, e.decisionReason,
                 e.approvedAt ?: e.requestedAt
             )
         }
