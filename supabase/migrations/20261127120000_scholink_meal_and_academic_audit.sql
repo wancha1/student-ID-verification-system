@@ -225,6 +225,7 @@ BEGIN
   UPDATE public.exam_exceptions
   SET decision_status = p_decision,
       decision_reason = NULLIF(btrim(p_reason), ''),
+      decision_by_user_id = auth.uid(),
       is_approved = (p_decision = 'APPROVED'),
       approved_by_head_teacher = CASE WHEN p_decision = 'APPROVED' THEN 'Authorized school leadership' ELSE NULL END,
       approved_at_ms = CASE WHEN p_decision = 'APPROVED' THEN now_ms ELSE NULL END,
