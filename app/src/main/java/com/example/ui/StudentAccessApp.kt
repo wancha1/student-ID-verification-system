@@ -77,6 +77,7 @@ import com.example.ui.admin.StudentDetailScreen
 import com.example.ui.auth.SupabaseStaffLoginScreen
 import com.example.ui.attendance.AttendanceMasterScreen
 import com.example.ui.exeat.ExeatPassScreen
+import com.example.ui.exams.ExamExceptionReviewScreen
 import com.example.ui.notifications.GuardianAlertsScreen
 import com.example.ui.requirements.RequirementsMasterScreen
 import com.example.ui.components.MultiFormatExportDialog
@@ -105,6 +106,7 @@ fun StudentAccessApp(
     val guardianNotifications by viewModel.guardianNotifications.collectAsStateWithLifecycle()
     val exeatPasses by viewModel.exeatPasses.collectAsStateWithLifecycle()
     val attendanceRecords by viewModel.attendanceRecords.collectAsStateWithLifecycle()
+    val examExceptions by viewModel.examExceptions.collectAsStateWithLifecycle()
     val selectedAttendanceSubject by viewModel.selectedAttendanceSubject.collectAsStateWithLifecycle()
     val selectedAttendanceSession by viewModel.selectedAttendanceSession.collectAsStateWithLifecycle()
     val requirementsList by viewModel.requirementsList.collectAsStateWithLifecycle()
@@ -129,6 +131,7 @@ fun StudentAccessApp(
     var showGuardianAlertsScreen by remember { mutableStateOf(false) }
     var showExeatScreen by remember { mutableStateOf(false) }
     var showAttendanceScreen by remember { mutableStateOf(false) }
+    var showExamExceptionsScreen by remember { mutableStateOf(false) }
     var showRequirementsScreen by remember { mutableStateOf(false) }
     var showMealsScreen by remember { mutableStateOf(false) }
     var showHeadStudentsScreen by remember { mutableStateOf(false) }
@@ -183,7 +186,7 @@ fun StudentAccessApp(
             val roleColor = roleTheme.primaryColor
             val isSubScreenOpen = isAnyScannerOpen || showLogsScreen || showGuardianAlertsScreen ||
                 showExeatScreen || showAttendanceScreen || showRequirementsScreen ||
-                showMealsScreen || (selectedStudentDetail != null)
+                showMealsScreen || showExamExceptionsScreen || (selectedStudentDetail != null)
 
             BackHandler(enabled = showSignOutConfirm) { showSignOutConfirm = false }
             BackHandler(enabled = showBatchPrintDialog) { showBatchPrintDialog = false }
@@ -192,6 +195,7 @@ fun StudentAccessApp(
             BackHandler(enabled = showGuardianAlertsScreen) { showGuardianAlertsScreen = false }
             BackHandler(enabled = showExeatScreen) { showExeatScreen = false }
             BackHandler(enabled = showAttendanceScreen) { showAttendanceScreen = false }
+            BackHandler(enabled = showExamExceptionsScreen) { showExamExceptionsScreen = false }
             BackHandler(enabled = showRequirementsScreen) { showRequirementsScreen = false }
             BackHandler(enabled = showMealsScreen) { showMealsScreen = false }
             BackHandler(enabled = showHeadStudentsScreen && selectedStudentDetail == null) { showHeadStudentsScreen = false }
@@ -343,7 +347,24 @@ fun StudentAccessApp(
                                         }
                                         if (user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                                             DropdownMenuItem(
-                                                text = { Text("Attendance Review") },
+                                                text = { if (user.role == UserRole.ADMINISTRATOR || user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Exam Exception Review") },
+                                                    leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
+                                                    onClick = {
+                                                        showExamExceptionsScreen = true
+                                                        showAttendanceScreen = false
+                                                        showRequirementsScreen = false
+                                                        showGuardianAlertsScreen = false
+                                                        showExeatScreen = false
+                                                        showLogsScreen = false
+                                                        showMealsScreen = false
+                                                        showOptionsMenu = false
+                                                    },
+                                                    modifier = Modifier.testTag("menu_view_exam_exceptions")
+                                                )
+                                            }
+                                            Text("Attendance Review") },
                                                 leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
                                                 onClick = {
                                                     showAttendanceScreen = true
@@ -415,7 +436,7 @@ fun StudentAccessApp(
                 bottomBar = {
                     if (!isAnyScannerOpen && selectedStudentDetail == null &&
                         !showGuardianAlertsScreen && !showExeatScreen &&
-                        !showAttendanceScreen && !showRequirementsScreen) {
+                        !showAttendanceScreen && !showRequirementsScreen && !showExamExceptionsScreen) {
                         NavigationBar(
                             containerColor = MaterialTheme.colorScheme.surface,
                             tonalElevation = 2.dp,
@@ -590,6 +611,13 @@ fun StudentAccessApp(
                             readOnly = user.role == UserRole.HEAD_TEACHER_MANAGEMENT,
                             canIssue = user.role == UserRole.ADMINISTRATOR,
                             canMarkUsed = user.role == UserRole.GATE_STAFF
+                        )
+                    } else if (showExamExceptionsScreen && user.role in setOf(UserRole.ADMINISTRATOR, UserRole.HEAD_TEACHER_MANAGEMENT)) {
+                        ExamExceptionReviewScreen(
+                            exceptions = examExceptions,
+                            onBack = { showExamExceptionsScreen = false },
+                            onApprove = { studentId, examCode -> viewModel.approveExamException(studentId, examCode) },
+                            onReject = { studentId, examCode, reason -> viewModel.rejectExamException(studentId, examCode, reason) }
                         )
                     } else if (showAttendanceScreen && user.role == UserRole.HEAD_TEACHER_MANAGEMENT) {
                         AttendanceMasterScreen(
