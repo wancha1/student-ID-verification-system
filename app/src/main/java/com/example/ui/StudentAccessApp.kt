@@ -174,6 +174,7 @@ fun StudentAccessApp(
                 onAuthenticated = { role, name, hasFinance ->
                     showLogsScreen = false
                     showMealsScreen = false
+                    showExamExceptionsScreen = false
                     showHeadStudentsScreen = false
                     mealsTab = "SERVE"
                     viewModel.loginAs(role, name, hasFinance)
