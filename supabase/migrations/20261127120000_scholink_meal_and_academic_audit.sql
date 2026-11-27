@@ -170,6 +170,7 @@ SET search_path = ''
 AS $$
 DECLARE
   now_ms bigint := (extract(epoch FROM clock_timestamp()) * 1000)::bigint;
+  current_status text;
 BEGIN
   IF p_decision NOT IN ('APPROVED', 'REJECTED') THEN
     RAISE EXCEPTION 'Decision must be APPROVED or REJECTED';
@@ -177,6 +178,21 @@ BEGIN
   IF NOT private.is_active_staff(p_school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]) THEN
     RAISE EXCEPTION 'Only school leadership can decide exam exceptions'
       USING ERRCODE = '42501';
+  END IF;
+
+  SELECT decision_status INTO current_status
+  FROM public.exam_exceptions
+  WHERE school_id = p_school_id AND id = p_record_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Exam exception not found';
+  END IF;
+  -- Retrying the same decision is a no-op; a different second decision is forbidden.
+  IF current_status = p_decision THEN
+    RETURN;
+  END IF;
+  IF current_status <> 'PENDING' THEN
+    RAISE EXCEPTION 'Exam exception has already received a final decision';
   END IF;
 
   UPDATE public.exam_exceptions
@@ -189,10 +205,6 @@ BEGIN
   WHERE school_id = p_school_id
     AND id = p_record_id
     AND decision_status = 'PENDING';
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Pending exam exception not found or already decided';
-  END IF;
 END;
 $$;
 
