@@ -208,8 +208,11 @@ DECLARE
   now_ms bigint := (extract(epoch FROM clock_timestamp()) * 1000)::bigint;
   current_status text;
 BEGIN
-  IF p_decision NOT IN ('APPROVED', 'REJECTED') THEN
+  IF p_decision IS NULL OR p_decision NOT IN ('APPROVED', 'REJECTED') THEN
     RAISE EXCEPTION 'Decision must be APPROVED or REJECTED';
+  END IF;
+  IF p_decision = 'REJECTED' AND NULLIF(btrim(p_reason), '') IS NULL THEN
+    RAISE EXCEPTION 'A reason is required when rejecting an exam exception';
   END IF;
   IF NOT private.is_active_staff(p_school_id, ARRAY['ADMIN','HEAD_TEACHER']::text[]) THEN
     RAISE EXCEPTION 'Only school leadership can decide exam exceptions'
