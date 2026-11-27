@@ -66,7 +66,7 @@ check_row_visibility() {
   code="$(curl --silent --show-error --get --output "$response" --write-out '%{http_code}' \
     "$api/rest/v1/$table" \
     --data-urlencode "select=$column" \
-    --data-urlencode "school_id=eq.ltc_school_01" \
+    --data-urlencode "school_id=eq.$TEST_SCHOOL_ID" \
     --data-urlencode "$column=eq.$sentinel" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code."; exit 1; }
@@ -146,7 +146,7 @@ check_finance_boundary() {
     -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' \
     -H 'Prefer: return=minimal' \
-    --data '{"school_id":"$TEST_SCHOOL_ID","student_id":"__ltc_authz_probe_nonexistent__","outstanding_amount":1,"fee_status":"OUTSTANDING","updated_at_ms":1}')"
+    --data "$(jq -n --arg school "$TEST_SCHOOL_ID" '{school_id:$school,student_id:"__ltc_authz_probe_nonexistent__",outstanding_amount:1,fee_status:"OUTSTANDING",updated_at_ms:1}')")"
 
   if [[ "$role" == "ADMIN" ]]; then
     [[ "$code" == "409" ]] || {
