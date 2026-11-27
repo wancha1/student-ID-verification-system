@@ -708,7 +708,8 @@ class SupabaseCloudBackend(
             approvedAt = approvedAt,
             isSyncedToCloud = true,
             decisionStatus = decisionStatus,
-            decisionReason = decisionReason
+            decisionReason = decisionReason,
+            updatedAt = updatedAt
         )
         companion object {
             fun from(e: ExamExceptionEntity, school: String) = ExamExceptionRow(
@@ -716,7 +717,7 @@ class SupabaseCloudBackend(
                 e.requestedByBursar, e.recommendationReason, e.isApproved,
                 e.approvedByHeadTeacher, e.requestedAt, e.approvedAt,
                 e.decisionStatus, e.decisionReason,
-                e.approvedAt ?: e.requestedAt
+                e.updatedAt
             )
         }
     }
