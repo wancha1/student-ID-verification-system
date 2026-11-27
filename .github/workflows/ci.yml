@@ -210,6 +210,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          TEST_SCHOOL_ID: ${{ secrets.TEST_SCHOOL_ID }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
@@ -224,7 +225,7 @@ jobs:
           TEST_SENTINEL_ATTENDANCE_EVENT_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_EVENT_ID }}
           TEST_SENTINEL_EXAM_EVENT_ID: ${{ secrets.TEST_SENTINEL_EXAM_EVENT_ID }}
         run: |
-          if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_PUBLISHABLE_KEY:-}" \
+          if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_PUBLISHABLE_KEY:-}" && -n "${TEST_SCHOOL_ID:-}" \
             && -n "${TEST_ADMIN_EMAIL:-}" && -n "${TEST_ADMIN_PASSWORD:-}" \
             && -n "${TEST_HEAD_TEACHER_EMAIL:-}" && -n "${TEST_HEAD_TEACHER_PASSWORD:-}" \
             && -n "${TEST_GATE_OFFICER_EMAIL:-}" && -n "${TEST_GATE_OFFICER_PASSWORD:-}" \
