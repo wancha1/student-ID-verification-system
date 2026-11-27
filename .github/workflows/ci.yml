@@ -200,7 +200,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run role tests with four isolated staging accounts
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_PUBLISHABLE_KEY != '' && env.TEST_ADMIN_EMAIL != '' && env.TEST_ADMIN_PASSWORD != '' && env.TEST_HEAD_TEACHER_EMAIL != '' && env.TEST_HEAD_TEACHER_PASSWORD != '' && env.TEST_GATE_OFFICER_EMAIL != '' && env.TEST_GATE_OFFICER_PASSWORD != '' && env.TEST_MEAL_STAFF_EMAIL != '' && env.TEST_MEAL_STAFF_PASSWORD != '' && env.TEST_SENTINEL_STUDENT_ID != '' && env.TEST_SENTINEL_GATE_LOG_ID != '' && env.TEST_SENTINEL_MEAL_ID != '' && env.TEST_SENTINEL_ATTENDANCE_ID != '' && env.TEST_SENTINEL_EXAM_ID != '' }}
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_PUBLISHABLE_KEY != '' && env.TEST_ADMIN_EMAIL != '' && env.TEST_ADMIN_PASSWORD != '' && env.TEST_HEAD_TEACHER_EMAIL != '' && env.TEST_HEAD_TEACHER_PASSWORD != '' && env.TEST_GATE_OFFICER_EMAIL != '' && env.TEST_GATE_OFFICER_PASSWORD != '' && env.TEST_MEAL_STAFF_EMAIL != '' && env.TEST_MEAL_STAFF_PASSWORD != '' && env.TEST_SENTINEL_STUDENT_ID != '' && env.TEST_SENTINEL_GATE_LOG_ID != '' && env.TEST_SENTINEL_MEAL_ID != '' && env.TEST_SENTINEL_ATTENDANCE_EVENT_ID != '' && env.TEST_SENTINEL_EXAM_EVENT_ID != '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
@@ -215,11 +215,11 @@ jobs:
           TEST_SENTINEL_STUDENT_ID: ${{ secrets.TEST_SENTINEL_STUDENT_ID }}
           TEST_SENTINEL_GATE_LOG_ID: ${{ secrets.TEST_SENTINEL_GATE_LOG_ID }}
           TEST_SENTINEL_MEAL_ID: ${{ secrets.TEST_SENTINEL_MEAL_ID }}
-          TEST_SENTINEL_ATTENDANCE_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_ID }}
-          TEST_SENTINEL_EXAM_ID: ${{ secrets.TEST_SENTINEL_EXAM_ID }}
+          TEST_SENTINEL_ATTENDANCE_EVENT_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_EVENT_ID }}
+          TEST_SENTINEL_EXAM_EVENT_ID: ${{ secrets.TEST_SENTINEL_EXAM_EVENT_ID }}
         run: bash scripts/supabase-real-token-smoke.sh
       - name: Explain skipped staging authentication tests
-        if: ${{ env.SUPABASE_URL == '' || env.SUPABASE_PUBLISHABLE_KEY == '' || env.TEST_ADMIN_EMAIL == '' || env.TEST_ADMIN_PASSWORD == '' || env.TEST_HEAD_TEACHER_EMAIL == '' || env.TEST_HEAD_TEACHER_PASSWORD == '' || env.TEST_GATE_OFFICER_EMAIL == '' || env.TEST_GATE_OFFICER_PASSWORD == '' || env.TEST_MEAL_STAFF_EMAIL == '' || env.TEST_MEAL_STAFF_PASSWORD == '' || env.TEST_SENTINEL_STUDENT_ID == '' || env.TEST_SENTINEL_GATE_LOG_ID == '' || env.TEST_SENTINEL_MEAL_ID == '' || env.TEST_SENTINEL_ATTENDANCE_ID == '' || env.TEST_SENTINEL_EXAM_ID == '' }}
+        if: ${{ env.SUPABASE_URL == '' || env.SUPABASE_PUBLISHABLE_KEY == '' || env.TEST_ADMIN_EMAIL == '' || env.TEST_ADMIN_PASSWORD == '' || env.TEST_HEAD_TEACHER_EMAIL == '' || env.TEST_HEAD_TEACHER_PASSWORD == '' || env.TEST_GATE_OFFICER_EMAIL == '' || env.TEST_GATE_OFFICER_PASSWORD == '' || env.TEST_MEAL_STAFF_EMAIL == '' || env.TEST_MEAL_STAFF_PASSWORD == '' || env.TEST_SENTINEL_STUDENT_ID == '' || env.TEST_SENTINEL_GATE_LOG_ID == '' || env.TEST_SENTINEL_MEAL_ID == '' || env.TEST_SENTINEL_ATTENDANCE_EVENT_ID == '' || env.TEST_SENTINEL_EXAM_EVENT_ID == '' }}
         run: echo "SKIPPED: configure isolated staging Auth users and sentinel record IDs as repository secrets to run real-token RLS tests."
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -235,5 +235,5 @@ jobs:
       TEST_SENTINEL_STUDENT_ID: ${{ secrets.TEST_SENTINEL_STUDENT_ID }}
       TEST_SENTINEL_GATE_LOG_ID: ${{ secrets.TEST_SENTINEL_GATE_LOG_ID }}
       TEST_SENTINEL_MEAL_ID: ${{ secrets.TEST_SENTINEL_MEAL_ID }}
-      TEST_SENTINEL_ATTENDANCE_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_ID }}
-      TEST_SENTINEL_EXAM_ID: ${{ secrets.TEST_SENTINEL_EXAM_ID }}
+      TEST_SENTINEL_ATTENDANCE_EVENT_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_EVENT_ID }}
+      TEST_SENTINEL_EXAM_EVENT_ID: ${{ secrets.TEST_SENTINEL_EXAM_EVENT_ID }}
