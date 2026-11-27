@@ -351,7 +351,6 @@ class SupabaseCloudBackend(
                         put("p_school_id", schoolId)
                         put("p_record_id", record.id)
                         put("p_decision", "APPROVED")
-                        put("p_reason", record.recommendationReason)
                     }
                 )
             } else {
