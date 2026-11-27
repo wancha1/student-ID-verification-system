@@ -107,7 +107,7 @@ CREATE TRIGGER attendance_record_audit_after_change
 -- Existing approved rows are backfilled; pending rows remain pending.
 ALTER TABLE public.exam_exceptions
   ADD COLUMN decision_status text NOT NULL DEFAULT 'PENDING',
-  ADD COLUMN decision_reason text;
+  ADD COLUMN decision_reason text,\n  ADD COLUMN decision_by_user_id uuid;
 UPDATE public.exam_exceptions
 SET decision_status = CASE WHEN is_approved THEN 'APPROVED' ELSE 'PENDING' END;
 ALTER TABLE public.exam_exceptions
@@ -183,7 +183,7 @@ BEGIN
   SET decision_status = p_decision,
       decision_reason = NULLIF(btrim(p_reason), ''),
       is_approved = (p_decision = 'APPROVED'),
-      approved_by_head_teacher = CASE WHEN p_decision = 'APPROVED' THEN auth.uid()::text ELSE NULL END,
+      approved_by_head_teacher = CASE WHEN p_decision = 'APPROVED' THEN 'Authorized school leadership' ELSE NULL END,
       approved_at_ms = CASE WHEN p_decision = 'APPROVED' THEN now_ms ELSE NULL END,
       updated_at_ms = now_ms
   WHERE school_id = p_school_id
