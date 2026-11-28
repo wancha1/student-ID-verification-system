@@ -438,3 +438,20 @@ BEGIN
     RAISE EXCEPTION 'Exam decision user ID missing from the immutable snapshot';
   END IF;
 END $$;
+
+
+-- The LTC tenant seed must leave exactly one canonical school row.
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.schools WHERE id = 'ltc_school_01') <> 1
+     OR NOT EXISTS (
+       SELECT 1 FROM public.schools
+       WHERE id = 'ltc_school_01'
+         AND name = 'Lira Town College'
+         AND school_code = 'LTC'
+         AND is_active = true
+     ) THEN
+    RAISE EXCEPTION 'Canonical LTC school seed is missing or duplicated';
+  END IF;
+END;
+$$;

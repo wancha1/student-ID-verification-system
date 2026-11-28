@@ -168,6 +168,13 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/bootstrap.sql
+      - name: Verify the LTC school seed is idempotent
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261127150000_seed_ltc_school.sql
+          psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261127150000_seed_ltc_school.sql
+          test "$(psql -h localhost -U postgres -d scholink_test -tAc "SELECT count(*) FROM public.schools WHERE id='ltc_school_01'")" = "1"
       - name: Apply issuer lifecycle audit migration
         env:
           PGPASSWORD: postgres
@@ -192,6 +199,10 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/assertions.sql
+      - name: Verify finance, cross-school audit, and actor-attribution boundaries
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/security-coverage.sql
 
 
   supabase-authenticated-role-tests:
@@ -203,6 +214,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          TEST_SCHOOL_ID: ${{ secrets.TEST_SCHOOL_ID }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_HEAD_TEACHER_EMAIL: ${{ secrets.TEST_HEAD_TEACHER_EMAIL }}
@@ -217,7 +229,7 @@ jobs:
           TEST_SENTINEL_ATTENDANCE_EVENT_ID: ${{ secrets.TEST_SENTINEL_ATTENDANCE_EVENT_ID }}
           TEST_SENTINEL_EXAM_EVENT_ID: ${{ secrets.TEST_SENTINEL_EXAM_EVENT_ID }}
         run: |
-          if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_PUBLISHABLE_KEY:-}" \
+          if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_PUBLISHABLE_KEY:-}" && -n "${TEST_SCHOOL_ID:-}" \
             && -n "${TEST_ADMIN_EMAIL:-}" && -n "${TEST_ADMIN_PASSWORD:-}" \
             && -n "${TEST_HEAD_TEACHER_EMAIL:-}" && -n "${TEST_HEAD_TEACHER_PASSWORD:-}" \
             && -n "${TEST_GATE_OFFICER_EMAIL:-}" && -n "${TEST_GATE_OFFICER_PASSWORD:-}" \
@@ -227,5 +239,6 @@ jobs:
             && -n "${TEST_SENTINEL_EXAM_EVENT_ID:-}" ]]; then
             bash scripts/supabase-real-token-smoke.sh
           else
-            echo "SKIPPED: configure isolated staging Auth users and sentinel record IDs as repository secrets."
+            echo "::error::Release gate blocked: configure isolated staging Auth users and sentinel record IDs as repository secrets. Role-boundary tests must not silently skip."
+            exit 1
           fi

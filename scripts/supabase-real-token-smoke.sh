@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${SUPABASE_URL:?Set SUPABASE_URL}"
 : "${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY}"
+: "${TEST_SCHOOL_ID:?Set the isolated staging school ID (not the production tenant ID)}"
 : "${TEST_SENTINEL_STUDENT_ID:?Set a pre-seeded, non-sensitive staging student ID}"
 : "${TEST_SENTINEL_GATE_LOG_ID:?Set a pre-seeded staging gate-log ID}"
 : "${TEST_SENTINEL_MEAL_ID:?Set a pre-seeded staging meal ID}"
@@ -11,7 +12,21 @@ set -euo pipefail
 
 api="${SUPABASE_URL%/}"
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+storage_probe_path="${TEST_SCHOOL_ID}/ci-storage-probe-${GITHUB_RUN_ID:-local}/photo.jpg"
+admin_token=""
+
+cleanup() {
+  if [[ -n "$admin_token" ]]; then
+    curl --silent --show-error --output /dev/null \
+      -X DELETE "$api/storage/v1/object/student-photos" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+      -H "Authorization: Bearer $admin_token" \
+      -H 'Content-Type: application/json' \
+      --data "$(jq -n --arg path "$storage_probe_path" '{prefixes:[$path]}')" || true
+  fi
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
 
 login() {
   local role="$1" email="$2" password="$3"
@@ -37,7 +52,7 @@ check_membership() {
   local role="$1" token="$2" uid="$3" expected="$4" expected_finance="$5"
   local response="$tmp/$role-membership.json" code count actual active finance
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-    "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.ltc_school_01&user_id=eq.$uid" \
+    "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.$TEST_SCHOOL_ID&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] || { echo "::error::$role membership lookup returned HTTP $code."; exit 1; }
   count="$(jq 'length' "$response")"
@@ -51,7 +66,7 @@ check_membership() {
 
   # A valid token must not reveal a membership in a different school tenant.
   code="$(curl --silent --show-error --output "$tmp/$role-other-school.json" --write-out '%{http_code}' \
-    "$api/rest/v1/staff_memberships?select=user_id&school_id=neq.ltc_school_01&user_id=eq.$uid" \
+    "$api/rest/v1/staff_memberships?select=user_id&school_id=neq.$TEST_SCHOOL_ID&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] && [[ "$(jq 'length' "$tmp/$role-other-school.json")" == "0" ]] || {
     echo "::error::$role token crossed the school-tenant boundary."
@@ -65,7 +80,7 @@ check_row_visibility() {
   code="$(curl --silent --show-error --get --output "$response" --write-out '%{http_code}' \
     "$api/rest/v1/$table" \
     --data-urlencode "select=$column" \
-    --data-urlencode "school_id=eq.ltc_school_01" \
+    --data-urlencode "school_id=eq.$TEST_SCHOOL_ID" \
     --data-urlencode "$column=eq.$sentinel" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
   [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code."; exit 1; }
@@ -126,12 +141,74 @@ check_rpc_boundaries() {
     MEAL_STAFF) meal_allowed=true ;;
   esac
   local gate_payload meal_payload
-  gate_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_GATE_LOG_ID" \
+  gate_payload="$(jq -n --arg school "$TEST_SCHOOL_ID" --arg id "$TEST_SENTINEL_GATE_LOG_ID" \
     '{p_row:{school_id:$school,id:$id,student_number:"AUTHZ-PROBE",student_name:"Synthetic",decision:"APPROVED",gate_location:"CI sentinel",timestamp_ms:1}}')"
-  meal_payload="$(jq -n --arg school 'ltc_school_01' --arg id "$TEST_SENTINEL_MEAL_ID" --arg student "$TEST_SENTINEL_STUDENT_ID" \
+  meal_payload="$(jq -n --arg school "$TEST_SCHOOL_ID" --arg id "$TEST_SENTINEL_MEAL_ID" --arg student "$TEST_SENTINEL_STUDENT_ID" \
     '{p_row:{school_id:$school,id:$id,student_id:$student,student_number:"AUTHZ-PROBE",student_name:"Synthetic",grade_class:"CI",meal_type:"LUNCH",meal_date:"2000-01-01",status:"SERVED",notes:"",serving_station:"CI sentinel",timestamp_ms:1}}')"
   check_rpc_role "$role" "$token" scholink_insert_gate_log_once "$gate_allowed" "$gate_payload"
   check_rpc_role "$role" "$token" scholink_insert_meal_once "$meal_allowed" "$meal_payload"
+}
+
+check_storage_boundary() {
+  local role="$1" token="$2" code response="$tmp/$role-storage.json"
+  local denied_path="${TEST_SCHOOL_ID}/ci-storage-denied-${role}-${GITHUB_RUN_ID:-local}/photo.jpg"
+
+  if [[ "$role" == "ADMIN" ]]; then
+    admin_token="$token"
+    # A tiny synthetic PNG; unique CI path, removed by the EXIT trap.
+    printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=' | base64 -d > "$tmp/photo.png"
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo upload failed (HTTP $code)."; cat "$response"; exit 1; }
+
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo replacement failed (HTTP $code)."; cat "$response"; exit 1; }
+  fi
+
+  code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+    "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
+    -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
+  [[ "$code" == "200" ]] || { echo "::error::$role could not download the private student-photo sentinel (HTTP $code)."; cat "$response"; exit 1; }
+
+  if [[ "$role" != "ADMIN" ]]; then
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "400" || "$code" == "403" ]] || {
+      echo "::error::$role unexpectedly replaced an Admin-owned student photo (HTTP $code)."; cat "$response"; exit 1;
+    }
+
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X DELETE "$api/storage/v1/object/student-photos" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: application/json' \
+      --data "$(jq -n --arg path "$storage_probe_path" '{prefixes:[$path]}')")"
+    # Storage may return HTTP 200 with an empty result when RLS filters the
+    # DELETE target. Verify the object remains downloadable instead of trusting
+    # the status code alone.
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
+    [[ "$code" == "200" ]] || {
+      echo "::error::$role deleted or lost access to an Admin-owned student photo after a denied DELETE (HTTP $code)."; cat "$response"; exit 1;
+    }
+
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$denied_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "400" || "$code" == "403" ]] || {
+      echo "::error::$role unexpectedly uploaded a student photo (HTTP $code)."; cat "$response"; exit 1;
+    }
+  fi
+
+  echo "PASS: $role private student-photo read and Admin-only write boundary"
 }
 
 check_finance_boundary() {
@@ -145,7 +222,7 @@ check_finance_boundary() {
     -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' \
     -H 'Prefer: return=minimal' \
-    --data '{"school_id":"ltc_school_01","student_id":"__ltc_authz_probe_nonexistent__","outstanding_amount":1,"fee_status":"OUTSTANDING","updated_at_ms":1}')"
+    --data "$(jq -n --arg school "$TEST_SCHOOL_ID" '{school_id:$school,student_id:"__ltc_authz_probe_nonexistent__",outstanding_amount:1,fee_status:"OUTSTANDING",updated_at_ms:1}')")"
 
   if [[ "$role" == "ADMIN" ]]; then
     [[ "$code" == "409" ]] || {
@@ -174,7 +251,8 @@ run_role() {
   check_role_data_boundaries "$expected" "$token"
   check_rpc_boundaries "$expected" "$token"
   check_finance_boundary "$expected" "$token"
-  echo "PASS: $expected real Auth token, active LTC membership, cross-school denial and finance boundary"
+  check_storage_boundary "$expected" "$token"
+  echo "PASS: $expected real Auth token, active staging membership, cross-school denial and finance boundary"
 }
 
 run_role ADMIN ADMIN "${TEST_ADMIN_EMAIL:?}" "${TEST_ADMIN_PASSWORD:?}"

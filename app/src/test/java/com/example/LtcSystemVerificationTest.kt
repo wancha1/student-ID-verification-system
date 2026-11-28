@@ -802,7 +802,7 @@ class LtcSystemVerificationTest {
     // =========================================================================
 
     @Test
-    fun testMigrationFromVersion4To7PreservesAllDataAndAppliesSchemaChanges() {
+    fun testMigrationFromVersion4To8PreservesAllDataAndAppliesSchemaChanges() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val dbFile = File(context.filesDir, "test_migration_v4_to_v6.db")
@@ -1012,7 +1012,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open through Room with explicit grounded migrations MIGRATION_4_5 and MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1115,7 +1115,7 @@ class LtcSystemVerificationTest {
             roomDb.close()
 
             val reopenedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1130,7 +1130,7 @@ class LtcSystemVerificationTest {
     }
 
     @Test
-    fun testMigrationFromVersion5To7PreservesAllData() {
+    fun testMigrationFromVersion5To8PreservesAllData() {
         runBlocking {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val dbFile = File(context.filesDir, "test_migration_v5_to_v6.db")
@@ -1293,7 +1293,7 @@ class LtcSystemVerificationTest {
 
             // 2. Open with Room specifying MIGRATION_5_6
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1336,7 +1336,7 @@ class LtcSystemVerificationTest {
         var migrationException: Throwable? = null
         try {
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+                .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
                 .allowMainThreadQueries()
                 .build()
 
@@ -1505,9 +1505,9 @@ class LtcSystemVerificationTest {
         )
         rawDb.close()
 
-        // 2. Perform Room migration to Version 6
+        // 2. Perform Room migration through current Version 8
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries()
             .build()
 
