@@ -39,7 +39,7 @@ diagnostic_body() {
 
 meal_staff_step() {
   if [[ "${1:-}" == "MEAL_STAFF" ]]; then
-    echo "DIAG: MEAL_STAFF check: $2"
+    echo "DIAG: MEAL_STAFF check: $2" >&2
   fi
 }
 
@@ -54,18 +54,18 @@ login() {
     -H 'Content-Type: application/json' \
     --data "$(jq -n --arg email "$email" --arg password "$password" '{email:$email,password:$password}')")"
   if [[ "$code" != "200" ]]; then
-    echo "::error::$role Supabase password sign-in failed (HTTP $code)."
+    echo "::error::$role Supabase password sign-in failed (HTTP $code)." >&2
     if [[ "$role" == "MEAL_STAFF" ]]; then
-      echo "Response: $(diagnostic_body "$response")"
+      echo "Response: $(diagnostic_body "$response")" >&2
     else
-      echo "Check the protected test-account secrets."
+      echo "Check the protected test-account secrets." >&2
     fi
     exit 1
   fi
   local token uid
   token="$(jq -r '.access_token // empty' "$response")"
   uid="$(jq -r '.user.id // empty' "$response")"
-  [[ -n "$token" && -n "$uid" ]] || { echo "::error::$role sign-in response did not contain a token and user ID."; exit 1; }
+  [[ -n "$token" && -n "$uid" ]] || { echo "::error::$role sign-in response did not contain a token and user ID." >&2; exit 1; }
   printf '%s\n%s\n' "$token" "$uid"
 }
 
