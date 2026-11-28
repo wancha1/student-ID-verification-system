@@ -28,6 +28,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+diagnostic_body() {
+  local file="$1"
+  if jq -e . "$file" >/dev/null 2>&1; then
+    jq -c 'walk(if type == "object" then with_entries(if (.key | test("token|password|email|phone|authorization"; "i")) then .value = "[REDACTED]" else . end) else . end)' "$file"
+  else
+    echo "[non-JSON response body omitted]"
+  fi
+}
+
+meal_staff_step() {
+  if [[ "${1:-}" == "MEAL_STAFF" ]]; then
+    echo "DIAG: MEAL_STAFF check: $2"
+  fi
+}
+
 login() {
   local role="$1" email="$2" password="$3"
   local response="$tmp/$role-login.json"
@@ -51,10 +66,11 @@ login() {
 check_membership() {
   local role="$1" token="$2" uid="$3" expected="$4" expected_finance="$5"
   local response="$tmp/$role-membership.json" code count actual active finance
+  meal_staff_step "$role" "membership lookup (GET /rest/v1/staff_memberships)"
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.$TEST_SCHOOL_ID&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
-  [[ "$code" == "200" ]] || { echo "::error::$role membership lookup returned HTTP $code."; exit 1; }
+  [[ "$code" == "200" ]] || { echo "::error::$role membership lookup returned HTTP $code; response=$(diagnostic_body "$response")"; exit 1; }
   count="$(jq 'length' "$response")"
   actual="$(jq -r '.[0].role // empty' "$response")"
   active="$(jq -r '.[0].is_active // false' "$response")"
@@ -83,10 +99,10 @@ check_row_visibility() {
     --data-urlencode "school_id=eq.$TEST_SCHOOL_ID" \
     --data-urlencode "$column=eq.$sentinel" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
-  [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code."; exit 1; }
+  [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code; response=$(diagnostic_body "$response")"; exit 1; }
   count="$(jq 'length' "$response")"
   [[ "$count" == "$expected" ]] || {
-    echo "::error::$role expected $expected visible sentinel row(s) in $table, got $count."
+    echo "::error::$role expected $expected visible sentinel row(s) in $table, got $count; response=$(diagnostic_body "$response")"
     exit 1
   }
 }
@@ -102,10 +118,15 @@ check_role_data_boundaries() {
     MEAL_STAFF)
       meal_expected=1 ;;
   esac
+  meal_staff_step "$role" "row visibility: student_private"
   check_row_visibility "$role" "$token" student_private student_id "$TEST_SENTINEL_STUDENT_ID" "$private_expected"
+  meal_staff_step "$role" "row visibility: gate_logs"
   check_row_visibility "$role" "$token" gate_logs id "$TEST_SENTINEL_GATE_LOG_ID" "$gate_expected"
+  meal_staff_step "$role" "row visibility: meals"
   check_row_visibility "$role" "$token" meals id "$TEST_SENTINEL_MEAL_ID" "$meal_expected"
+  meal_staff_step "$role" "row visibility: attendance_record_events"
   check_row_visibility "$role" "$token" attendance_record_events event_id "$TEST_SENTINEL_ATTENDANCE_EVENT_ID" "$academic_expected"
+  meal_staff_step "$role" "row visibility: exam_exception_events"
   check_row_visibility "$role" "$token" exam_exception_events event_id "$TEST_SENTINEL_EXAM_EVENT_ID" "$exam_expected"
 }
 
