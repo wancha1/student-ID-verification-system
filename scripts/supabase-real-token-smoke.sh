@@ -28,33 +28,55 @@ cleanup() {
 }
 trap cleanup EXIT
 
+diagnostic_body() {
+  local file="$1"
+  if jq -e . "$file" >/dev/null 2>&1; then
+    jq -c 'walk(if type == "object" then with_entries(if (.key | test("token|password|email|phone|authorization"; "i")) then .value = "[REDACTED]" else . end) else . end)' "$file"
+  else
+    echo "[non-JSON response body omitted]"
+  fi
+}
+
+meal_staff_step() {
+  if [[ "${1:-}" == "MEAL_STAFF" ]]; then
+    echo "DIAG: MEAL_STAFF check: $2" >&2
+  fi
+}
+
 login() {
   local role="$1" email="$2" password="$3"
   local response="$tmp/$role-login.json"
   local code
+  meal_staff_step "$role" "Auth password sign-in (POST /auth/v1/token?grant_type=password)"
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     -X POST "$api/auth/v1/token?grant_type=password" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
     -H 'Content-Type: application/json' \
     --data "$(jq -n --arg email "$email" --arg password "$password" '{email:$email,password:$password}')")"
   if [[ "$code" != "200" ]]; then
-    echo "::error::$role Supabase password sign-in failed (HTTP $code). Check the protected test-account secrets."
+    echo "::error::$role Supabase password sign-in failed (HTTP $code)." >&2
+    if [[ "$role" == "MEAL_STAFF" ]]; then
+      echo "Response: $(diagnostic_body "$response")" >&2
+    else
+      echo "Check the protected test-account secrets." >&2
+    fi
     exit 1
   fi
   local token uid
   token="$(jq -r '.access_token // empty' "$response")"
   uid="$(jq -r '.user.id // empty' "$response")"
-  [[ -n "$token" && -n "$uid" ]] || { echo "::error::$role sign-in response did not contain a token and user ID."; exit 1; }
+  [[ -n "$token" && -n "$uid" ]] || { echo "::error::$role sign-in response did not contain a token and user ID." >&2; exit 1; }
   printf '%s\n%s\n' "$token" "$uid"
 }
 
 check_membership() {
   local role="$1" token="$2" uid="$3" expected="$4" expected_finance="$5"
   local response="$tmp/$role-membership.json" code count actual active finance
+  meal_staff_step "$role" "membership lookup (GET /rest/v1/staff_memberships)"
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     "$api/rest/v1/staff_memberships?select=role,is_active,has_finance_access&school_id=eq.$TEST_SCHOOL_ID&user_id=eq.$uid" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
-  [[ "$code" == "200" ]] || { echo "::error::$role membership lookup returned HTTP $code."; exit 1; }
+  [[ "$code" == "200" ]] || { echo "::error::$role membership lookup returned HTTP $code; response=$(diagnostic_body "$response")"; exit 1; }
   count="$(jq 'length' "$response")"
   actual="$(jq -r '.[0].role // empty' "$response")"
   active="$(jq -r '.[0].is_active // false' "$response")"
@@ -83,10 +105,10 @@ check_row_visibility() {
     --data-urlencode "school_id=eq.$TEST_SCHOOL_ID" \
     --data-urlencode "$column=eq.$sentinel" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
-  [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code."; exit 1; }
+  [[ "$code" == "200" ]] || { echo "::error::$role $table SELECT returned HTTP $code; response=$(diagnostic_body "$response")"; exit 1; }
   count="$(jq 'length' "$response")"
   [[ "$count" == "$expected" ]] || {
-    echo "::error::$role expected $expected visible sentinel row(s) in $table, got $count."
+    echo "::error::$role expected $expected visible sentinel row(s) in $table, got $count; response=$(diagnostic_body "$response")"
     exit 1
   }
 }
@@ -102,16 +124,22 @@ check_role_data_boundaries() {
     MEAL_STAFF)
       meal_expected=1 ;;
   esac
+  meal_staff_step "$role" "row visibility: student_private"
   check_row_visibility "$role" "$token" student_private student_id "$TEST_SENTINEL_STUDENT_ID" "$private_expected"
+  meal_staff_step "$role" "row visibility: gate_logs"
   check_row_visibility "$role" "$token" gate_logs id "$TEST_SENTINEL_GATE_LOG_ID" "$gate_expected"
+  meal_staff_step "$role" "row visibility: meals"
   check_row_visibility "$role" "$token" meals id "$TEST_SENTINEL_MEAL_ID" "$meal_expected"
+  meal_staff_step "$role" "row visibility: attendance_record_events"
   check_row_visibility "$role" "$token" attendance_record_events event_id "$TEST_SENTINEL_ATTENDANCE_EVENT_ID" "$academic_expected"
+  meal_staff_step "$role" "row visibility: exam_exception_events"
   check_row_visibility "$role" "$token" exam_exception_events event_id "$TEST_SENTINEL_EXAM_EVENT_ID" "$exam_expected"
 }
 
 check_rpc_role() {
   local role="$1" token="$2" rpc="$3" allowed="$4" payload="$5"
   local response="$tmp/$role-$rpc.json" code
+  meal_staff_step "$role" "RPC authorization: $rpc"
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     -X POST "$api/rest/v1/rpc/$rpc" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
@@ -121,13 +149,13 @@ check_rpc_role() {
   if [[ "$allowed" == "true" ]]; then
     [[ "$code" == "200" ]] && [[ "$(jq -r 'tostring' "$response")" == "false" ]] || {
       echo "::error::$role should be allowed to call $rpc idempotently against its existing sentinel row (HTTP $code)."
-      cat "$response"
+      echo "Response: $(diagnostic_body "$response")"
       exit 1
     }
   else
     [[ "$code" == "401" || "$code" == "403" ]] || {
       echo "::error::$role must be denied $rpc by RLS (HTTP $code)."
-      cat "$response"
+      echo "Response: $(diagnostic_body "$response")"
       exit 1
     }
   fi
@@ -152,6 +180,7 @@ check_rpc_boundaries() {
 check_storage_boundary() {
   local role="$1" token="$2" code response="$tmp/$role-storage.json"
   local denied_path="${TEST_SCHOOL_ID}/ci-storage-denied-${role}-${GITHUB_RUN_ID:-local}/photo.jpg"
+  meal_staff_step "$role" "private photo storage boundary"
 
   if [[ "$role" == "ADMIN" ]]; then
     admin_token="$token"
@@ -161,19 +190,19 @@ check_storage_boundary() {
       -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
-    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo upload failed (HTTP $code)."; cat "$response"; exit 1; }
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo upload failed (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1; }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
       -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
-    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo replacement failed (HTTP $code)."; cat "$response"; exit 1; }
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo replacement failed (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1; }
   fi
 
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
-  [[ "$code" == "200" ]] || { echo "::error::$role could not download the private student-photo sentinel (HTTP $code)."; cat "$response"; exit 1; }
+  [[ "$code" == "200" ]] || { echo "::error::$role could not download the private student-photo sentinel (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1; }
 
   if [[ "$role" != "ADMIN" ]]; then
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
@@ -181,7 +210,7 @@ check_storage_boundary() {
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
     [[ "$code" == "400" || "$code" == "403" ]] || {
-      echo "::error::$role unexpectedly replaced an Admin-owned student photo (HTTP $code)."; cat "$response"; exit 1;
+      echo "::error::$role unexpectedly replaced an Admin-owned student photo (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1;
     }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
@@ -196,7 +225,7 @@ check_storage_boundary() {
       "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
     [[ "$code" == "200" ]] || {
-      echo "::error::$role deleted or lost access to an Admin-owned student photo after a denied DELETE (HTTP $code)."; cat "$response"; exit 1;
+      echo "::error::$role deleted or lost access to an Admin-owned student photo after a denied DELETE (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1;
     }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
@@ -204,7 +233,7 @@ check_storage_boundary() {
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
     [[ "$code" == "400" || "$code" == "403" ]] || {
-      echo "::error::$role unexpectedly uploaded a student photo (HTTP $code)."; cat "$response"; exit 1;
+      echo "::error::$role unexpectedly uploaded a student photo (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1;
     }
   fi
 
@@ -213,6 +242,7 @@ check_storage_boundary() {
 
 check_finance_boundary() {
   local role="$1" token="$2" code
+  meal_staff_step "$role" "finance write boundary (POST /rest/v1/student_finances)"
   # A deliberately nonexistent student_id ensures that even the authorized Admin
   # cannot create a persistent test row. Admin should reach the FK check (409);
   # roles without finance capability must be rejected by RLS (401/403).
@@ -227,13 +257,13 @@ check_finance_boundary() {
   if [[ "$role" == "ADMIN" ]]; then
     [[ "$code" == "409" ]] || {
       echo "::error::Finance-enabled Admin expected FK rejection (HTTP 409), got HTTP $code."
-      cat "$tmp/$role-finance-write.json"
+      echo "Response: $(diagnostic_body "$tmp/$role-finance-write.json")"
       exit 1
     }
   else
     [[ "$code" == "401" || "$code" == "403" ]] || {
       echo "::error::$role should be denied finance writes by RLS (HTTP 401/403), got HTTP $code."
-      cat "$tmp/$role-finance-write.json"
+      echo "Response: $(diagnostic_body "$tmp/$role-finance-write.json")"
       exit 1
     }
   fi
