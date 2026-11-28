@@ -41,6 +41,13 @@ AS $fn$
 $fn$;
 
 -- Finance schema/policies mirror the explicit active-Admin capability contract.
+ALTER TABLE public.students
+  ADD CONSTRAINT students_school_id_id_security_test_unique UNIQUE (school_id, id);
+INSERT INTO public.students (id, school_id, student_number)
+VALUES
+  ('finance-student-local', 'school-test', 'FIN-LOCAL'),
+  ('finance-student-foreign', 'school-other', 'FIN-FOREIGN');
+
 CREATE TABLE public.student_finances (
   school_id text NOT NULL,
   student_id text NOT NULL,
@@ -48,7 +55,9 @@ CREATE TABLE public.student_finances (
   fee_status text NOT NULL DEFAULT 'CLEARED'
     CHECK (fee_status IN ('CLEARED','OUTSTANDING')),
   updated_at_ms bigint NOT NULL,
-  PRIMARY KEY (school_id, student_id)
+  PRIMARY KEY (school_id, student_id),
+  FOREIGN KEY (school_id, student_id)
+    REFERENCES public.students (school_id, id) ON DELETE CASCADE
 );
 ALTER TABLE public.student_finances ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.student_finances FROM PUBLIC, anon, authenticated;
@@ -89,14 +98,13 @@ VALUES
   ('school-test', '00000000-0000-0000-0000-000000000701', 'ADMIN', true, true),
   ('school-test', '00000000-0000-0000-0000-000000000702', 'ADMIN', true, false),
   ('school-test', '00000000-0000-0000-0000-000000000703', 'GATE_OFFICER', true, false),
-  ('school-test', '00000000-0000-0000-0000-000000000704', 'TEACHER', true, false),
-  ('school-other', '00000000-0000-0000-0000-000000000701', 'ADMIN', true, true);
+  ('school-test', '00000000-0000-0000-0000-000000000704', 'TEACHER', true, false);
 
 INSERT INTO public.student_finances
   (school_id, student_id, outstanding_amount, fee_status, updated_at_ms)
 VALUES
-  ('school-test', 'finance-sentinel-local', 125000, 'OUTSTANDING', 1700000000000),
-  ('school-other', 'finance-sentinel-foreign', 99000, 'OUTSTANDING', 1700000000001);
+  ('school-test', 'finance-student-local', 125000, 'OUTSTANDING', 1700000000000),
+  ('school-other', 'finance-student-foreign', 99000, 'OUTSTANDING', 1700000000001);
 
 -- Finance: only the active finance-enabled Admin may read balances, and only
 -- within the school for which that capability is granted.
