@@ -199,6 +199,10 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/assertions.sql
+      - name: Verify finance, cross-school audit, and actor-attribution boundaries
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d scholink_test -v ON_ERROR_STOP=1 -f scripts/db-test/security-coverage.sql
 
 
   supabase-authenticated-role-tests:
