@@ -98,7 +98,9 @@ VALUES
   ('school-test', '00000000-0000-0000-0000-000000000701', 'ADMIN', true, true),
   ('school-test', '00000000-0000-0000-0000-000000000702', 'ADMIN', true, false),
   ('school-test', '00000000-0000-0000-0000-000000000703', 'GATE_OFFICER', true, false),
-  ('school-test', '00000000-0000-0000-0000-000000000704', 'TEACHER', true, false);
+  ('school-test', '00000000-0000-0000-0000-000000000704', 'TEACHER', true, false),
+  ('school-test', '00000000-0000-0000-0000-000000000705', 'HEAD_TEACHER', true, false),
+  ('school-test', '00000000-0000-0000-0000-000000000706', 'MEAL_STAFF', true, false);
 
 INSERT INTO public.student_finances
   (school_id, student_id, outstanding_amount, fee_status, updated_at_ms)
@@ -172,6 +174,64 @@ BEGIN
   END IF;
 END
 $cross_school_admin$;
+RESET ROLE;
+
+-- Exercise the cross-school denial for each role and preserve the intended
+-- within-school audit visibility matrix.
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000705', false);
+SET ROLE authenticated;
+DO $cross_school_head_teacher$
+BEGIN
+  IF (SELECT count(*) FROM public.attendance_record_events WHERE school_id = 'school-other') <> 0
+     OR (SELECT count(*) FROM public.exam_exception_events WHERE school_id = 'school-other') <> 0 THEN
+    RAISE EXCEPTION 'Head Teacher read foreign-school audit events';
+  END IF;
+  IF (SELECT count(*) FROM public.attendance_record_events WHERE school_id = 'school-test') = 0
+     OR (SELECT count(*) FROM public.exam_exception_events WHERE school_id = 'school-test') = 0 THEN
+    RAISE EXCEPTION 'Head Teacher lost permitted own-school audit visibility';
+  END IF;
+END
+$cross_school_head_teacher$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000704', false);
+SET ROLE authenticated;
+DO $cross_school_teacher$
+BEGIN
+  IF (SELECT count(*) FROM public.attendance_record_events WHERE school_id = 'school-other') <> 0
+     OR (SELECT count(*) FROM public.exam_exception_events WHERE school_id = 'school-other') <> 0 THEN
+    RAISE EXCEPTION 'Teacher read foreign-school audit events';
+  END IF;
+  IF (SELECT count(*) FROM public.attendance_record_events WHERE school_id = 'school-test') = 0
+     OR (SELECT count(*) FROM public.exam_exception_events WHERE school_id = 'school-test') <> 0 THEN
+    RAISE EXCEPTION 'Teacher audit visibility does not match the attendance-only contract';
+  END IF;
+END
+$cross_school_teacher$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000703', false);
+SET ROLE authenticated;
+DO $cross_school_gate$
+BEGIN
+  IF (SELECT count(*) FROM public.attendance_record_events) <> 0
+     OR (SELECT count(*) FROM public.exam_exception_events) <> 0 THEN
+    RAISE EXCEPTION 'Gate Officer read academic audit events';
+  END IF;
+END
+$cross_school_gate$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000706', false);
+SET ROLE authenticated;
+DO $cross_school_meal$
+BEGIN
+  IF (SELECT count(*) FROM public.attendance_record_events) <> 0
+     OR (SELECT count(*) FROM public.exam_exception_events) <> 0 THEN
+    RAISE EXCEPTION 'Meal Staff read academic audit events';
+  END IF;
+END
+$cross_school_meal$;
 RESET ROLE;
 
 -- Actor attribution survives membership revocation. A revoked staff identity
