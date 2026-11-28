@@ -47,13 +47,19 @@ login() {
   local role="$1" email="$2" password="$3"
   local response="$tmp/$role-login.json"
   local code
+  meal_staff_step "$role" "Auth password sign-in (POST /auth/v1/token?grant_type=password)"
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     -X POST "$api/auth/v1/token?grant_type=password" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
     -H 'Content-Type: application/json' \
     --data "$(jq -n --arg email "$email" --arg password "$password" '{email:$email,password:$password}')")"
   if [[ "$code" != "200" ]]; then
-    echo "::error::$role Supabase password sign-in failed (HTTP $code). Check the protected test-account secrets."
+    echo "::error::$role Supabase password sign-in failed (HTTP $code)."
+    if [[ "$role" == "MEAL_STAFF" ]]; then
+      echo "Response: $(diagnostic_body "$response")"
+    else
+      echo "Check the protected test-account secrets."
+    fi
     exit 1
   fi
   local token uid
