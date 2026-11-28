@@ -189,8 +189,14 @@ check_storage_boundary() {
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: application/json' \
       --data "$(jq -n --arg path "$storage_probe_path" '{prefixes:[$path]}')")"
-    [[ "$code" == "400" || "$code" == "403" ]] || {
-      echo "::error::$role unexpectedly deleted an Admin-owned student photo (HTTP $code)."; cat "$response"; exit 1;
+    # Storage may return HTTP 200 with an empty result when RLS filters the
+    # DELETE target. Verify the object remains downloadable instead of trusting
+    # the status code alone.
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
+    [[ "$code" == "200" ]] || {
+      echo "::error::$role deleted or lost access to an Admin-owned student photo after a denied DELETE (HTTP $code)."; cat "$response"; exit 1;
     }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
