@@ -149,7 +149,7 @@ check_rpc_role() {
   else
     [[ "$code" == "401" || "$code" == "403" ]] || {
       echo "::error::$role must be denied $rpc by RLS (HTTP $code)."
-      cat "$response"
+      echo "Response: $(diagnostic_body "$response")"
       exit 1
     }
   fi
@@ -190,13 +190,13 @@ check_storage_boundary() {
       -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
-    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo replacement failed (HTTP $code)."; cat "$response"; exit 1; }
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo replacement failed (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1; }
   fi
 
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
-  [[ "$code" == "200" ]] || { echo "::error::$role could not download the private student-photo sentinel (HTTP $code)."; cat "$response"; exit 1; }
+  [[ "$code" == "200" ]] || { echo "::error::$role could not download the private student-photo sentinel (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1; }
 
   if [[ "$role" != "ADMIN" ]]; then
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
@@ -204,7 +204,7 @@ check_storage_boundary() {
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
     [[ "$code" == "400" || "$code" == "403" ]] || {
-      echo "::error::$role unexpectedly replaced an Admin-owned student photo (HTTP $code)."; cat "$response"; exit 1;
+      echo "::error::$role unexpectedly replaced an Admin-owned student photo (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1;
     }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
@@ -219,7 +219,7 @@ check_storage_boundary() {
       "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
     [[ "$code" == "200" ]] || {
-      echo "::error::$role deleted or lost access to an Admin-owned student photo after a denied DELETE (HTTP $code)."; cat "$response"; exit 1;
+      echo "::error::$role deleted or lost access to an Admin-owned student photo after a denied DELETE (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1;
     }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
@@ -227,7 +227,7 @@ check_storage_boundary() {
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
     [[ "$code" == "400" || "$code" == "403" ]] || {
-      echo "::error::$role unexpectedly uploaded a student photo (HTTP $code)."; cat "$response"; exit 1;
+      echo "::error::$role unexpectedly uploaded a student photo (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1;
     }
   fi
 
