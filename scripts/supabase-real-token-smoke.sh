@@ -133,6 +133,7 @@ check_role_data_boundaries() {
 check_rpc_role() {
   local role="$1" token="$2" rpc="$3" allowed="$4" payload="$5"
   local response="$tmp/$role-$rpc.json" code
+  meal_staff_step "$role" "RPC authorization: $rpc"
   code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
     -X POST "$api/rest/v1/rpc/$rpc" \
     -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
@@ -142,7 +143,7 @@ check_rpc_role() {
   if [[ "$allowed" == "true" ]]; then
     [[ "$code" == "200" ]] && [[ "$(jq -r 'tostring' "$response")" == "false" ]] || {
       echo "::error::$role should be allowed to call $rpc idempotently against its existing sentinel row (HTTP $code)."
-      cat "$response"
+      echo "Response: $(diagnostic_body "$response")"
       exit 1
     }
   else
@@ -173,6 +174,7 @@ check_rpc_boundaries() {
 check_storage_boundary() {
   local role="$1" token="$2" code response="$tmp/$role-storage.json"
   local denied_path="${TEST_SCHOOL_ID}/ci-storage-denied-${role}-${GITHUB_RUN_ID:-local}/photo.jpg"
+  meal_staff_step "$role" "private photo storage boundary"
 
   if [[ "$role" == "ADMIN" ]]; then
     admin_token="$token"
@@ -182,7 +184,7 @@ check_storage_boundary() {
       -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
       -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
       -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
-    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo upload failed (HTTP $code)."; cat "$response"; exit 1; }
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo upload failed (HTTP $code)."; echo "Response: $(diagnostic_body "$response")"; exit 1; }
 
     code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
       -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
@@ -234,6 +236,7 @@ check_storage_boundary() {
 
 check_finance_boundary() {
   local role="$1" token="$2" code
+  meal_staff_step "$role" "finance write boundary (POST /rest/v1/student_finances)"
   # A deliberately nonexistent student_id ensures that even the authorized Admin
   # cannot create a persistent test row. Admin should reach the FK check (409);
   # roles without finance capability must be rejected by RLS (401/403).
@@ -248,13 +251,13 @@ check_finance_boundary() {
   if [[ "$role" == "ADMIN" ]]; then
     [[ "$code" == "409" ]] || {
       echo "::error::Finance-enabled Admin expected FK rejection (HTTP 409), got HTTP $code."
-      cat "$tmp/$role-finance-write.json"
+      echo "Response: $(diagnostic_body "$tmp/$role-finance-write.json")"
       exit 1
     }
   else
     [[ "$code" == "401" || "$code" == "403" ]] || {
       echo "::error::$role should be denied finance writes by RLS (HTTP 401/403), got HTTP $code."
-      cat "$tmp/$role-finance-write.json"
+      echo "Response: $(diagnostic_body "$tmp/$role-finance-write.json")"
       exit 1
     }
   fi
