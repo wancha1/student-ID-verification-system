@@ -12,7 +12,21 @@ set -euo pipefail
 
 api="${SUPABASE_URL%/}"
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+storage_probe_path="${TEST_SCHOOL_ID}/ci-storage-probe-${GITHUB_RUN_ID:-local}/photo.jpg"
+admin_token=""
+
+cleanup() {
+  if [[ -n "$admin_token" ]]; then
+    curl --silent --show-error --output /dev/null \
+      -X DELETE "$api/storage/v1/object/student-photos" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+      -H "Authorization: Bearer $admin_token" \
+      -H 'Content-Type: application/json' \
+      --data "$(jq -n --arg path "$storage_probe_path" '{prefixes:[$path]}')" || true
+  fi
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
 
 login() {
   local role="$1" email="$2" password="$3"
@@ -135,6 +149,62 @@ check_rpc_boundaries() {
   check_rpc_role "$role" "$token" scholink_insert_meal_once "$meal_allowed" "$meal_payload"
 }
 
+check_storage_boundary() {
+  local role="$1" token="$2" code response="$tmp/$role-storage.json"
+  local denied_path="${TEST_SCHOOL_ID}/ci-storage-denied-${role}-${GITHUB_RUN_ID:-local}/photo.jpg"
+
+  if [[ "$role" == "ADMIN" ]]; then
+    admin_token="$token"
+    # A tiny synthetic PNG; unique CI path, removed by the EXIT trap.
+    printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=' | base64 -d > "$tmp/photo.png"
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo upload failed (HTTP $code)."; cat "$response"; exit 1; }
+
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "200" ]] || { echo "::error::Admin student-photo replacement failed (HTTP $code)."; cat "$response"; exit 1; }
+  fi
+
+  code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+    "$api/storage/v1/object/authenticated/student-photos/$storage_probe_path" \
+    -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token")"
+  [[ "$code" == "200" ]] || { echo "::error::$role could not download the private student-photo sentinel (HTTP $code)."; cat "$response"; exit 1; }
+
+  if [[ "$role" != "ADMIN" ]]; then
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$storage_probe_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' -H 'x-upsert: true' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "400" || "$code" == "403" ]] || {
+      echo "::error::$role unexpectedly replaced an Admin-owned student photo (HTTP $code)."; cat "$response"; exit 1;
+    }
+
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X DELETE "$api/storage/v1/object/student-photos" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: application/json' \
+      --data "$(jq -n --arg path "$storage_probe_path" '{prefixes:[$path]}')")"
+    [[ "$code" == "400" || "$code" == "403" ]] || {
+      echo "::error::$role unexpectedly deleted an Admin-owned student photo (HTTP $code)."; cat "$response"; exit 1;
+    }
+
+    code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+      -X POST "$api/storage/v1/object/student-photos/$denied_path" \
+      -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $token" \
+      -H 'Content-Type: image/png' --data-binary @"$tmp/photo.png")"
+    [[ "$code" == "400" || "$code" == "403" ]] || {
+      echo "::error::$role unexpectedly uploaded a student photo (HTTP $code)."; cat "$response"; exit 1;
+    }
+  fi
+
+  echo "PASS: $role private student-photo read and Admin-only write boundary"
+}
+
 check_finance_boundary() {
   local role="$1" token="$2" code
   # A deliberately nonexistent student_id ensures that even the authorized Admin
@@ -175,6 +245,7 @@ run_role() {
   check_role_data_boundaries "$expected" "$token"
   check_rpc_boundaries "$expected" "$token"
   check_finance_boundary "$expected" "$token"
+  check_storage_boundary "$expected" "$token"
   echo "PASS: $expected real Auth token, active staging membership, cross-school denial and finance boundary"
 }
 
